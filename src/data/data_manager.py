@@ -22,3 +22,9 @@ class DataManager:
 
     def get_all(self):
         return self.data
+
+    def get_last_n(self, count):
+        if count < 0:
+            raise ValueError("Count cannot be negative")
+
+        return self.data[-count:] if count > 0 else []
