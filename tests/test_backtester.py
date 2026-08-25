@@ -106,3 +106,22 @@ def test_trading_fee():
 
     assert result["trades"] == 1
     assert result["profit"] == 9.79
+
+
+def test_position_size():
+    backtester = Backtester(
+        initial_balance=1000.0,
+        fee_rate=0.0,
+        position_size=1.0
+    )
+
+    signals = [
+        ("BUY", 100.0),
+        ("SELL", 110.0)
+    ]
+
+    result = backtester.run(signals)
+
+    assert result["trades"] == 1
+    assert result["profit"] == 100.0
+    assert result["balance"] == 1100.0
