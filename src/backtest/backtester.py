@@ -1,6 +1,7 @@
 class Backtester:
-    def __init__(self, initial_balance=0.0):
+    def __init__(self, initial_balance=0.0, fee_rate=0.0):
         self.initial_balance = initial_balance
+        self.fee_rate = fee_rate
 
     def run(self, signals):
         trades = 0
@@ -18,10 +19,17 @@ class Backtester:
                 buy_price = price
 
             elif signal == "SELL" and buy_price is not None:
-                trade_profit = price - buy_price
+                trade_profit = (price - buy_price) - (
+                    buy_price * self.fee_rate
+                ) - (
+                    price * self.fee_rate
+                )
 
                 profit += trade_profit
+                profit = round(profit, 2)
+
                 balance += trade_profit
+                balance = round(balance, 2)
                 trades += 1
 
                 if trade_profit > 0:

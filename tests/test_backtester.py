@@ -89,3 +89,20 @@ def test_max_drawdown():
     result = backtester.run(signals)
 
     assert result["max_drawdown"] == 1.0
+
+
+def test_trading_fee():
+    backtester = Backtester(
+        initial_balance=1000.0,
+        fee_rate=0.001
+    )
+
+    signals = [
+        ("BUY", 100.0),
+        ("SELL", 110.0)
+    ]
+
+    result = backtester.run(signals)
+
+    assert result["trades"] == 1
+    assert result["profit"] == 9.79
