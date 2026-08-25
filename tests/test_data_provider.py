@@ -29,7 +29,7 @@ def test_get_candles_returns_list():
 
     assert isinstance(candles, list)
 
-    
+
 def test_get_candles_api_error(monkeypatch):
     provider = DataProvider()
 
@@ -44,3 +44,16 @@ def test_get_candles_api_error(monkeypatch):
 
     with pytest.raises(requests.HTTPError):
         provider.get_candles()
+
+
+def test_get_historical_candles():
+    provider = DataProvider()
+
+    candles = provider.get_historical_candles(
+        symbol="BTCUSDT",
+        interval="1m",
+        limit=200
+    )
+
+    assert len(candles) == 200
+    assert candles[0].timestamp < candles[-1].timestamp

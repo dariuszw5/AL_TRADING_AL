@@ -26,3 +26,29 @@ class StrategyEngine:
             ema_value=ema_value,
             rsi_value=rsi_value
         )
+
+    def generate_signals(self, analysis):
+        sma_values = analysis["sma"]
+        ema_values = analysis["ema"]
+        rsi_values = analysis["rsi"]
+
+        length = min(
+            len(sma_values),
+            len(ema_values),
+            len(rsi_values)
+        )
+
+        signals = []
+
+        for i in range(length):
+            signal = self.strategy.generate_signal(
+                sma_value=sma_values[i],
+                ema_value=ema_values[i],
+                rsi_value=rsi_values[i]
+            )
+
+            price = 0.0
+
+            signals.append((signal, price))
+
+        return signals

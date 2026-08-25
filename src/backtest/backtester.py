@@ -55,6 +55,7 @@ class Backtester:
             "profit": profit,
             "balance": balance,
             "return_percent": return_percent,
+            "return_percentage": return_percent,
             "winning_trades": winning_trades,
             "losing_trades": losing_trades,
             "win_rate": win_rate,

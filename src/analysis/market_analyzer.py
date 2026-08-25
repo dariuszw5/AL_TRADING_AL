@@ -6,12 +6,13 @@ class MarketAnalyzer:
     def __init__(self):
         self.provider = DataProvider()
 
-    def analyze(self):
-        candles = self.provider.get_candles(
-            symbol="BTCUSDT",
-            interval="1m",
-            limit=100
-        )
+    def analyze(self, candles=None):
+        if candles is None:
+            candles = self.provider.get_candles(
+                symbol="BTCUSDT",
+                interval="1m",
+                limit=100
+            )
 
         closes = [candle.close for candle in candles]
 

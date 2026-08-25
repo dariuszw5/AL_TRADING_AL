@@ -41,3 +41,59 @@ class DataProvider:
         self.data = candles
 
         return candles
+
+    def get_historical_candles(self, symbol="BTCUSDT", interval="1m", limit=1000):
+        candles = []
+        remaining = limit
+        end_time = None
+
+        while remaining > 0:
+            batch_limit = min(1000, remaining)
+
+            params = {
+                "symbol": symbol,
+                "interval": interval,
+                "limit": batch_limit
+            }
+
+            if end_time is not None:
+                params["endTime"] = end_time
+
+            response = requests.get(
+                f"{self.BASE_URL}/api/v3/klines",
+                params=params,
+                timeout=10
+            )
+
+            response.raise_for_status()
+
+            raw_data = response.json()
+
+            if not raw_data:
+                break
+
+            batch = []
+
+            for item in raw_data:
+                candle = Candle(
+                    timestamp=item[0],
+                    open=float(item[1]),
+                    high=float(item[2]),
+                    low=float(item[3]),
+                    close=float(item[4]),
+                    volume=float(item[5])
+                )
+
+                batch.append(candle)
+
+            candles = batch + candles
+            remaining -= len(batch)
+
+            end_time = raw_data[0][0] - 1
+
+            if len(batch) < batch_limit:
+                break
+
+        self.data = candles
+
+        return candles
