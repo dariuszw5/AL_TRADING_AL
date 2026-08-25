@@ -164,3 +164,5 @@ def test_get_last_n_more_than_available():
     manager.add_data(candle)
 
     assert manager.get_last_n(10) == [candle]
+
+
