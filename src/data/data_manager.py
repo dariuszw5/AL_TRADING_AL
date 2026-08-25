@@ -13,3 +13,12 @@ class DataManager:
 
     def get_data(self):
         return self.data
+
+    def get_latest(self):
+        if not self.data:
+            return None
+
+        return self.data[-1]
+
+    def get_all(self):
+        return self.data
