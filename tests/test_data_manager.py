@@ -134,3 +134,33 @@ def test_get_last_n():
     manager.add_data(candle3)
 
     assert manager.get_last_n(2) == [candle2, candle3]
+
+
+def test_get_last_n_zero():
+    manager = DataManager()
+
+    assert manager.get_last_n(0) == []
+
+
+def test_get_last_n_negative():
+    manager = DataManager()
+
+    with pytest.raises(ValueError):
+        manager.get_last_n(-1)
+
+
+def test_get_last_n_more_than_available():
+    manager = DataManager()
+
+    candle = Candle(
+        timestamp=1000,
+        open=100.0,
+        high=110.0,
+        low=95.0,
+        close=105.0,
+        volume=5000.0
+    )
+
+    manager.add_data(candle)
+
+    assert manager.get_last_n(10) == [candle]
