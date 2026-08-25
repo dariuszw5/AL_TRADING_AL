@@ -1,23 +1,24 @@
 from src.data.data_manager import DataManager
 from src.data.candle import Candle
+import pytest
 
 
-def test_add_data():
+def test_add_candle():
     manager = DataManager()
 
-    manager.add_data("BTC")
+    candle = Candle(
+        timestamp=1000,
+        open=100.0,
+        high=110.0,
+        low=95.0,
+        close=105.0,
+        volume=5000.0
+    )
 
-    assert manager.get_data() == ["BTC"]
+    manager.add_data(candle)
 
+    assert manager.get_data() == [candle]
 
-def test_multiple_data():
-    manager = DataManager()
-
-    manager.add_data("BTC")
-    
-    manager.add_data("ETH")
-
-    assert manager.get_data() == ["BTC", "ETH"]
 
 def test_candle():
     candle = Candle(
@@ -35,3 +36,10 @@ def test_candle():
     assert candle.low == 95.0
     assert candle.close == 105.0
     assert candle.volume == 5000.0
+
+
+def test_add_invalid_data():
+    manager = DataManager()
+
+    with pytest.raises(TypeError):
+        manager.add_data("BTC")
