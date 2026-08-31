@@ -1,0 +1,36 @@
+from src.strategy.strategy_engine import StrategyEngine
+from src.trading.trade_manager import TradeManager
+
+
+class TradingEngine:
+    def __init__(self):
+        self.strategy_engine = StrategyEngine()
+        self.trade_manager = TradeManager()
+
+    def process_signal(
+        self,
+        signal,
+        entry_price,
+        quantity,
+        stop_loss,
+        take_profit
+    ):
+        if signal == "BUY":
+            return self.trade_manager.open_position(
+                side="BUY",
+                entry_price=entry_price,
+                quantity=quantity,
+                stop_loss=stop_loss,
+                take_profit=take_profit
+            )
+
+        if signal == "SELL":
+            return self.trade_manager.open_position(
+                side="SELL",
+                entry_price=entry_price,
+                quantity=quantity,
+                stop_loss=stop_loss,
+                take_profit=take_profit
+            )
+
+        return None
