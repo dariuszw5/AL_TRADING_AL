@@ -150,14 +150,18 @@ class TradingEngine:
         entry_price,
         risk_percent,
         risk_reward_ratio,
-        balance=None
+        balance=None,
+        stop_loss_percent=None,
+        max_exposure_percent=None
     ):
         setup = self.strategy_engine.generate_trade_setup(
             signal=signal,
             entry_price=entry_price,
             risk_percent=risk_percent,
+            stop_loss_percent=stop_loss_percent,
             risk_reward_ratio=risk_reward_ratio,
-            balance=balance
+            balance=balance,
+            max_exposure_percent=max_exposure_percent
         )
 
         if setup is None:

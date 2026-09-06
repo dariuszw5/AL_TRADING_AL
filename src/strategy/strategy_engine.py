@@ -93,14 +93,20 @@ class StrategyEngine:
         entry_price,
         risk_percent,
         risk_reward_ratio,
-        balance=None
+        stop_loss_percent=None,
+        balance=None,
+        max_exposure_percent=None
     ):
         if signal not in ("BUY", "SELL"):
             return None
 
+        if balance is None:
+            balance = self.initial_balance
+
         stop_loss = self.risk_levels.calculate_stop_loss(
             entry_price=entry_price,
             risk_percent=risk_percent,
+            stop_loss_percent=stop_loss_percent,
             side=signal
         )
 
@@ -111,15 +117,36 @@ class StrategyEngine:
             side=signal
         )
 
-        if balance is None:
-            balance = self.initial_balance
-
         position_size = self.risk_manager.calculate_position_size(
             balance=balance,
             risk_percent=risk_percent,
             entry_price=entry_price,
             stop_loss=stop_loss
         )
+
+        if max_exposure_percent is not None:
+            if max_exposure_percent <= 0:
+                raise ValueError(
+                    "Max exposure percent must be greater than 0"
+                )
+
+            max_exposure_value = (
+                balance * max_exposure_percent / 100
+            )
+
+            max_position_size = (
+                max_exposure_value / entry_price
+            )
+
+            position_size = min(
+                position_size,
+                max_position_size
+            )
+
+            position_size = round(
+                position_size,
+                2
+            )
 
         return {
             "signal": signal,

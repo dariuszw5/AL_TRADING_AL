@@ -1,4 +1,4 @@
-﻿from src.data.data_provider import DataProvider
+from src.data.data_provider import DataProvider
 from src.data.data_manager import DataManager
 from src.data.candle import Candle
 from src.strategy.strategy_engine import StrategyEngine
@@ -48,7 +48,7 @@ class AgentEngine:
 
         self.risk_guard = RiskGuard(
             max_daily_loss=self.config.initial_balance
-            * (self.config.risk_percent / 100)
+            * (self.config.max_daily_loss_percent / 100)
         )
 
         self.trading_engine.set_trade_result_callback(
@@ -56,6 +56,8 @@ class AgentEngine:
         )
 
         self.trade_history = TradeHistory()
+
+        self.position_candles = 0
 
     @property
     def state(self):
@@ -115,7 +117,9 @@ class AgentEngine:
                 "signal": signal
             }
 
-        if not self.risk_guard.can_trade():
+        if not self.risk_guard.can_trade(
+            timestamp=entry_timestamp
+        ):
             return {
                 "status": "RISK_BLOCKED",
                 "signal": signal
@@ -152,6 +156,15 @@ class AgentEngine:
                 "signal": signal
             }
 
+        if isinstance(result, dict):
+            if result.get("status") == "POSITION_OPEN":
+                self.agent_state.set_state("IDLE")
+
+                return {
+                    "status": "ALREADY_OPEN",
+                    "signal": signal
+                }
+
         trade = {
             "signal": signal,
             "entry_price": entry_price,
@@ -162,6 +175,8 @@ class AgentEngine:
         }
 
         self.trade_history.add_trade(trade)
+
+        self.position_candles = 0
 
         if self.market_price is None:
             self.market_price = entry_price
@@ -234,8 +249,11 @@ class AgentEngine:
 
         if net_profit < 0:
             self.risk_guard.record_loss(
-                abs(net_profit)
+                abs(net_profit),
+                timestamp=result.get("exit_timestamp")
             )
+
+        self.position_candles = 0
 
     def update_market_price(self, current_price):
         if current_price <= 0:
@@ -297,11 +315,117 @@ class AgentEngine:
     def get_equity_curve(self):
         return self.equity_curve.copy()
 
+    def _open_signal_from_candle(
+        self,
+        signal,
+        current_price,
+        current_timestamp
+    ):
+        if signal not in ("BUY", "SELL"):
+            return None
+
+        if not self.risk_guard.can_trade(
+            timestamp=current_timestamp
+        ):
+            return {
+                "status": "RISK_BLOCKED",
+                "signal": signal
+            }
+
+        setup = self.trading_engine.generate_trade_setup(
+            signal=signal,
+            entry_price=current_price,
+            risk_percent=self.config.risk_percent,
+            stop_loss_percent=self.config.stop_loss_percent,
+            risk_reward_ratio=self.config.risk_reward_ratio,
+            balance=self.balance,
+            max_exposure_percent=self.config.max_exposure_percent
+        )
+
+        if setup is None:
+            return None
+
+        result = self.trading_engine.execute_trade_setup(
+            setup,
+            entry_timestamp=current_timestamp
+        )
+
+        position = self.trading_engine.trade_manager.position
+
+        if position is not None:
+            self.agent_state.set_state("TRADING")
+            self.position_candles = 1
+
+            self.trade_history.add_trade({
+                "signal": signal,
+                "entry_price": setup["entry_price"],
+                "quantity": setup["quantity"],
+                "stop_loss": setup["stop_loss"],
+                "take_profit": setup["take_profit"],
+                "entry_timestamp": current_timestamp
+            })
+        else:
+            self.agent_state.set_state("IDLE")
+
+        return {
+            "signal": signal,
+            "position": position,
+            "result": result,
+            "setup": setup
+        }
+
+    def _time_exit_position(
+        self,
+        current_price,
+        current_timestamp
+    ):
+        position = self.trading_engine.trade_manager.position
+
+        if position is None:
+            return None
+
+        max_candles = int(
+            self.config.max_position_candles
+        )
+
+        if max_candles <= 0:
+            return None
+
+        if self.position_candles < max_candles:
+            return None
+
+        close_result = (
+            self.trading_engine.trade_manager.close_position(
+                exit_price=current_price,
+                exit_timestamp=current_timestamp
+            )
+        )
+
+        if close_result is None:
+            return None
+
+        close_result["exit_reason"] = "TIME_EXIT"
+
+        self._process_closed_trade(
+            close_result
+        )
+
+        self.agent_state.set_state("IDLE")
+
+        return close_result
+
     def run_cycle(self, candles):
         if self.agent_state.is_stopped():
             return {
                 "signal": "HOLD",
                 "position": self.trading_engine.trade_manager.position,
+                "result": None
+            }
+
+        if not candles:
+            return {
+                "signal": "HOLD",
+                "position": None,
                 "result": None
             }
 
@@ -313,20 +437,36 @@ class AgentEngine:
         current_candle = candles[-1]
 
         if isinstance(current_candle, dict):
-            current_price = current_candle["close"]
+            current_price = float(
+                current_candle["close"]
+            )
+            current_high = float(
+                current_candle["high"]
+            )
+            current_low = float(
+                current_candle["low"]
+            )
             current_timestamp = current_candle["timestamp"]
-            current_high = current_candle["high"]
-            current_low = current_candle["low"]
         else:
-            current_price = current_candle.close
+            current_price = float(
+                current_candle.close
+            )
+            current_high = float(
+                current_candle.high
+            )
+            current_low = float(
+                current_candle.low
+            )
             current_timestamp = current_candle.timestamp
-            current_high = current_candle.high
-            current_low = current_candle.low
 
-        self.update_market_price(current_price)
+        self.update_market_price(
+            current_price
+        )
 
         if position is not None:
             self.agent_state.set_state("TRADING")
+
+            self.position_candles += 1
 
             result = self.trading_engine.check_candle(
                 high=current_high,
@@ -335,10 +475,30 @@ class AgentEngine:
                 timestamp=current_timestamp
             )
 
-            position = self.trading_engine.trade_manager.position
+            position = (
+                self.trading_engine.trade_manager.position
+            )
 
             if position is None:
                 self.agent_state.set_state("IDLE")
+
+                return {
+                    "signal": signal,
+                    "position": None,
+                    "result": result
+                }
+
+            time_exit = self._time_exit_position(
+                current_price=current_price,
+                current_timestamp=current_timestamp
+            )
+
+            if time_exit is not None:
+                return {
+                    "signal": signal,
+                    "position": None,
+                    "result": time_exit
+                }
 
             return {
                 "signal": signal,
@@ -347,52 +507,14 @@ class AgentEngine:
             }
 
         if signal in ("BUY", "SELL"):
-            if not self.risk_guard.can_trade():
-                return {
-                    "signal": signal,
-                    "position": None,
-                    "result": {
-                        "status": "RISK_BLOCKED"
-                    }
-                }
-
-            setup = self.trading_engine.generate_trade_setup(
+            opened = self._open_signal_from_candle(
                 signal=signal,
-                entry_price=current_price,
-                risk_percent=self.config.risk_percent,
-                risk_reward_ratio=self.config.risk_reward_ratio,
-                balance=self.balance
+                current_price=current_price,
+                current_timestamp=current_timestamp
             )
 
-            if setup is not None:
-                result = self.trading_engine.execute_trade_setup(
-                    setup,
-                    entry_timestamp=current_timestamp
-                )
-
-                position = self.trading_engine.trade_manager.position
-
-                if position is not None:
-                    self.agent_state.set_state("TRADING")
-
-                    self.trade_history.add_trade({
-                        "signal": signal,
-                        "entry_price": setup["entry_price"],
-                        "quantity": setup["quantity"],
-                        "stop_loss": setup["stop_loss"],
-                        "take_profit": setup["take_profit"],
-                        "entry_timestamp": current_timestamp
-                    })
-
-                else:
-                    self.agent_state.set_state("IDLE")
-
-                return {
-                    "signal": signal,
-                    "position": position,
-                    "result": result,
-                    "setup": setup
-                }
+            if opened is not None:
+                return opened
 
         self.agent_state.set_state("IDLE")
 
@@ -432,13 +554,19 @@ class AgentEngine:
                 final_price = last_candle.close
                 final_timestamp = last_candle.timestamp
 
-            close_result = self.trading_engine.trade_manager.close_position(
-                exit_price=final_price,
-                exit_timestamp=final_timestamp
+            close_result = (
+                self.trading_engine.trade_manager.close_position(
+                    exit_price=final_price,
+                    exit_timestamp=final_timestamp
+                )
             )
 
             if close_result is not None:
-                self._process_closed_trade(close_result)
+                close_result["exit_reason"] = "END_OF_DATA"
+
+                self._process_closed_trade(
+                    close_result
+                )
 
                 results.append({
                     "signal": "CLOSE",

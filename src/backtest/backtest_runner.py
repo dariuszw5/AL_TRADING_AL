@@ -17,18 +17,32 @@ class BacktestRunner:
         min_difference=1.0,
         trading_fee=0.0,
         rsi_method="classic",
+        risk_percent=5.0,
+        max_daily_loss_percent=10.0,
+        risk_reward_ratio=2.0,
         data_source="api",
         data_file=None
     ):
         self.symbol = symbol
         self.interval = interval
         self.limit = limit
-        self.initial_balance = initial_balance
-        self.buy_rsi = buy_rsi
-        self.sell_rsi = sell_rsi
-        self.min_difference = min_difference
+        self.initial_balance = float(initial_balance)
+
+        self.buy_rsi = float(buy_rsi)
+        self.sell_rsi = float(sell_rsi)
+        self.min_difference = float(min_difference)
+
         self.trading_fee = float(trading_fee)
         self.rsi_method = rsi_method
+
+        self.risk_percent = float(risk_percent)
+        self.max_daily_loss_percent = float(
+            max_daily_loss_percent
+        )
+        self.risk_reward_ratio = float(
+            risk_reward_ratio
+        )
+
         self.data_source = data_source
 
         if data_file is None:
@@ -43,22 +57,27 @@ class BacktestRunner:
 
         self.agent = AgentEngine(
             config=AgentConfig(
-                symbol=symbol,
-                interval=interval,
-                limit=limit,
-                initial_balance=initial_balance,
-                buy_rsi=buy_rsi,
-                sell_rsi=sell_rsi,
-                min_difference=min_difference,
-                trading_fee=trading_fee,
-                rsi_method=rsi_method
+                symbol=self.symbol,
+                interval=self.interval,
+                limit=self.limit,
+                initial_balance=self.initial_balance,
+                buy_rsi=self.buy_rsi,
+                sell_rsi=self.sell_rsi,
+                min_difference=self.min_difference,
+                trading_fee=self.trading_fee,
+                rsi_method=self.rsi_method,
+                risk_percent=self.risk_percent,
+                max_daily_loss_percent=(
+                    self.max_daily_loss_percent
+                ),
+                risk_reward_ratio=self.risk_reward_ratio
             )
         )
 
         self.backtest_engine = BacktestEngine(
             agent=self.agent,
-            initial_balance=initial_balance,
-            trading_fee=trading_fee
+            initial_balance=self.initial_balance,
+            trading_fee=self.trading_fee
         )
 
         self.candles = []
@@ -70,10 +89,12 @@ class BacktestRunner:
                 self.data_file
             )
         else:
-            self.candles = self.data_provider.get_historical_candles(
-                symbol=self.symbol,
-                interval=self.interval,
-                limit=self.limit
+            self.candles = (
+                self.data_provider.get_historical_candles(
+                    symbol=self.symbol,
+                    interval=self.interval,
+                    limit=self.limit
+                )
             )
 
         return self.candles
@@ -116,25 +137,47 @@ class BacktestRunner:
         return self.backtest_engine.get_equity_curve()
 
     def get_trades(self):
-        return self.backtest_engine.get_backtest_result().get_trades()
+        return (
+            self.backtest_engine
+            .get_backtest_result()
+            .get_trades()
+        )
 
     def get_profit_factor(self):
-        return self.get_backtest_result().get_profit_factor()
+        return (
+            self.get_backtest_result()
+            .get_profit_factor()
+        )
 
     def get_average_win(self):
-        return self.get_backtest_result().get_average_win()
+        return (
+            self.get_backtest_result()
+            .get_average_win()
+        )
 
     def get_average_loss(self):
-        return self.get_backtest_result().get_average_loss()
+        return (
+            self.get_backtest_result()
+            .get_average_loss()
+        )
 
     def get_largest_win(self):
-        return self.get_backtest_result().get_largest_win()
+        return (
+            self.get_backtest_result()
+            .get_largest_win()
+        )
 
     def get_largest_loss(self):
-        return self.get_backtest_result().get_largest_loss()
+        return (
+            self.get_backtest_result()
+            .get_largest_loss()
+        )
 
     def get_expectancy(self):
-        return self.get_backtest_result().get_expectancy()
+        return (
+            self.get_backtest_result()
+            .get_expectancy()
+        )
 
     def get_summary(self):
         return {

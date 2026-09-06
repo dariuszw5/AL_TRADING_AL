@@ -1,19 +1,25 @@
 class BacktestResult:
+
     def __init__(self, initial_balance=1000.0):
-        self.initial_balance = initial_balance
-        self.balance = initial_balance
+        self.initial_balance = float(initial_balance)
+        self.balance = float(initial_balance)
         self.trades = []
-        self.equity_curve = [initial_balance]
+        self.equity_curve = [self.balance]
 
     def add_trade(self, trade):
         self.trades.append(trade)
 
-        profit = trade.get("profit", 0.0)
+        profit = float(
+            trade.get("profit", 0.0)
+        )
 
         self.balance += profit
         self.equity_curve.append(self.balance)
 
     def get_balance(self):
+        return self.balance
+
+    def get_final_balance(self):
         return self.balance
 
     def get_total_profit(self):
@@ -29,14 +35,14 @@ class BacktestResult:
         return sum(
             1
             for trade in self.trades
-            if trade.get("profit", 0.0) > 0
+            if float(trade.get("profit", 0.0)) > 0
         )
 
     def get_losing_trades(self):
         return sum(
             1
             for trade in self.trades
-            if trade.get("profit", 0.0) < 0
+            if float(trade.get("profit", 0.0)) < 0
         )
 
     def get_win_rate(self):
@@ -47,19 +53,19 @@ class BacktestResult:
 
         return (
             self.get_winning_trades() / total
-        ) * 100
+        ) * 100.0
 
     def get_profit_factor(self):
         gross_profit = sum(
-            trade.get("profit", 0.0)
+            float(trade.get("profit", 0.0))
             for trade in self.trades
-            if trade.get("profit", 0.0) > 0
+            if float(trade.get("profit", 0.0)) > 0
         )
 
         gross_loss = sum(
-            abs(trade.get("profit", 0.0))
+            abs(float(trade.get("profit", 0.0)))
             for trade in self.trades
-            if trade.get("profit", 0.0) < 0
+            if float(trade.get("profit", 0.0)) < 0
         )
 
         if gross_loss == 0:
@@ -72,9 +78,9 @@ class BacktestResult:
 
     def get_average_win(self):
         winning_trades = [
-            trade.get("profit", 0.0)
+            float(trade.get("profit", 0.0))
             for trade in self.trades
-            if trade.get("profit", 0.0) > 0
+            if float(trade.get("profit", 0.0)) > 0
         ]
 
         if not winning_trades:
@@ -84,9 +90,9 @@ class BacktestResult:
 
     def get_average_loss(self):
         losing_trades = [
-            abs(trade.get("profit", 0.0))
+            abs(float(trade.get("profit", 0.0)))
             for trade in self.trades
-            if trade.get("profit", 0.0) < 0
+            if float(trade.get("profit", 0.0)) < 0
         ]
 
         if not losing_trades:
@@ -96,9 +102,9 @@ class BacktestResult:
 
     def get_largest_win(self):
         winning_trades = [
-            trade.get("profit", 0.0)
+            float(trade.get("profit", 0.0))
             for trade in self.trades
-            if trade.get("profit", 0.0) > 0
+            if float(trade.get("profit", 0.0)) > 0
         ]
 
         if not winning_trades:
@@ -108,9 +114,9 @@ class BacktestResult:
 
     def get_largest_loss(self):
         losing_trades = [
-            abs(trade.get("profit", 0.0))
+            abs(float(trade.get("profit", 0.0)))
             for trade in self.trades
-            if trade.get("profit", 0.0) < 0
+            if float(trade.get("profit", 0.0)) < 0
         ]
 
         if not losing_trades:
@@ -124,9 +130,7 @@ class BacktestResult:
         if total_trades == 0:
             return 0.0
 
-        total_profit = self.get_total_profit()
-
-        return total_profit / total_trades
+        return self.get_total_profit() / total_trades
 
     def get_max_drawdown(self):
         if not self.equity_curve:

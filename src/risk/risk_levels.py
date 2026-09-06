@@ -3,27 +3,44 @@ class RiskLevels:
         self,
         entry_price,
         risk_percent,
+        stop_loss_percent=None,
         side="BUY"
     ):
         if entry_price <= 0:
-            raise ValueError("Entry price must be greater than 0")
+            raise ValueError(
+                "Entry price must be greater than 0"
+            )
 
         if risk_percent <= 0:
-            raise ValueError("Risk percent must be greater than 0")
+            raise ValueError(
+                "Risk percent must be greater than 0"
+            )
+
+        if stop_loss_percent is None:
+            stop_loss_percent = risk_percent
+
+        if stop_loss_percent <= 0:
+            raise ValueError(
+                "Stop loss percent must be greater than 0"
+            )
 
         if side == "BUY":
             return round(
-                entry_price * (1 - risk_percent / 100),
+                entry_price
+                * (1 - stop_loss_percent / 100),
                 2
             )
 
         if side == "SELL":
             return round(
-                entry_price * (1 + risk_percent / 100),
+                entry_price
+                * (1 + stop_loss_percent / 100),
                 2
             )
 
-        raise ValueError("Side must be BUY or SELL")
+        raise ValueError(
+            "Side must be BUY or SELL"
+        )
 
     def calculate_take_profit(
         self,
@@ -33,10 +50,14 @@ class RiskLevels:
         side="BUY"
     ):
         if entry_price <= 0:
-            raise ValueError("Entry price must be greater than 0")
+            raise ValueError(
+                "Entry price must be greater than 0"
+            )
 
         if stop_loss <= 0:
-            raise ValueError("Stop loss must be greater than 0")
+            raise ValueError(
+                "Stop loss must be greater than 0"
+            )
 
         if risk_reward_ratio <= 0:
             raise ValueError(
@@ -52,7 +73,8 @@ class RiskLevels:
                 )
 
             return round(
-                entry_price + (risk * risk_reward_ratio),
+                entry_price
+                + (risk * risk_reward_ratio),
                 2
             )
 
@@ -65,8 +87,11 @@ class RiskLevels:
                 )
 
             return round(
-                entry_price - (risk * risk_reward_ratio),
+                entry_price
+                - (risk * risk_reward_ratio),
                 2
             )
 
-        raise ValueError("Side must be BUY or SELL")
+        raise ValueError(
+            "Side must be BUY or SELL"
+        )

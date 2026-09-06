@@ -54,3 +54,51 @@ def test_strategy_engine_generates_trade_setup():
     assert setup["entry_price"] == 100.0
     assert setup["stop_loss"] == 95.0
     assert setup["take_profit"] == 110.0
+
+
+def test_strategy_engine_generates_trade_setup_with_custom_stop_loss_percent():
+    engine = StrategyEngine()
+
+    setup = engine.generate_trade_setup(
+        signal="BUY",
+        entry_price=100.0,
+        risk_percent=5.0,
+        stop_loss_percent=1.5,
+        risk_reward_ratio=2.0
+    )
+
+    assert setup["signal"] == "BUY"
+    assert setup["entry_price"] == 100.0
+    assert setup["stop_loss"] == 98.5
+    assert setup["take_profit"] == 103.0
+
+
+def test_strategy_engine_generates_sell_setup_with_custom_stop_loss_percent():
+    engine = StrategyEngine()
+
+    setup = engine.generate_trade_setup(
+        signal="SELL",
+        entry_price=100.0,
+        risk_percent=5.0,
+        stop_loss_percent=1.5,
+        risk_reward_ratio=2.0
+    )
+
+    assert setup["signal"] == "SELL"
+    assert setup["entry_price"] == 100.0
+    assert setup["stop_loss"] == 101.5
+    assert setup["take_profit"] == 97.0
+
+
+def test_strategy_engine_defaults_stop_loss_percent_to_risk_percent():
+    engine = StrategyEngine()
+
+    setup = engine.generate_trade_setup(
+        signal="BUY",
+        entry_price=100.0,
+        risk_percent=5.0,
+        risk_reward_ratio=2.0
+    )
+
+    assert setup["stop_loss"] == 95.0
+    assert setup["take_profit"] == 110.0

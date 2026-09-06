@@ -1,4 +1,4 @@
-from src.backtest.backtest_runner import BacktestRunner
+﻿from src.backtest.backtest_runner import BacktestRunner
 
 
 runner = BacktestRunner(
@@ -6,10 +6,10 @@ runner = BacktestRunner(
     interval="1m",
     limit=5000,
     initial_balance=1000.0,
-    buy_rsi=30.0,
-    sell_rsi=70.0,
+    buy_rsi=34.5,
+    sell_rsi=68.5,
     min_difference=1.0,
-    trading_fee=0.001,
+    trading_fee=0.0004,
     rsi_method="classic",
     data_source="file"
 )
@@ -35,6 +35,6 @@ print(f"Max drawdown:     {summary['max_drawdown']}")
 print(f"Profit factor:    {summary['profit_factor']}")
 print(f"Average win:      {summary['average_win']}")
 print(f"Average loss:     {summary['average_loss']}")
-print(f"Largest win:      {summary['largest_win']}")
+print(f"Largest win:     {summary['largest_win']}")
 print(f"Largest loss:     {summary['largest_loss']}")
 print(f"Expectancy:       {summary['expectancy']}")
