@@ -47,11 +47,20 @@ class AgentLoop:
         return self.history
 
     def run_live_once(self):
-        candles = self.data_provider.get_candles(
-            symbol=self.config.symbol,
-            interval=self.config.interval,
-            limit=self.config.limit
-        )
+        try:
+            candles = self.data_provider.get_candles(
+                symbol=self.config.symbol,
+                interval=self.config.interval,
+                limit=self.config.limit
+            )
+        except Exception as exc:
+            return {
+                "status": "API_ERROR",
+                "signal": "HOLD",
+                "position": self.agent.trading_engine.trade_manager.position,
+                "result": None,
+                "error": str(exc),
+            }
 
         if len(candles) < 2:
             return {
