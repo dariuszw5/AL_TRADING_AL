@@ -1,4 +1,4 @@
-﻿from dataclasses import dataclass
+from dataclasses import dataclass
 
 
 @dataclass
@@ -16,11 +16,11 @@ class AgentConfig:
 
     initial_balance: float = 1000.0
 
-    buy_rsi: float = 30.0
-    sell_rsi: float = 70.0
+    buy_rsi: float = 33.8
+    sell_rsi: float = 68.5
     min_difference: float = 1.0
 
     trading_fee: float = 0.0
     rsi_method: str = "classic"
 
-    max_position_candles: int = 240
+    max_position_candles: int = 241

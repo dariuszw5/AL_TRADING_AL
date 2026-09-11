@@ -4,8 +4,12 @@ from src.trading.paper_trading import PaperTrading
 
 
 class TradingEngine:
-    def __init__(self):
-        self.strategy_engine = StrategyEngine()
+    def __init__(self, strategy_engine=None):
+        self.strategy_engine = (
+            strategy_engine
+            if strategy_engine is not None
+            else StrategyEngine()
+        )
         self.trade_manager = TradeManager()
         self.paper_trading = PaperTrading()
         self.trade_result_callback = None

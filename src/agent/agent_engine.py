@@ -1,4 +1,4 @@
-from src.data.data_provider import DataProvider
+﻿from src.data.data_provider import DataProvider
 from src.data.data_manager import DataManager
 from src.data.candle import Candle
 from src.strategy.strategy_engine import StrategyEngine
@@ -37,7 +37,7 @@ class AgentEngine:
             rsi_method=self.config.rsi_method
         )
 
-        self.trading_engine = TradingEngine()
+        self.trading_engine = TradingEngine(strategy_engine=self.strategy_engine)
 
         self.decision_engine = DecisionEngine(
             buy_rsi=self.config.buy_rsi,
@@ -578,3 +578,4 @@ class AgentEngine:
 
     def stop(self):
         self.agent_state.stop()
+
