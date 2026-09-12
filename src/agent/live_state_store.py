@@ -1,4 +1,5 @@
 ﻿import json
+import time
 from pathlib import Path
 
 
@@ -19,7 +20,20 @@ class LiveStateStore:
                 ensure_ascii=False
             )
 
-        temporary.replace(self.path)
+        last_error = None
+
+        for attempt in range(5):
+            try:
+                temporary.replace(self.path)
+                return
+
+            except PermissionError as exc:
+                last_error = exc
+
+                if attempt < 4:
+                    time.sleep(0.05)
+
+        raise last_error
 
     def load(self):
         if not self.path.exists():
