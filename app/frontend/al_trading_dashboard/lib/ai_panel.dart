@@ -30,6 +30,7 @@ class AiPanel extends StatelessWidget {
     };
     final actions = {
       'SELECT': 'Wybrano aktywo — oczekiwanie na wejście',
+      'SELECT_EXPLORATION': 'Mała pozycja testowa na bieżącym sygnale',
       'HOLD': 'Utrzymywanie pozycji',
       'WAIT': 'Oczekiwanie na świecę',
       'CASH': 'Pozostaje w gotówce',

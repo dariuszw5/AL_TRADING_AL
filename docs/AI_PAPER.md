@@ -31,6 +31,11 @@ or proven profitable settings. Reusing rolling validation for selection does not
 constitute an independent final performance test: a longer forward paper trial
 is required before drawing conclusions about predictive value.
 
+If no full-validation strategy is eligible, paper-only exploration may test the
+best current signal above a small score floor using 5% exposure. Exploration is
+marked in the decision history and uses the same stops, costs and loss limits;
+it cannot submit a real order.
+
 The old frozen BTC parameters and release tag are not rewritten by this module.
 The AI compares the three named strategies; it does not invent arbitrary code,
 change its own risk limits, or control unrelated application functionality.

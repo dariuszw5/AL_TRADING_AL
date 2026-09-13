@@ -19,6 +19,8 @@ HORIZON = 10
 FEE = 0.0004
 SLIPPAGE = 0.0005
 EXPOSURE = 0.20
+EXPLORATION_EXPOSURE = 0.05
+EXPLORATION_SCORE_FLOOR = -0.003
 STOP = 0.01
 TAKE = 0.02
 STRATEGIES = ('trend', 'mean_reversion', 'breakout')
@@ -130,6 +132,7 @@ def rank_asset(symbol, candles):
     model = NearestReturnModel([(features(candles, i), outcome(candles, i))
                                 for i in train_indices])
     prediction, spread = model.predict(features(candles, len(candles)-1))
+    current_score = prediction - spread
     rows = []
     for strategy in STRATEGIES:
         validation = []
@@ -143,11 +146,12 @@ def rank_asset(symbol, candles):
             validation.append(outcome(candles, i))
             next_free = i + HORIZON + 1
         score = min(prediction - spread, mean(validation)) if validation else -1.0
-        eligible = (len(validation) >= 5 and score > 0 and
-                    signal(strategy, candles, len(candles)-1))
+        current_signal = signal(strategy, candles, len(candles)-1)
+        eligible = (len(validation) >= 5 and score > 0 and current_signal)
         rows.append(dict(symbol=symbol, strategy=strategy, eligible=eligible,
                          score=score, expected_net_return=prediction,
                          neighbor_spread=spread, validation_trades=len(validation),
+                         current_score=current_score, current_signal=current_signal,
                          validation_mean=mean(validation) if validation else None,
                          train_samples=len(train_indices),
                          train_label_end=candles[train_indices[-1]+HORIZON].timestamp,
@@ -286,7 +290,8 @@ class AIPaperManager:
             entry_bar = next((c for c in bars if c.timestamp == entry_at), None)
             if entry_bar:
                 s['position'] = dict(symbol=pending['symbol'], strategy=pending['strategy'],
-                    entry=entry_bar.open, allocation=s['balance']*EXPOSURE,
+                    entry=entry_bar.open,
+                    allocation=s['balance'] * pending.get('exposure', EXPOSURE),
                     entry_timestamp=entry_bar.timestamp,
                     last_timestamp=entry_bar.timestamp-MINUTE,
                     exit_at=entry_bar.timestamp+(HORIZON-1)*MINUTE)
@@ -317,7 +322,8 @@ class AIPaperManager:
                                       if sample_count >= 3 else 0.0)
             row['score'] += row['learning_bonus']
         s.update(ranking=rows, data_issues=issues, last_cycle=now_ms,
-                 limits=dict(exposure=EXPOSURE, daily_loss=20, drawdown=0.05,
+                 limits=dict(exposure=EXPOSURE, exploration_exposure=EXPLORATION_EXPOSURE,
+                             daily_loss=20, drawdown=0.05,
                              stop=STOP, take=TAKE, horizon_minutes=HORIZON))
         if self._blocked():
             s['pending'] = None
@@ -334,11 +340,27 @@ class AIPaperManager:
                 best = eligible[0]
                 s['pending'] = dict(symbol=best['symbol'], strategy=best['strategy'],
                                      timestamp=fresh[best['symbol']][-1].timestamp,
-                                     entry_at=((now_ms+MINUTE-1)//MINUTE)*MINUTE)
+                                     entry_at=((now_ms+MINUTE-1)//MINUTE)*MINUTE,
+                                     exposure=EXPOSURE)
                 self._record(now_ms, 'SELECT', 'Dodatnia ocena modelu i walidacji po kosztach',
                              symbol=best['symbol'], strategy=best['strategy'])
             else:
-                self._record(now_ms, 'CASH', 'Brak potwierdzonej przewagi po kosztach')
+                exploratory = [r for r in rows
+                                if r.get('current_signal')
+                                and r.get('current_score', -1) >= EXPLORATION_SCORE_FLOOR]
+                if exploratory:
+                    best = max(exploratory, key=lambda row: row['current_score'])
+                    s['pending'] = dict(
+                        symbol=best['symbol'], strategy=best['strategy'],
+                        timestamp=fresh[best['symbol']][-1].timestamp,
+                        entry_at=((now_ms+MINUTE-1)//MINUTE)*MINUTE,
+                        exposure=EXPLORATION_EXPOSURE, exploration=True,
+                    )
+                    self._record(now_ms, 'SELECT_EXPLORATION',
+                                 'Mała pozycja testowa dla najlepszego bieżącego sygnału',
+                                 symbol=best['symbol'], strategy=best['strategy'])
+                else:
+                    self._record(now_ms, 'CASH', 'Brak potwierdzonej przewagi po kosztach')
         return s
 
     def run_once(self):
