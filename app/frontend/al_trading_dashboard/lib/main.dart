@@ -69,6 +69,8 @@ class _DashboardPageState extends State<DashboardPage> {
   Map<String, dynamic>? aiData;
   String? aiError;
   bool aiLoading = false;
+  Map<String, dynamic>? userPortfolio;
+  String? userPortfolioError;
   bool followAiSelection = false;
 
   String? error;
@@ -85,10 +87,12 @@ class _DashboardPageState extends State<DashboardPage> {
       loadAssets();
       loadData();
       loadAi();
+      loadUserPortfolio();
 
       timer = Timer.periodic(const Duration(seconds: 5), (_) {
         loadData();
         loadAi();
+        loadUserPortfolio();
       });
     } else {
       _loadTestData();
@@ -105,6 +109,13 @@ class _DashboardPageState extends State<DashboardPage> {
     assets = fallbackAssets
         .map((asset) => Map<String, dynamic>.from(asset))
         .toList();
+    userPortfolio = {
+      'available': true,
+      'balance': 0.0,
+      'total_deposited': 0.0,
+      'total_withdrawn': 0.0,
+      'result': 0.0,
+    };
 
     status = {
       'available': true,
@@ -173,6 +184,99 @@ class _DashboardPageState extends State<DashboardPage> {
     }
 
     return jsonDecode(response.body);
+  }
+
+  Future<dynamic> postJson(String endpoint, double amount) async {
+    final response = await http.post(
+      Uri.parse('$apiBaseUrl$endpoint'),
+      headers: {'content-type': 'application/json'},
+      body: jsonEncode({'amount': amount}),
+    ).timeout(const Duration(seconds: 5));
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw Exception('HTTP ${response.statusCode}: ${response.body}');
+    }
+    return jsonDecode(response.body);
+  }
+
+  Future<void> loadUserPortfolio() async {
+    try {
+      final result = await getJson('/api/user-portfolio');
+      if (!mounted) return;
+      setState(() {
+        userPortfolio = Map<String, dynamic>.from(result as Map);
+        userPortfolioError = null;
+      });
+    } catch (exc) {
+      if (mounted) setState(() => userPortfolioError = exc.toString());
+    }
+  }
+
+  Future<void> changeUserFunds({required bool deposit}) async {
+    final controller = TextEditingController();
+    final amount = await showDialog<double>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(deposit ? 'Wpłata do mojego portfela' : 'Wypłata z mojego portfela'),
+        content: TextField(
+          controller: controller,
+          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+          autofocus: true,
+          decoration: const InputDecoration(labelText: 'Kwota PLN'),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Anuluj')),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, double.tryParse(
+              controller.text.replaceAll(',', '.'),
+            )),
+            child: const Text('Zapisz'),
+          ),
+        ],
+      ),
+    );
+    controller.dispose();
+    if (amount == null || amount <= 0) return;
+    try {
+      final result = await postJson(
+        deposit ? '/api/user-portfolio/deposit' : '/api/user-portfolio/withdraw',
+        amount,
+      );
+      if (mounted) setState(() => userPortfolio = Map<String, dynamic>.from(result as Map));
+    } catch (exc) {
+      if (mounted) setState(() => userPortfolioError = exc.toString());
+    }
+  }
+
+  Widget buildUserPortfolio() {
+    final portfolio = userPortfolio;
+    if (portfolio == null) {
+      return const Card(child: ListTile(title: Text('MÓJ PORTFEL'), subtitle: Text('Ładowanie...')));
+    }
+    final balance = (portfolio['balance'] as num?)?.toDouble() ?? 0;
+    final deposited = (portfolio['total_deposited'] as num?)?.toDouble() ?? 0;
+    final withdrawn = (portfolio['total_withdrawn'] as num?)?.toDouble() ?? 0;
+    final result = (portfolio['result'] as num?)?.toDouble() ?? 0;
+    final aiProfit = (portfolio['profit_transferred'] as num?)?.toDouble() ?? 0;
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(18),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          const Text('MÓJ PORTFEL', style: TextStyle(fontSize: 19, fontWeight: FontWeight.bold)),
+          const SizedBox(height: 8),
+          Text('Saldo: ${balance.toStringAsFixed(2)} PLN', style: const TextStyle(fontSize: 20)),
+          Text('Wpłaty: ${deposited.toStringAsFixed(2)} PLN • Wypłaty: ${withdrawn.toStringAsFixed(2)} PLN'),
+          Text('Wynik: ${result >= 0 ? '+' : ''}${result.toStringAsFixed(2)} PLN'),
+          Text('Zysk przekazany przez AI: ${aiProfit.toStringAsFixed(2)} PLN'),
+          if (userPortfolioError != null)
+            Text(userPortfolioError!, style: const TextStyle(color: Colors.redAccent)),
+          Wrap(spacing: 8, children: [
+            FilledButton.tonal(onPressed: () => changeUserFunds(deposit: true), child: const Text('Wpłać')),
+            OutlinedButton(onPressed: () => changeUserFunds(deposit: false), child: const Text('Wypłać')),
+          ]),
+          const Text('Ten portfel jest niezależny od portfela AI i nie składa zleceń.', style: TextStyle(color: Colors.white60, fontSize: 12)),
+        ]),
+      ),
+    );
   }
 
   Future<void> loadAi() async {
@@ -813,6 +917,7 @@ class _DashboardPageState extends State<DashboardPage> {
           padding: const EdgeInsets.all(18),
           children: [
             buildAssetSelector(),
+            buildUserPortfolio(),
             const SizedBox(height: 24),
             buildAiPanel(),
             Center(child: Text(error ?? 'Brak danych z API.')),
@@ -867,6 +972,7 @@ class _DashboardPageState extends State<DashboardPage> {
               ),
 
             buildAssetSelector(),
+            buildUserPortfolio(),
 
             sectionTitle('KONTO'),
 
