@@ -5,7 +5,22 @@ import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 
-const String apiBaseUrl = 'http://127.0.0.1:8000';
+const List<Map<String, String>> fallbackAssets = [
+  {'symbol': 'BTCUSDT', 'name': 'Bitcoin', 'asset_type': 'crypto'},
+  {'symbol': 'ETHUSDT', 'name': 'Ethereum', 'asset_type': 'crypto'},
+  {'symbol': 'SOLUSDT', 'name': 'Solana', 'asset_type': 'crypto'},
+  {'symbol': 'BNBUSDT', 'name': 'BNB', 'asset_type': 'crypto'},
+  {'symbol': 'XRPUSDT', 'name': 'XRP', 'asset_type': 'crypto'},
+  {'symbol': 'XAUUSD', 'name': 'Złoto', 'asset_type': 'gold'},
+  {'symbol': 'WTIUSD', 'name': 'Ropa WTI', 'asset_type': 'oil'},
+  {'symbol': 'EURUSD', 'name': 'Euro / dolar', 'asset_type': 'forex'},
+  {'symbol': 'AAPL', 'name': 'Apple', 'asset_type': 'stock'},
+];
+
+const String apiBaseUrl = String.fromEnvironment(
+  'AL_TRADING_API_BASE_URL',
+  defaultValue: 'http://100.77.193.89:8000',
+);
 
 void main() {
   runApp(const AlTradingApp());
@@ -33,10 +48,7 @@ class AlTradingApp extends StatelessWidget {
 class DashboardPage extends StatefulWidget {
   final bool liveMode;
 
-  const DashboardPage({
-    super.key,
-    this.liveMode = true,
-  });
+  const DashboardPage({super.key, this.liveMode = true});
 
   @override
   State<DashboardPage> createState() => _DashboardPageState();
@@ -47,6 +59,11 @@ class _DashboardPageState extends State<DashboardPage> {
   List<dynamic> trades = [];
   List<dynamic> equity = [];
   List<dynamic> marketCandles = [];
+  List<Map<String, dynamic>> assets = fallbackAssets
+      .map((asset) => Map<String, dynamic>.from(asset))
+      .toList();
+  String selectedSymbol = 'BTCUSDT';
+  int requestGeneration = 0;
 
   String? error;
   bool loading = true;
@@ -59,12 +76,10 @@ class _DashboardPageState extends State<DashboardPage> {
     super.initState();
 
     if (widget.liveMode) {
+      loadAssets();
       loadData();
 
-      timer = Timer.periodic(
-        const Duration(seconds: 5),
-        (_) => loadData(),
-      );
+      timer = Timer.periodic(const Duration(seconds: 5), (_) => loadData());
     } else {
       _loadTestData();
     }
@@ -77,6 +92,10 @@ class _DashboardPageState extends State<DashboardPage> {
   }
 
   void _loadTestData() {
+    assets = fallbackAssets
+        .map((asset) => Map<String, dynamic>.from(asset))
+        .toList();
+
     status = {
       'available': true,
       'strategy': {
@@ -89,10 +108,7 @@ class _DashboardPageState extends State<DashboardPage> {
         'rsi_method': 'classic',
         'trading_fee': 0.0004,
       },
-      'system': {
-        'state_version': 3,
-        'last_processed_timestamp': 0,
-      },
+      'system': {'state_version': 3, 'last_processed_timestamp': 0},
       'position': {
         'side': null,
         'entry_price': null,
@@ -128,10 +144,7 @@ class _DashboardPageState extends State<DashboardPage> {
 
     trades = [];
     equity = [
-      {
-        'index': 0,
-        'balance': 1000.0,
-      },
+      {'index': 0, 'balance': 1000.0},
     ];
 
     marketCandles = [];
@@ -139,50 +152,88 @@ class _DashboardPageState extends State<DashboardPage> {
     loading = false;
     lastUpdate = DateTime.now();
   }
+
   Future<dynamic> getJson(String endpoint) async {
     final response = await http
         .get(Uri.parse('$apiBaseUrl$endpoint'))
         .timeout(const Duration(seconds: 5));
 
     if (response.statusCode != 200) {
-      throw Exception(
-        'HTTP ${response.statusCode}: ${response.body}',
-      );
+      throw Exception('HTTP ${response.statusCode}: ${response.body}');
     }
 
     return jsonDecode(response.body);
   }
 
-  Future<void> loadData() async {
+  Future<void> loadAssets() async {
     try {
-      final results = await Future.wait([
-        getJson('/api/status'),
-        getJson('/api/trades'),
-        getJson('/api/equity'),
-        getJson('/api/market'),
-      ]);
+      final response = await getJson('/api/assets');
 
       if (!mounted) {
         return;
       }
 
       setState(() {
-        status = Map<String, dynamic>.from(results[0] as Map);
+        assets = (response as List)
+            .map((asset) => Map<String, dynamic>.from(asset as Map))
+            .toList();
+      });
+    } catch (_) {
+      // The legacy BTC-only API can still drive the dashboard.
+    }
+  }
+
+  Future<void> loadData({String? symbol}) async {
+    final requestSymbol = symbol ?? selectedSymbol;
+    final currentRequest = ++requestGeneration;
+
+    try {
+      final query = '?symbol=${Uri.encodeQueryComponent(requestSymbol)}';
+
+      final results = await Future.wait([
+        getJson('/api/status$query'),
+        getJson('/api/trades$query'),
+        getJson('/api/equity$query'),
+        getJson('/api/market$query'),
+      ]);
+
+      if (!mounted) {
+        return;
+      }
+
+      final loadedStatus = Map<String, dynamic>.from(results[0] as Map);
+
+      if (loadedStatus['available'] != true) {
+        throw Exception(loadedStatus['error'] ?? 'Brak stanu aktywa');
+      }
+
+      final loadedStrategy = Map<String, dynamic>.from(
+        loadedStatus['strategy'] as Map? ?? {},
+      );
+
+      if (loadedStrategy['symbol'] != requestSymbol) {
+        throw Exception(
+          'API zwróciło ${loadedStrategy['symbol'] ?? 'inne aktywo'} '
+          'zamiast $requestSymbol',
+        );
+      }
+
+      setState(() {
+        if (currentRequest != requestGeneration ||
+            requestSymbol != selectedSymbol) {
+          return;
+        }
+
+        status = loadedStatus;
         trades = List<dynamic>.from(results[1] as List);
 
-        final equityData =
-            Map<String, dynamic>.from(results[2] as Map);
+        final equityData = Map<String, dynamic>.from(results[2] as Map);
 
-        equity = List<dynamic>.from(
-          equityData['points'] as List? ?? [],
-        );
+        equity = List<dynamic>.from(equityData['points'] as List? ?? []);
 
-        final marketData =
-            Map<String, dynamic>.from(results[3] as Map);
+        final marketData = Map<String, dynamic>.from(results[3] as Map);
 
-        marketCandles = List<dynamic>.from(
-          marketData['points'] as List? ?? [],
-        );
+        marketCandles = List<dynamic>.from(marketData['points'] as List? ?? []);
 
         error = null;
         loading = false;
@@ -194,6 +245,10 @@ class _DashboardPageState extends State<DashboardPage> {
       }
 
       setState(() {
+        if (currentRequest != requestGeneration) {
+          return;
+        }
+
         error = exc.toString();
         loading = false;
       });
@@ -230,10 +285,7 @@ class _DashboardPageState extends State<DashboardPage> {
           children: [
             Text(
               title,
-              style: const TextStyle(
-                color: Colors.white60,
-                fontSize: 13,
-              ),
+              style: const TextStyle(color: Colors.white60, fontSize: 13),
             ),
             const SizedBox(height: 8),
             Text(
@@ -248,10 +300,7 @@ class _DashboardPageState extends State<DashboardPage> {
               const SizedBox(height: 5),
               Text(
                 subtitle,
-                style: const TextStyle(
-                  color: Colors.white54,
-                  fontSize: 12,
-                ),
+                style: const TextStyle(color: Colors.white54, fontSize: 12),
               ),
             ],
           ],
@@ -262,16 +311,71 @@ class _DashboardPageState extends State<DashboardPage> {
 
   Widget sectionTitle(String title) {
     return Padding(
-      padding: const EdgeInsets.only(
-        left: 4,
-        bottom: 10,
-        top: 10,
-      ),
+      padding: const EdgeInsets.only(left: 4, bottom: 10, top: 10),
       child: Text(
         title,
-        style: const TextStyle(
-          fontSize: 19,
-          fontWeight: FontWeight.bold,
+        style: const TextStyle(fontSize: 19, fontWeight: FontWeight.bold),
+      ),
+    );
+  }
+
+  Widget buildAssetSelector() {
+    final symbols = assets
+        .map((asset) => asset['symbol']?.toString())
+        .whereType<String>()
+        .toList();
+
+    if (!symbols.contains(selectedSymbol)) {
+      symbols.insert(0, selectedSymbol);
+    }
+
+    return Card(
+      elevation: 0,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
+        child: Row(
+          children: [
+            const Text(
+              'AKTYWO TRENINGOWE',
+              style: TextStyle(color: Colors.white60, fontSize: 12),
+            ),
+            const SizedBox(width: 18),
+            DropdownButton<String>(
+              value: selectedSymbol,
+              items: symbols
+                  .map(
+                    (symbol) => DropdownMenuItem<String>(
+                      value: symbol,
+                      child: Text(symbol),
+                    ),
+                  )
+                  .toList(),
+              onChanged: (symbol) {
+                if (symbol == null || symbol == selectedSymbol) {
+                  return;
+                }
+
+                setState(() {
+                  selectedSymbol = symbol;
+                  status = null;
+                  loading = true;
+                  error = null;
+                });
+
+                if (widget.liveMode) {
+                  loadData(symbol: symbol);
+                }
+              },
+            ),
+            const SizedBox(width: 12),
+            const Expanded(
+              child: Text(
+                'Paper trading — bez prawdziwych zleceń',
+                textAlign: TextAlign.right,
+                style: TextStyle(color: Colors.white38, fontSize: 12),
+              ),
+            ),
+          ],
         ),
       ),
     );
@@ -283,18 +387,12 @@ class _DashboardPageState extends State<DashboardPage> {
       children: [
         Text(
           label,
-          style: const TextStyle(
-            color: Colors.white54,
-            fontSize: 12,
-          ),
+          style: const TextStyle(color: Colors.white54, fontSize: 12),
         ),
         const SizedBox(height: 4),
         Text(
           value,
-          style: const TextStyle(
-            fontSize: 16,
-            fontWeight: FontWeight.w600,
-          ),
+          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
         ),
       ],
     );
@@ -310,14 +408,11 @@ class _DashboardPageState extends State<DashboardPage> {
     double unrealizedPnl = 0.0;
 
     if (!isFlat) {
-      final entry =
-          (position['entry_price'] as num).toDouble();
+      final entry = (position['entry_price'] as num).toDouble();
 
-      final market =
-          (account['market_price'] as num).toDouble();
+      final market = (account['market_price'] as num).toDouble();
 
-      final quantity =
-          (position['quantity'] as num).toDouble();
+      final quantity = (position['quantity'] as num).toDouble();
 
       if (side == 'SELL') {
         unrealizedPnl = (entry - market) * quantity;
@@ -336,17 +431,15 @@ class _DashboardPageState extends State<DashboardPage> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              isFlat
-                  ? 'FLAT'
-                  : '${side.toString().toUpperCase()} OPEN',
+              isFlat ? 'FLAT' : '${side.toString().toUpperCase()} OPEN',
               style: TextStyle(
                 fontSize: 28,
                 fontWeight: FontWeight.bold,
                 color: isFlat
                     ? Colors.white70
                     : side == 'SELL'
-                        ? Colors.redAccent
-                        : Colors.greenAccent,
+                    ? Colors.redAccent
+                    : Colors.greenAccent,
               ),
             ),
             const SizedBox(height: 18),
@@ -355,26 +448,11 @@ class _DashboardPageState extends State<DashboardPage> {
                 spacing: 50,
                 runSpacing: 20,
                 children: [
-                  infoItem(
-                    'Wejście',
-                    money(position['entry_price']),
-                  ),
-                  infoItem(
-                    'Rynek',
-                    money(account['market_price']),
-                  ),
-                  infoItem(
-                    'Ilość',
-                    position['quantity'].toString(),
-                  ),
-                  infoItem(
-                    'Stop Loss',
-                    money(position['stop_loss']),
-                  ),
-                  infoItem(
-                    'Take Profit',
-                    money(position['take_profit']),
-                  ),
+                  infoItem('Wejście', money(position['entry_price'])),
+                  infoItem('Rynek', money(account['market_price'])),
+                  infoItem('Ilość', position['quantity'].toString()),
+                  infoItem('Stop Loss', money(position['stop_loss'])),
+                  infoItem('Take Profit', money(position['take_profit'])),
                   infoItem(
                     'Świece pozycji',
                     account['position_candles'].toString(),
@@ -388,10 +466,7 @@ class _DashboardPageState extends State<DashboardPage> {
               const SizedBox(height: 18),
               Text(
                 'NIEZREALIZOWANY WYNIK',
-                style: const TextStyle(
-                  color: Colors.white54,
-                  fontSize: 12,
-                ),
+                style: const TextStyle(color: Colors.white54, fontSize: 12),
               ),
               const SizedBox(height: 5),
               Text(
@@ -399,16 +474,11 @@ class _DashboardPageState extends State<DashboardPage> {
                 style: TextStyle(
                   fontSize: 24,
                   fontWeight: FontWeight.bold,
-                  color: pnlPositive
-                      ? Colors.greenAccent
-                      : Colors.redAccent,
+                  color: pnlPositive ? Colors.greenAccent : Colors.redAccent,
                 ),
               ),
             ] else ...[
-              infoItem(
-                'BTCUSDT',
-                money(account['market_price']),
-              ),
+              infoItem(selectedSymbol, money(account['market_price'])),
             ],
           ],
         ),
@@ -422,31 +492,22 @@ class _DashboardPageState extends State<DashboardPage> {
         elevation: 0,
         child: SizedBox(
           height: 360,
-          child: Center(
-            child: Text('Brak danych rynku'),
-          ),
+          child: Center(child: Text('Brak danych rynku')),
         ),
       );
     }
 
-    final candles = marketCandles
-        .asMap()
-        .entries
-        .map(
-          (entry) {
-            final candle =
-                Map<String, dynamic>.from(entry.value as Map);
+    final candles = marketCandles.asMap().entries.map((entry) {
+      final candle = Map<String, dynamic>.from(entry.value as Map);
 
-            return CandlestickSpot(
-              x: entry.key.toDouble(),
-              open: (candle['open'] as num).toDouble(),
-              high: (candle['high'] as num).toDouble(),
-              low: (candle['low'] as num).toDouble(),
-              close: (candle['close'] as num).toDouble(),
-            );
-          },
-        )
-        .toList();
+      return CandlestickSpot(
+        x: entry.key.toDouble(),
+        open: (candle['open'] as num).toDouble(),
+        high: (candle['high'] as num).toDouble(),
+        low: (candle['low'] as num).toDouble(),
+        close: (candle['close'] as num).toDouble(),
+      );
+    }).toList();
 
     final lows = candles.map((c) => c.low).toList();
     final highs = candles.map((c) => c.high).toList();
@@ -466,46 +527,13 @@ class _DashboardPageState extends State<DashboardPage> {
       }
     }
 
-    final position =
-        Map<String, dynamic>.from(status?['position'] as Map? ?? {});
-
-    final side = position['side'];
-    final hasPosition = side != null;
-
-    double? entryPrice;
-    double? stopLoss;
-    double? takeProfit;
-
-    if (hasPosition) {
-      entryPrice = (position['entry_price'] as num?)?.toDouble();
-      stopLoss = (position['stop_loss'] as num?)?.toDouble();
-      takeProfit = (position['take_profit'] as num?)?.toDouble();
-    }
-
-    final levels = <double>[
-      minY,
-      maxY,
-      ?entryPrice,
-      ?stopLoss,
-      ?takeProfit,
-    ];
-
-    minY = levels.reduce((a, b) => a < b ? a : b);
-    maxY = levels.reduce((a, b) => a > b ? a : b);
-
     final range = maxY - minY;
     final padding = range > 0 ? range * 0.08 : 10.0;
-
 
     return Card(
       elevation: 0,
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(
-          12,
-          18,
-          20,
-          18,
-        ),
+        padding: const EdgeInsets.fromLTRB(12, 18, 20, 18),
         child: SizedBox(
           height: 360,
           child: CandlestickChart(
@@ -515,19 +543,26 @@ class _DashboardPageState extends State<DashboardPage> {
               minY: minY - padding,
               maxY: maxY + padding,
               candlestickSpots: candles,
-              gridData: const FlGridData(
-                show: true,
-                drawVerticalLine: false,
-              ),
+              gridData: const FlGridData(show: true, drawVerticalLine: false),
               borderData: FlBorderData(show: false),
-              titlesData: const FlTitlesData(
-                topTitles: AxisTitles(
+              titlesData: FlTitlesData(
+                leftTitles: AxisTitles(
+                  sideTitles: SideTitles(
+                    showTitles: true,
+                    reservedSize: 72,
+                    getTitlesWidget: (value, meta) => SideTitleWidget(
+                      meta: meta,
+                      child: Text(value.toStringAsFixed(1)),
+                    ),
+                  ),
+                ),
+                topTitles: const AxisTitles(
                   sideTitles: SideTitles(showTitles: false),
                 ),
-                rightTitles: AxisTitles(
+                rightTitles: const AxisTitles(
                   sideTitles: SideTitles(showTitles: false),
                 ),
-                bottomTitles: AxisTitles(
+                bottomTitles: const AxisTitles(
                   sideTitles: SideTitles(showTitles: false),
                 ),
               ),
@@ -542,14 +577,13 @@ class _DashboardPageState extends State<DashboardPage> {
       ),
     );
   }
+
   Widget buildEquityChart() {
     if (equity.isEmpty) {
       return const Card(
         child: SizedBox(
           height: 300,
-          child: Center(
-            child: Text('Brak danych krzywej kapitału'),
-          ),
+          child: Center(child: Text('Brak danych krzywej kapitału')),
         ),
       );
     }
@@ -583,28 +617,54 @@ class _DashboardPageState extends State<DashboardPage> {
     return Card(
       elevation: 0,
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(
-          12,
-          18,
-          20,
-          18,
-        ),
+        padding: const EdgeInsets.fromLTRB(12, 18, 20, 18),
         child: SizedBox(
           height: 300,
           child: LineChart(
             LineChartData(
               minY: minY - padding,
               maxY: maxY + padding,
-              gridData: const FlGridData(
-                show: true,
-                drawVerticalLine: false,
-              ),
+              gridData: const FlGridData(show: true, drawVerticalLine: false),
               borderData: FlBorderData(show: false),
-              titlesData: const FlTitlesData(
-                topTitles: AxisTitles(
+              lineTouchData: LineTouchData(
+                touchTooltipData: LineTouchTooltipData(
+                  fitInsideHorizontally: true,
+                  fitInsideVertically: true,
+                  getTooltipItems: (touchedSpots) => touchedSpots.map((spot) {
+                    final textStyle = TextStyle(
+                      color: spot.bar.color ?? Colors.blueGrey,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 14,
+                    );
+                    return LineTooltipItem(
+                      spot.y.toStringAsFixed(1),
+                      textStyle,
+                    );
+                  }).toList(),
+                ),
+              ),
+              titlesData: FlTitlesData(
+                leftTitles: AxisTitles(
+                  sideTitles: SideTitles(
+                    showTitles: true,
+                    reservedSize: 64,
+                    getTitlesWidget: (value, meta) => SideTitleWidget(
+                      meta: meta,
+                      child: Text(value.toStringAsFixed(1)),
+                    ),
+                  ),
+                ),
+                bottomTitles: const AxisTitles(
+                  sideTitles: SideTitles(
+                    showTitles: true,
+                    reservedSize: 30,
+                    maxIncluded: false,
+                  ),
+                ),
+                topTitles: const AxisTitles(
                   sideTitles: SideTitles(showTitles: false),
                 ),
-                rightTitles: AxisTitles(
+                rightTitles: const AxisTitles(
                   sideTitles: SideTitles(showTitles: false),
                 ),
               ),
@@ -649,36 +709,15 @@ class _DashboardPageState extends State<DashboardPage> {
             DataColumn(label: Text('Prowizja')),
           ],
           rows: trades.map((trade) {
-            final profit =
-                (trade['profit'] as num).toDouble();
+            final profit = (trade['profit'] as num).toDouble();
 
             return DataRow(
               cells: [
-                DataCell(
-                  Text(
-                    trade['trade_number'].toString(),
-                  ),
-                ),
-                DataCell(
-                  Text(
-                    trade['side'].toString(),
-                  ),
-                ),
-                DataCell(
-                  Text(
-                    money(trade['entry_price']),
-                  ),
-                ),
-                DataCell(
-                  Text(
-                    money(trade['exit_price']),
-                  ),
-                ),
-                DataCell(
-                  Text(
-                    trade['exit_reason'].toString(),
-                  ),
-                ),
+                DataCell(Text(trade['trade_number'].toString())),
+                DataCell(Text(trade['side'].toString())),
+                DataCell(Text(money(trade['entry_price']))),
+                DataCell(Text(money(trade['exit_price']))),
+                DataCell(Text(trade['exit_reason'].toString())),
                 DataCell(
                   Text(
                     money4(profit),
@@ -690,11 +729,7 @@ class _DashboardPageState extends State<DashboardPage> {
                     ),
                   ),
                 ),
-                DataCell(
-                  Text(
-                    money4(trade['fee']),
-                  ),
-                ),
+                DataCell(Text(money4(trade['fee']))),
               ],
             );
           }).toList(),
@@ -706,61 +741,47 @@ class _DashboardPageState extends State<DashboardPage> {
   @override
   Widget build(BuildContext context) {
     if (loading && status == null) {
-      return const Scaffold(
-        body: Center(
-          child: CircularProgressIndicator(),
-        ),
-      );
+      return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
 
     if (status == null) {
       return Scaffold(
-        appBar: AppBar(
-          title: const Text('AL Trading Agent'),
-        ),
-        body: Center(
-          child: Text(
-            error ?? 'Brak danych z API.',
-          ),
+        appBar: AppBar(title: const Text('AL Trading Agent')),
+        body: ListView(
+          padding: const EdgeInsets.all(18),
+          children: [
+            buildAssetSelector(),
+            const SizedBox(height: 24),
+            Center(child: Text(error ?? 'Brak danych z API.')),
+          ],
         ),
       );
     }
 
-    final account = Map<String, dynamic>.from(
-      status!['account'] as Map,
-    );
+    final account = Map<String, dynamic>.from(status!['account'] as Map);
 
     final performance = Map<String, dynamic>.from(
       status!['performance'] as Map,
     );
 
-    final strategy = Map<String, dynamic>.from(
-      status!['strategy'] as Map,
-    );
+    final strategy = Map<String, dynamic>.from(status!['strategy'] as Map);
 
-    final position = Map<String, dynamic>.from(
-      status!['position'] as Map,
-    );
+    final position = Map<String, dynamic>.from(status!['position'] as Map);
 
-    final netProfit =
-        (account['net_profit'] as num).toDouble();
-
-    final isProfit = netProfit >= 0;
+    final portfolioBalance = (account['balance'] as num?)?.toDouble() ?? 0.0;
+    final initialBalance =
+        (account['initial_balance'] as num?)?.toDouble() ?? 1000.0;
+    final earned = portfolioBalance - initialBalance;
+    final isEarnedPositive = earned >= 0;
 
     return Scaffold(
       appBar: AppBar(
         title: const Text(
           'AL TRADING AGENT',
-          style: TextStyle(
-            fontWeight: FontWeight.bold,
-          ),
+          style: TextStyle(fontWeight: FontWeight.bold),
         ),
         actions: [
-          const Icon(
-            Icons.circle,
-            color: Colors.greenAccent,
-            size: 11,
-          ),
+          const Icon(Icons.circle, color: Colors.greenAccent, size: 11),
           const SizedBox(width: 7),
           const Text('PAPER LIVE'),
           const SizedBox(width: 18),
@@ -777,12 +798,12 @@ class _DashboardPageState extends State<DashboardPage> {
                   padding: const EdgeInsets.all(14),
                   child: Text(
                     'BŁĄD API: $error',
-                    style: const TextStyle(
-                      color: Colors.redAccent,
-                    ),
+                    style: const TextStyle(color: Colors.redAccent),
                   ),
                 ),
               ),
+
+            buildAssetSelector(),
 
             sectionTitle('KONTO'),
 
@@ -790,45 +811,37 @@ class _DashboardPageState extends State<DashboardPage> {
               builder: (context, constraints) {
                 final cards = [
                   metricCard(
-                    title: 'SALDO',
-                    value: money(account['balance']),
-                    subtitle:
-                        'Initial ${money(account['initial_balance'])}',
+                    title: 'PORTFEL',
+                    value: '${money(portfolioBalance)} zł',
+                    subtitle: 'Wpłata początkowa ${money(initialBalance)}',
                   ),
                   metricCard(
-                    title: 'ZYSK / STRATA',
-                    value:
-                        '${isProfit ? '+' : ''}${money(netProfit)}',
-                    subtitle: 'Tryb paper-live',
-                    valueColor: isProfit
+                    title: 'ZAROBIONO',
+                    value: '${isEarnedPositive ? '+' : ''}${money(earned)} zł',
+                    subtitle: 'Od wpłaty początkowej',
+                    valueColor: isEarnedPositive
                         ? Colors.greenAccent
                         : Colors.redAccent,
                   ),
                   metricCard(
                     title: 'MAKS. OBSUNIĘCIE',
-                    value: money(
-                      account['max_drawdown'],
-                    ),
+                    value: money(account['max_drawdown']),
                     subtitle: 'Ryzyko',
                   ),
                   metricCard(
-                    title: 'BTCUSDT',
-                    value: money(
-                      account['market_price'],
-                    ),
+                    title: selectedSymbol,
+                    value: money(account['market_price']),
                     subtitle: 'Rynek',
                   ),
                 ];
 
                 return GridView.count(
-                  crossAxisCount:
-                      constraints.maxWidth >= 950 ? 4 : 2,
+                  crossAxisCount: constraints.maxWidth >= 950 ? 4 : 2,
                   crossAxisSpacing: 12,
                   mainAxisSpacing: 12,
                   childAspectRatio: 1.8,
                   shrinkWrap: true,
-                  physics:
-                      const NeverScrollableScrollPhysics(),
+                  physics: const NeverScrollableScrollPhysics(),
                   children: cards,
                 );
               },
@@ -844,57 +857,45 @@ class _DashboardPageState extends State<DashboardPage> {
                 final cards = [
                   metricCard(
                     title: 'TRANSAKCJE',
-                    value:
-                        performance['trades'].toString(),
+                    value: performance['trades'].toString(),
                   ),
                   metricCard(
                     title: 'ZYSKOWNE',
-                    value:
-                        performance['wins'].toString(),
+                    value: performance['wins'].toString(),
                   ),
                   metricCard(
                     title: 'STRATNE',
-                    value:
-                        performance['losses'].toString(),
+                    value: performance['losses'].toString(),
                   ),
                   metricCard(
                     title: 'SKUTECZNOŚĆ',
-                    value:
-                        pct(performance['win_rate']),
+                    value: pct(performance['win_rate']),
                   ),
                   metricCard(
                     title: 'WSPÓŁCZYNNIK ZYSKU',
-                    value:
-                        performance['profit_factor'] == null
-                            ? 'N/A'
-                            : money4(
-                                performance[
-                                    'profit_factor'],
-                              ),
+                    value: performance['profit_factor'] == null
+                        ? 'N/A'
+                        : money4(performance['profit_factor']),
                   ),
                   metricCard(
                     title: 'OCZEKIWANA WARTOŚĆ',
-                    value: money4(
-                      performance['expectancy'],
-                    ),
+                    value: money4(performance['expectancy']),
                   ),
                 ];
 
                 return GridView.count(
-                  crossAxisCount:
-                      constraints.maxWidth >= 1100 ? 6 : 2,
+                  crossAxisCount: constraints.maxWidth >= 1100 ? 6 : 2,
                   crossAxisSpacing: 12,
                   mainAxisSpacing: 12,
                   childAspectRatio: 1.6,
                   shrinkWrap: true,
-                  physics:
-                      const NeverScrollableScrollPhysics(),
+                  physics: const NeverScrollableScrollPhysics(),
                   children: cards,
                 );
               },
             ),
 
-            sectionTitle('ZAMROŻONA STRATEGIA'),
+            sectionTitle('STRATEGIA PAPER · ${strategy['symbol']}'),
 
             Card(
               elevation: 0,
@@ -904,40 +905,24 @@ class _DashboardPageState extends State<DashboardPage> {
                   spacing: 35,
                   runSpacing: 18,
                   children: [
-                    infoItem(
-                      'BUY RSI',
-                      strategy['buy_rsi'].toString(),
-                    ),
-                    infoItem(
-                      'SELL RSI',
-                      strategy['sell_rsi'].toString(),
-                    ),
+                    infoItem('BUY RSI', strategy['buy_rsi'].toString()),
+                    infoItem('SELL RSI', strategy['sell_rsi'].toString()),
                     infoItem(
                       'MAKS. CZAS',
-                      strategy[
-                        'max_position_candles'
-                      ].toString(),
+                      strategy['max_position_candles'].toString(),
                     ),
                     infoItem(
                       'MIN. RÓŻNICA',
-                      strategy[
-                        'min_difference'
-                      ].toString(),
+                      strategy['min_difference'].toString(),
                     ),
-                    infoItem(
-                      'RSI',
-                      strategy['rsi_method'].toString(),
-                    ),
-                    infoItem(
-                      'PROWIZJA',
-                      strategy['trading_fee'].toString(),
-                    ),
+                    infoItem('RSI', strategy['rsi_method'].toString()),
+                    infoItem('PROWIZJA', strategy['trading_fee'].toString()),
                   ],
                 ),
               ),
             ),
 
-            sectionTitle('RYNEK BTCUSDT · 1m'),
+            sectionTitle('RYNEK ${strategy['symbol']} · ${strategy['interval']}'),
             buildMarketChart(),
 
             sectionTitle('KRZYWA KAPITAŁU'),
@@ -952,13 +937,11 @@ class _DashboardPageState extends State<DashboardPage> {
               child: Text(
                 lastUpdate == null
                     ? 'Automatyczne odświeżanie: 5 s'
-                    : 'Auto-refresh: 5s  •  '
-                      'Aktualizacja ${lastUpdate!.hour.toString().padLeft(2, '0')}:'
-                      '${lastUpdate!.minute.toString().padLeft(2, '0')}:'
-                      '${lastUpdate!.second.toString().padLeft(2, '0')}',
-                style: const TextStyle(
-                  color: Colors.white38,
-                ),
+                    : 'Automatyczne odświeżanie: 5 s  •  '
+                          'Aktualizacja ${lastUpdate!.hour.toString().padLeft(2, '0')}:'
+                          '${lastUpdate!.minute.toString().padLeft(2, '0')}:'
+                          '${lastUpdate!.second.toString().padLeft(2, '0')}',
+                style: const TextStyle(color: Colors.white38),
               ),
             ),
           ],
@@ -967,11 +950,3 @@ class _DashboardPageState extends State<DashboardPage> {
     );
   }
 }
-
-
-
-
-
-
-
-

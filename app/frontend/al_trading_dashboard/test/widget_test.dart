@@ -21,5 +21,30 @@ void main() {
       expect(find.text('POZYCJA'), findsOneWidget);
     },
   );
+
+  testWidgets(
+    'asset selector changes the selected paper market',
+    (WidgetTester tester) async {
+      await tester.pumpWidget(
+        const MaterialApp(
+          home: DashboardPage(liveMode: false),
+        ),
+      );
+
+      await tester.pump();
+
+      expect(find.text('BTCUSDT'), findsWidgets);
+
+      await tester.tap(find.byType(DropdownButton<String>));
+      await tester.pumpAndSettle();
+
+      expect(find.text('ETHUSDT'), findsWidgets);
+
+      await tester.tap(find.text('ETHUSDT').last);
+      await tester.pump();
+
+      expect(find.text('ETHUSDT'), findsWidgets);
+    },
+  );
 }
 
