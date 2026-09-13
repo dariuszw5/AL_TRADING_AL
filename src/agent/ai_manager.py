@@ -23,6 +23,7 @@ STOP = 0.01
 TAKE = 0.02
 STRATEGIES = ('trend', 'mean_reversion', 'breakout')
 LEARNING_WEIGHT = 0.25
+USER_PORTFOLIO_PATH = 'data/live_state/user_portfolio.json'
 
 
 def clean_candles(candles, now_ms):
@@ -163,6 +164,7 @@ class AIPaperManager:
             unit='simulation_units', initial_balance=1000.0, balance=1000.0,
             equity=1000.0, peak=1000.0, daily_loss=0.0, day=None,
             realized_pnl=0.0, unrealized_pnl=0.0,
+            profit_swept=0.0, profit_transfers=[],
             position=None, pending=None, decisions=[], trades=[], last_cycle=0,
             strategy_learning={strategy: dict(trades=0, wins=0, total_return=0.0)
                                for strategy in STRATEGIES},
@@ -174,6 +176,8 @@ class AIPaperManager:
                              - self.state.get('initial_balance', 1000.0))
         self.state.setdefault('unrealized_pnl', self.state.get('equity', 1000.0)
                              - self.state.get('balance', 1000.0))
+        self.state.setdefault('profit_swept', 0.0)
+        self.state.setdefault('profit_transfers', [])
         for strategy in STRATEGIES:
             self.state['strategy_learning'].setdefault(
                 strategy, dict(trades=0, wins=0, total_return=0.0))
@@ -220,6 +224,30 @@ class AIPaperManager:
                     profit=profit, reason=result[1])])[-300:]
                 s['position'] = None
                 break
+
+    def _sweep_surplus(self, now_ms):
+        """Move realized AI profit above its base into the user's ledger."""
+        s = self.state
+        surplus = max(0.0, s['balance'] - s['initial_balance'])
+        amount = surplus - s.get('profit_swept', 0.0)
+        if amount <= 1e-9:
+            return
+        store = LiveStateStore(USER_PORTFOLIO_PATH)
+        portfolio = store.load() or dict(
+            version=1, currency='PLN', balance=0.0,
+            total_deposited=0.0, total_withdrawn=0.0,
+            profit_transferred=0.0, profit_transfers=[],
+        )
+        portfolio['balance'] += amount
+        portfolio['profit_transferred'] = portfolio.get('profit_transferred', 0.0) + amount
+        transfer = dict(timestamp=now_ms, amount=amount, source='AI_PAPER_PROFIT')
+        portfolio['profit_transfers'] = (portfolio.get('profit_transfers', []) + [transfer])[-300:]
+        store.save(portfolio)
+        s['balance'] -= amount
+        s['equity'] -= amount
+        s['profit_swept'] += amount
+        s['profit_transfers'] = (s['profit_transfers'] + [transfer])[-300:]
+        s['realized_pnl'] = (s['balance'] - s['initial_balance']) + s['profit_swept']
 
     def step(self, raw_markets, now_ms, errors=None):
         previous = deepcopy(self.state)
@@ -268,6 +296,7 @@ class AIPaperManager:
             self._manage_position(markets)
         else:
             s['unrealized_pnl'] = 0.0
+        self._sweep_surplus(now_ms)
         rows = []
         for symbol, bars in fresh.items():
             ranked = rank_asset(symbol, bars)

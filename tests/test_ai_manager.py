@@ -85,7 +85,8 @@ def test_signal_executes_next_open_once_and_restores(tmp_path):
     state = restored.step({'BTCUSDT': bars[:610]}, now(bars[:610]))
     assert len(state['trades']) == 1
     assert state['trades'][0]['reason'] == 'TIME_EXIT'
-    assert state['balance'] > 1000
+    assert state['balance'] == 1000
+    assert state['profit_swept'] > 0
     learning = state['strategy_learning']['trend']
     assert learning['trades'] == 1
     assert learning['total_return'] > 0
@@ -105,6 +106,19 @@ def test_online_learning_is_bounded_and_exposed_in_ranking(tmp_path, monkeypatch
     assert row['learning_mean_return'] == approx(0.10)
     assert row['learning_bonus'] == approx(ai.LEARNING_WEIGHT * 0.10)
     assert row['score'] == approx(0.01 + ai.LEARNING_WEIGHT * 0.10)
+
+
+def test_realized_surplus_is_transferred_to_user_ledger(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    m = manager(tmp_path / 'ai.json')
+    m.state['balance'] = 1012.5
+    m.state['equity'] = 1012.5
+    state = m.step({}, now(candles()))
+    user = ai.LiveStateStore('data/live_state/user_portfolio.json').load()
+    assert state['balance'] == 1000
+    assert state['profit_swept'] == approx(12.5)
+    assert user['profit_transferred'] == approx(12.5)
+    assert user['balance'] == approx(12.5)
 
 
 def test_stop_gap_and_costs_are_charged(tmp_path):

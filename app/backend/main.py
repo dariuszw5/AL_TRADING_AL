@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Any
 
 from fastapi import FastAPI, HTTPException
+from pydantic import BaseModel, Field
 from fastapi.middleware.cors import CORSMiddleware
 
 from src.data.assets import SUPPORTED_ASSETS, asset_payload, get_asset
@@ -17,19 +18,24 @@ STATE_FILE = LIVE_STATE_DIR / "paper_live_BTCUSDT_1m.json"
 TRADE_HISTORY_FILE = LIVE_STATE_DIR / "paper_live_history.csv"
 SNAPSHOTS_FILE = LIVE_STATE_DIR / "paper_live_snapshots.csv"
 DAILY_FILE = LIVE_STATE_DIR / "paper_live_daily.csv"
+USER_PORTFOLIO_FILE = LIVE_STATE_DIR / "user_portfolio.json"
+
+
+class PortfolioAmount(BaseModel):
+    amount: float = Field(gt=0, le=1_000_000)
 
 
 app = FastAPI(
     title="AL TRADING AGENT API",
     version="1.0.0",
-    description="Read-only API for the AL TRADING AGENT dashboard.",
+    description="Dashboard API and paper portfolio ledger for the AL TRADING AGENT.",
 )
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
     allow_credentials=False,
-    allow_methods=["GET"],
+    allow_methods=["GET", "POST"],
     allow_headers=["*"],
 )
 
@@ -454,6 +460,54 @@ def ai_status() -> dict[str, Any]:
     except (OSError, ValueError, KeyError, TypeError):
         return {'available': False, 'mode': 'PAPER_ONLY',
                 'reason': 'Moduł AI nie zapisał jeszcze poprawnego cyklu'}
+
+
+def user_portfolio_state() -> dict[str, Any]:
+    default = {
+        'version': 1, 'currency': 'PLN', 'balance': 0.0,
+        'total_deposited': 0.0, 'total_withdrawn': 0.0,
+        'profit_transferred': 0.0, 'profit_transfers': [],
+        'result': 0.0, 'available': True,
+    }
+    try:
+        with USER_PORTFOLIO_FILE.open(encoding='utf-8') as handle:
+            state = {**default, **json.load(handle)}
+        state['result'] = state.get('profit_transferred', 0.0)
+        return state
+    except (OSError, ValueError, TypeError, KeyError):
+        return default
+
+
+def save_user_portfolio(state: dict[str, Any]) -> dict[str, Any]:
+    LIVE_STATE_DIR.mkdir(parents=True, exist_ok=True)
+    temporary = USER_PORTFOLIO_FILE.with_suffix('.tmp')
+    temporary.write_text(json.dumps(state, ensure_ascii=False, indent=2),
+                         encoding='utf-8')
+    temporary.replace(USER_PORTFOLIO_FILE)
+    return user_portfolio_state()
+
+
+@app.get('/api/user-portfolio')
+def get_user_portfolio() -> dict[str, Any]:
+    return user_portfolio_state()
+
+
+@app.post('/api/user-portfolio/deposit')
+def deposit_user_portfolio(request: PortfolioAmount) -> dict[str, Any]:
+    state = user_portfolio_state()
+    state['balance'] += request.amount
+    state['total_deposited'] += request.amount
+    return save_user_portfolio(state)
+
+
+@app.post('/api/user-portfolio/withdraw')
+def withdraw_user_portfolio(request: PortfolioAmount) -> dict[str, Any]:
+    state = user_portfolio_state()
+    if request.amount > state['balance']:
+        raise HTTPException(status_code=400, detail='Niewystarczające saldo portfela')
+    state['balance'] -= request.amount
+    state['total_withdrawn'] += request.amount
+    return save_user_portfolio(state)
 
 
 @app.get("/api/market")
