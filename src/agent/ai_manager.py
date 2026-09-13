@@ -22,6 +22,7 @@ EXPOSURE = 0.20
 STOP = 0.01
 TAKE = 0.02
 STRATEGIES = ('trend', 'mean_reversion', 'breakout')
+LEARNING_WEIGHT = 0.25
 
 
 def clean_candles(candles, now_ms):
@@ -158,13 +159,19 @@ class AIPaperManager:
         self.assets = tuple(assets)
         self.store = LiveStateStore(path)
         self.state = self.store.load() or dict(
-            version=1, mode='PAPER_ONLY', model='k-NN returns v1',
+            version=1, mode='PAPER_ONLY', model='k-NN returns v1 + online stats',
             unit='simulation_units', initial_balance=1000.0, balance=1000.0,
             equity=1000.0, peak=1000.0, daily_loss=0.0, day=None,
             position=None, pending=None, decisions=[], trades=[], last_cycle=0,
+            strategy_learning={strategy: dict(trades=0, wins=0, total_return=0.0)
+                               for strategy in STRATEGIES},
         )
         if self.state.get('version') != 1 or self.state.get('mode') != 'PAPER_ONLY':
             raise ValueError('Unsupported AI paper state')
+        self.state.setdefault('strategy_learning', {})
+        for strategy in STRATEGIES:
+            self.state['strategy_learning'].setdefault(
+                strategy, dict(trades=0, wins=0, total_return=0.0))
 
     def _record(self, now_ms, action, reason, **extra):
         decision = dict(timestamp=now_ms, action=action, reason=reason, **extra)
@@ -195,6 +202,11 @@ class AIPaperManager:
                 s['balance'] += profit
                 s['equity'] = s['balance']
                 s['daily_loss'] += max(0, -profit)
+                learning = s['strategy_learning'].setdefault(
+                    p['strategy'], dict(trades=0, wins=0, total_return=0.0))
+                learning['trades'] += 1
+                learning['wins'] += int(profit > 0)
+                learning['total_return'] += net_return(p['entry'], result[0])
                 s['trades'] = (s['trades'] + [dict(
                     **p, exit_price=result[0], exit_timestamp=c.timestamp,
                     profit=profit, reason=result[1])])[-300:]
@@ -253,6 +265,18 @@ class AIPaperManager:
             if not ranked:
                 issues[symbol] = 'Za mało danych do treningu i walidacji'
         rows.sort(key=lambda row: row['score'], reverse=True)
+        for row in rows:
+            learning = s['strategy_learning'].get(row['strategy'], {})
+            sample_count = int(learning.get('trades', 0))
+            observed = (learning.get('total_return', 0.0) / sample_count
+                        if sample_count else 0.0)
+            # Online results are a bounded tie-breaker, never a reason to
+            # override a negative market model score.
+            row['learning_trades'] = sample_count
+            row['learning_mean_return'] = observed if sample_count else None
+            row['learning_bonus'] = (LEARNING_WEIGHT * observed
+                                      if sample_count >= 3 else 0.0)
+            row['score'] += row['learning_bonus']
         s.update(ranking=rows, data_issues=issues, last_cycle=now_ms,
                  limits=dict(exposure=EXPOSURE, daily_loss=20, drawdown=0.05,
                              stop=STOP, take=TAKE, horizon_minutes=HORIZON))

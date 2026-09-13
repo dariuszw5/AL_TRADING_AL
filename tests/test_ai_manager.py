@@ -2,6 +2,7 @@ import json
 import math
 
 import pytest
+from pytest import approx
 
 from src.agent import ai_manager as ai
 from src.data.candle import Candle
@@ -85,6 +86,25 @@ def test_signal_executes_next_open_once_and_restores(tmp_path):
     assert len(state['trades']) == 1
     assert state['trades'][0]['reason'] == 'TIME_EXIT'
     assert state['balance'] > 1000
+    learning = state['strategy_learning']['trend']
+    assert learning['trades'] == 1
+    assert learning['total_return'] > 0
+
+
+def test_online_learning_is_bounded_and_exposed_in_ranking(tmp_path, monkeypatch):
+    m = manager(tmp_path)
+    m.state['strategy_learning']['trend'] = {
+        'trades': 3, 'wins': 3, 'total_return': 0.30,
+    }
+    monkeypatch.setattr(ai, 'rank_asset', lambda symbol, bars: [dict(
+        symbol=symbol, strategy='trend', score=0.01, eligible=True)])
+    bars = candles()
+    state = m.step({'BTCUSDT': bars}, now(bars))
+    row = state['ranking'][0]
+    assert row['learning_trades'] == 3
+    assert row['learning_mean_return'] == approx(0.10)
+    assert row['learning_bonus'] == approx(ai.LEARNING_WEIGHT * 0.10)
+    assert row['score'] == approx(0.01 + ai.LEARNING_WEIGHT * 0.10)
 
 
 def test_stop_gap_and_costs_are_charged(tmp_path):
