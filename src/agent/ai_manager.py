@@ -344,7 +344,10 @@ class AIPaperManager:
     def run_once(self):
         def fetch(asset):
             try:
-                return asset.symbol, DataProvider().get_candles(asset.symbol, '1m', 600), None
+                # Binance supports 1000 candles per request; the longer
+                # window gives every asset a larger chronological validation
+                # sample without inventing trades when no signal exists.
+                return asset.symbol, DataProvider().get_candles(asset.symbol, '1m', 1000), None
             except Exception as exc:
                 return asset.symbol, [], str(exc)
         with ThreadPoolExecutor(max_workers=3) as pool:
