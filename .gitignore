@@ -1,5 +1,33 @@
+﻿# Python
 .venv/
 __pycache__/
-*.pyc
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# IDE / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Runtime / live state
+data/live_state/
+
+# Flutter / Dart generated
+app/frontend/al_trading_dashboard/.dart_tool/
+app/frontend/al_trading_dashboard/build/
+app/frontend/al_trading_dashboard/.flutter-plugins
+app/frontend/al_trading_dashboard/.flutter-plugins-dependencies
+app/frontend/al_trading_dashboard/.packages
+app/frontend/al_trading_dashboard/windows/flutter/ephemeral/
+
+# Temporary backups
+*.bak
+*.tmp
+
+# Local environment / secrets
 .env
-logs/
+.env.*
+!.env.example
