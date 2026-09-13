@@ -440,6 +440,22 @@ def assets() -> list[dict[str, Any]]:
     return result
 
 
+@app.get('/api/ai')
+def ai_status() -> dict[str, Any]:
+    import time
+
+    path = LIVE_STATE_DIR / 'ai_paper.json'
+    try:
+        with path.open(encoding='utf-8') as handle:
+            state = json.load(handle)
+        age = time.time() - state['last_cycle'] / 1000
+        return {**state, 'available': True, 'stale': age > 180,
+                'age_seconds': max(0, age)}
+    except (OSError, ValueError, KeyError, TypeError):
+        return {'available': False, 'mode': 'PAPER_ONLY',
+                'reason': 'Moduł AI nie zapisał jeszcze poprawnego cyklu'}
+
+
 @app.get("/api/market")
 def market(symbol: str = "BTCUSDT") -> dict[str, Any]:
     return load_market_candles(symbol=symbol, limit=120)

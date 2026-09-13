@@ -1,9 +1,11 @@
-﻿import 'dart:async';
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
+
+import 'ai_panel.dart';
 
 const List<Map<String, String>> fallbackAssets = [
   {'symbol': 'BTCUSDT', 'name': 'Bitcoin', 'asset_type': 'crypto'},
@@ -64,6 +66,10 @@ class _DashboardPageState extends State<DashboardPage> {
       .toList();
   String selectedSymbol = 'BTCUSDT';
   int requestGeneration = 0;
+  Map<String, dynamic>? aiData;
+  String? aiError;
+  bool aiLoading = false;
+  bool followAiSelection = false;
 
   String? error;
   bool loading = true;
@@ -78,8 +84,12 @@ class _DashboardPageState extends State<DashboardPage> {
     if (widget.liveMode) {
       loadAssets();
       loadData();
+      loadAi();
 
-      timer = Timer.periodic(const Duration(seconds: 5), (_) => loadData());
+      timer = Timer.periodic(const Duration(seconds: 5), (_) {
+        loadData();
+        loadAi();
+      });
     } else {
       _loadTestData();
     }
@@ -99,7 +109,7 @@ class _DashboardPageState extends State<DashboardPage> {
     status = {
       'available': true,
       'strategy': {
-        'symbol': 'BTCUSDT',
+        'symbol': selectedSymbol,
         'interval': '1m',
         'buy_rsi': 33.8,
         'sell_rsi': 68.5,
@@ -164,6 +174,67 @@ class _DashboardPageState extends State<DashboardPage> {
 
     return jsonDecode(response.body);
   }
+
+  Future<void> loadAi() async {
+    if (aiLoading) return;
+    aiLoading = true;
+    try {
+      final result = await getJson('/api/ai');
+      if (!mounted) return;
+      setState(() {
+        aiData = Map<String, dynamic>.from(result as Map);
+        aiError = null;
+      });
+      followAiAsset();
+    } catch (exc) {
+      if (mounted) setState(() => aiError = exc.toString());
+    } finally {
+      aiLoading = false;
+    }
+  }
+
+  void selectAsset(String symbol, {bool fromAi = false}) {
+    if (!fromAi && followAiSelection) {
+      setState(() => followAiSelection = false);
+    }
+    if (symbol == selectedSymbol) return;
+    setState(() {
+      selectedSymbol = symbol;
+      requestGeneration++;
+      status = null;
+      trades = [];
+      equity = [];
+      marketCandles = [];
+      loading = true;
+      error = null;
+      if (!widget.liveMode) _loadTestData();
+    });
+    if (widget.liveMode) loadData(symbol: symbol);
+  }
+
+  void followAiAsset() {
+    if (!followAiSelection ||
+        aiData?['available'] != true ||
+        aiData?['stale'] == true ||
+        aiError != null) {
+      return;
+    }
+    final position = aiData?['position'] as Map?;
+    final decision = aiData?['decision'] as Map?;
+    final symbol = position?['symbol'] ?? decision?['symbol'];
+    if (symbol is String) selectAsset(symbol, fromAi: true);
+  }
+
+  Widget buildAiPanel() => AiPanel(
+    data: aiData,
+    error: aiError,
+    onSelectAsset: selectAsset,
+    followSelection: followAiSelection,
+    onFollowChanged: (value) {
+      setState(() => followAiSelection = value);
+      followAiAsset();
+    },
+  );
 
   Future<void> loadAssets() async {
     try {
@@ -355,16 +426,7 @@ class _DashboardPageState extends State<DashboardPage> {
                   return;
                 }
 
-                setState(() {
-                  selectedSymbol = symbol;
-                  status = null;
-                  loading = true;
-                  error = null;
-                });
-
-                if (widget.liveMode) {
-                  loadData(symbol: symbol);
-                }
+                selectAsset(symbol);
               },
             ),
             const SizedBox(width: 12),
@@ -752,6 +814,7 @@ class _DashboardPageState extends State<DashboardPage> {
           children: [
             buildAssetSelector(),
             const SizedBox(height: 24),
+            buildAiPanel(),
             Center(child: Text(error ?? 'Brak danych z API.')),
           ],
         ),
@@ -922,8 +985,12 @@ class _DashboardPageState extends State<DashboardPage> {
               ),
             ),
 
-            sectionTitle('RYNEK ${strategy['symbol']} · ${strategy['interval']}'),
+            sectionTitle(
+              'RYNEK ${strategy['symbol']} · ${strategy['interval']}',
+            ),
             buildMarketChart(),
+
+            buildAiPanel(),
 
             sectionTitle('KRZYWA KAPITAŁU'),
             buildEquityChart(),

@@ -2,9 +2,11 @@ from time import sleep
 
 from src.agent.multi_asset_runner import MultiAssetPaperLive
 from src.data.assets import SUPPORTED_ASSETS
+from src.agent.ai_manager import AIPaperManager
 
 
 runner = MultiAssetPaperLive()
+ai_manager = AIPaperManager('data/live_state/ai_paper.json')
 
 print()
 print("=" * 100)
@@ -27,6 +29,12 @@ print("=" * 100)
 
 while True:
     results = runner.run_once()
+    try:
+        ai_state = ai_manager.run_once()
+        print('AI PAPER:', ai_state['decision'], flush=True)
+    except Exception as exc:
+        # Do not execute another AI decision from this failed cycle.
+        print(f'AI PAPER cycle failed: {exc}', flush=True)
 
     for symbol, result in results.items():
         print(
