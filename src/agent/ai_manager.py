@@ -162,6 +162,7 @@ class AIPaperManager:
             version=1, mode='PAPER_ONLY', model='k-NN returns v1 + online stats',
             unit='simulation_units', initial_balance=1000.0, balance=1000.0,
             equity=1000.0, peak=1000.0, daily_loss=0.0, day=None,
+            realized_pnl=0.0, unrealized_pnl=0.0,
             position=None, pending=None, decisions=[], trades=[], last_cycle=0,
             strategy_learning={strategy: dict(trades=0, wins=0, total_return=0.0)
                                for strategy in STRATEGIES},
@@ -169,6 +170,10 @@ class AIPaperManager:
         if self.state.get('version') != 1 or self.state.get('mode') != 'PAPER_ONLY':
             raise ValueError('Unsupported AI paper state')
         self.state.setdefault('strategy_learning', {})
+        self.state.setdefault('realized_pnl', self.state.get('balance', 1000.0)
+                             - self.state.get('initial_balance', 1000.0))
+        self.state.setdefault('unrealized_pnl', self.state.get('equity', 1000.0)
+                             - self.state.get('balance', 1000.0))
         for strategy in STRATEGIES:
             self.state['strategy_learning'].setdefault(
                 strategy, dict(trades=0, wins=0, total_return=0.0))
@@ -194,6 +199,7 @@ class AIPaperManager:
             result = exit_price(c, p['entry'], c.timestamp >= p['exit_at'])
             mark = result[0] if result else c.close
             s['equity'] = s['balance'] + p['allocation'] * net_return(p['entry'], mark)
+            s['unrealized_pnl'] = s['equity'] - s['balance']
             s['peak'] = max(s['peak'], s['equity'])
             if result is None and self._blocked():
                 result = (c.close, 'RISK_LIMIT')
@@ -201,6 +207,8 @@ class AIPaperManager:
                 profit = p['allocation'] * net_return(p['entry'], result[0])
                 s['balance'] += profit
                 s['equity'] = s['balance']
+                s['realized_pnl'] = s['balance'] - s['initial_balance']
+                s['unrealized_pnl'] = 0.0
                 s['daily_loss'] += max(0, -profit)
                 learning = s['strategy_learning'].setdefault(
                     p['strategy'], dict(trades=0, wins=0, total_return=0.0))
@@ -258,6 +266,8 @@ class AIPaperManager:
                 s['pending'] = pending
         if s['position']:
             self._manage_position(markets)
+        else:
+            s['unrealized_pnl'] = 0.0
         rows = []
         for symbol, bars in fresh.items():
             ranked = rank_asset(symbol, bars)

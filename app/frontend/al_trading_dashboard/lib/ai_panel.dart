@@ -40,6 +40,9 @@ class AiPanel extends StatelessWidget {
     final trades = data?['trades'] as List? ?? [];
     final decisions = data?['decisions'] as List? ?? [];
     final equity = (data?['equity'] as num?)?.toDouble() ?? 1000;
+    final realized = (data?['realized_pnl'] as num?)?.toDouble() ?? equity - 1000;
+    final unrealized =
+        (data?['unrealized_pnl'] as num?)?.toDouble() ?? 0;
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(18),
@@ -63,6 +66,10 @@ class AiPanel extends StatelessWidget {
               Text(
                 'Kapitał: ${equity.toStringAsFixed(2)} jedn. symulacji '
                 '• Wynik: ${(equity - 1000).toStringAsFixed(2)}',
+              ),
+              Text(
+                'Zrealizowany: ${realized.toStringAsFixed(2)} '
+                '• Otwarta pozycja: ${unrealized.toStringAsFixed(2)}',
               ),
               Text(decision['reason']?.toString() ?? ''),
               if (symbol != null)
