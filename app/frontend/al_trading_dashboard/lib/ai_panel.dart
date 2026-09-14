@@ -41,9 +41,29 @@ class AiPanel extends StatelessWidget {
     final trades = data?['trades'] as List? ?? [];
     final decisions = data?['decisions'] as List? ?? [];
     final equity = (data?['equity'] as num?)?.toDouble() ?? 1000;
-    final realized = (data?['realized_pnl'] as num?)?.toDouble() ?? equity - 1000;
-    final unrealized =
-        (data?['unrealized_pnl'] as num?)?.toDouble() ?? 0;
+    final realized =
+        (data?['realized_pnl'] as num?)?.toDouble() ?? equity - 1000;
+    final unrealized = (data?['unrealized_pnl'] as num?)?.toDouble() ?? 0;
+    final activity = <Map<String, dynamic>>[];
+    String? previousSymbol;
+    var switches = 0;
+    for (final raw in decisions.reversed) {
+      final item = Map<String, dynamic>.from(raw as Map);
+      final itemSymbol = item['symbol']?.toString();
+      if (itemSymbol != null &&
+          previousSymbol != null &&
+          itemSymbol != previousSymbol) {
+        switches++;
+      }
+      if (itemSymbol != null) {
+        previousSymbol = itemSymbol;
+      }
+      activity.add(item);
+    }
+    final actionLabels = {
+      ...actions,
+      'SELECT_EXPLORATION': 'Mała pozycja testowa',
+    };
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(18),
@@ -137,19 +157,33 @@ class AiPanel extends StatelessWidget {
               ),
             if (decisions.isNotEmpty)
               ExpansionTile(
-                title: const Text('Ostatnie decyzje AI'),
-                children: decisions.reversed.take(10).map((raw) {
-                  final item = raw as Map;
+                title: const Text('Raport aktywności AI'),
+                subtitle: Text(
+                  '${decisions.length} decyzji • $switches przełączeń aktywa'
+                  ' • ${trades.length} zamkniętych transakcji',
+                ),
+                children: activity.take(20).map((item) {
                   final at = DateTime.fromMillisecondsSinceEpoch(
                     (item['timestamp'] as num).toInt(),
                     isUtc: true,
                   ).toLocal();
+                  final itemSymbol = item['symbol']?.toString();
                   return ListTile(
                     title: Text(
                       '${at.toString().substring(0, 19)} · '
-                      '${item['symbol'] ?? 'Gotówka'}',
+                      '${itemSymbol ?? 'Gotówka'} · '
+                      '${actionLabels[item['action']] ?? item['action'] ?? 'Decyzja'}',
                     ),
                     subtitle: Text(item['reason']?.toString() ?? ''),
+                    trailing: itemSymbol == null
+                        ? null
+                        : IconButton(
+                            tooltip: 'Pokaż aktywo',
+                            icon: const Icon(Icons.show_chart),
+                            onPressed: stale
+                                ? null
+                                : () => onSelectAsset(itemSymbol),
+                          ),
                   );
                 }).toList(),
               ),

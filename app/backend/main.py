@@ -1,6 +1,7 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import json
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -54,6 +55,14 @@ def state_file_for(symbol: str) -> Path:
 
 def load_state(symbol: str = "BTCUSDT") -> dict[str, Any]:
     state_file = state_file_for(symbol)
+    ai_file = LIVE_STATE_DIR / f"ai_asset_{asset_or_error(symbol).symbol}.json"
+    if ai_file.exists():
+        from src.agent.independent_paper import dashboard_state
+        try:
+            with ai_file.open(encoding='utf-8') as handle:
+                return dashboard_state(json.load(handle))
+        except (OSError, ValueError, KeyError, TypeError) as exc:
+            return {'available': False, 'symbol': symbol, 'error': str(exc)}
 
     if not state_file.exists():
         return {
@@ -192,6 +201,7 @@ def status(symbol: str = "BTCUSDT") -> dict[str, Any]:
         "strategy": {
             "symbol": asset.symbol,
             "asset_name": asset.name,
+            "execution_model": state.get('source', 'BASELINE_PAPER'),
             "asset_type": asset.asset_type,
             "provider": asset.provider,
             "quote": asset.quote,
@@ -447,10 +457,11 @@ def assets() -> list[dict[str, Any]]:
 
 
 @app.get('/api/ai')
-def ai_status() -> dict[str, Any]:
+def ai_status(symbol: str | None = None) -> dict[str, Any]:
     import time
 
-    path = LIVE_STATE_DIR / 'ai_paper.json'
+    path = LIVE_STATE_DIR / (f'ai_asset_{asset_or_error(symbol).symbol}.json'
+                             if symbol else 'ai_paper.json')
     try:
         with path.open(encoding='utf-8') as handle:
             state = json.load(handle)
@@ -460,6 +471,29 @@ def ai_status() -> dict[str, Any]:
     except (OSError, ValueError, KeyError, TypeError):
         return {'available': False, 'mode': 'PAPER_ONLY',
                 'reason': 'Moduł AI nie zapisał jeszcze poprawnego cyklu'}
+
+
+@app.get('/api/ai-research')
+def ai_research_status(symbol: str | None = None) -> dict[str, Any]:
+    """Expose the real-data shadow model; execution is always disabled."""
+    import time
+
+    path = LIVE_STATE_DIR / 'ai_research.json'
+    try:
+        with path.open(encoding='utf-8') as handle:
+            state = json.load(handle)
+        cycle = datetime.fromisoformat(state['last_cycle']).timestamp()
+        age = max(0.0, time.time() - cycle)
+        if symbol:
+            asset = asset_or_error(symbol)
+            state = {**state, 'assets': {
+                asset.symbol: state.get('assets', {}).get(asset.symbol, {})}}
+        return {**state, 'available': True, 'stale': age > 180,
+                'age_seconds': age, 'execution_enabled': False}
+    except (OSError, ValueError, KeyError, TypeError):
+        return {'available': False, 'mode': 'RESEARCH_ONLY',
+                'execution_enabled': False,
+                'reason': 'AI nie zapisała jeszcze cyklu obserwacyjnego'}
 
 
 def user_portfolio_state() -> dict[str, Any]:
@@ -526,4 +560,3 @@ def files(symbol: str = "BTCUSDT") -> dict[str, bool]:
         "snapshots": SNAPSHOTS_FILE.exists(),
         "daily": DAILY_FILE.exists(),
     }
-

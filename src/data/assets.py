@@ -61,6 +61,22 @@ SUPPORTED_ASSETS = (
         min_difference=0.001,
     ),
     AssetSpec(
+        symbol="LTCUSDT", name="Litecoin", asset_type="crypto", provider="binance",
+        provider_symbol="LTCUSDT", quote="USDT", min_difference=0.05,
+    ),
+    AssetSpec(
+        symbol="ADAUSDT", name="Cardano", asset_type="crypto", provider="binance",
+        provider_symbol="ADAUSDT", quote="USDT", min_difference=0.001,
+    ),
+    AssetSpec(
+        symbol="DOGEUSDT", name="Dogecoin", asset_type="crypto", provider="binance",
+        provider_symbol="DOGEUSDT", quote="USDT", min_difference=0.0001,
+    ),
+    AssetSpec(
+        symbol="AVAXUSDT", name="Avalanche", asset_type="crypto", provider="binance",
+        provider_symbol="AVAXUSDT", quote="USDT", min_difference=0.01,
+    ),
+    AssetSpec(
         symbol="XAUUSD",
         name="Złoto",
         asset_type="gold",

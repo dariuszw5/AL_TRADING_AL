@@ -97,4 +97,49 @@ void main() {
     expect(find.textContaining('pierwszy cykl'), findsOneWidget);
     expect(find.text('Pokaż aktywo AI'), findsNothing);
   });
+
+  testWidgets('AI report selects the asset from the chosen history row', (
+    tester,
+  ) async {
+    String? selected;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: SingleChildScrollView(
+            child: AiPanel(
+              data: {
+                'available': true,
+                'decisions': [
+                  {
+                    'timestamp': 1,
+                    'action': 'SELECT',
+                    'symbol': 'BTCUSDT',
+                    'reason': 'BTC signal',
+                  },
+                  {
+                    'timestamp': 2,
+                    'action': 'SELECT_EXPLORATION',
+                    'symbol': 'ETHUSDT',
+                    'reason': 'ETH signal',
+                  },
+                ],
+              },
+              onSelectAsset: (value) => selected = value,
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.tap(find.text('Raport aktywności AI'));
+    await tester.pumpAndSettle();
+    final row = find.ancestor(
+      of: find.text('ETH signal'),
+      matching: find.byType(ListTile),
+    );
+    final button = find.descendant(of: row, matching: find.byType(IconButton));
+    await tester.ensureVisible(button);
+    await tester.tap(button);
+    expect(selected, 'ETHUSDT');
+    expect(tester.takeException(), isNull);
+  });
 }

@@ -13,6 +13,10 @@ const List<Map<String, String>> fallbackAssets = [
   {'symbol': 'SOLUSDT', 'name': 'Solana', 'asset_type': 'crypto'},
   {'symbol': 'BNBUSDT', 'name': 'BNB', 'asset_type': 'crypto'},
   {'symbol': 'XRPUSDT', 'name': 'XRP', 'asset_type': 'crypto'},
+  {'symbol': 'LTCUSDT', 'name': 'Litecoin', 'asset_type': 'crypto'},
+  {'symbol': 'ADAUSDT', 'name': 'Cardano', 'asset_type': 'crypto'},
+  {'symbol': 'DOGEUSDT', 'name': 'Dogecoin', 'asset_type': 'crypto'},
+  {'symbol': 'AVAXUSDT', 'name': 'Avalanche', 'asset_type': 'crypto'},
   {'symbol': 'XAUUSD', 'name': 'Złoto', 'asset_type': 'gold'},
   {'symbol': 'WTIUSD', 'name': 'Ropa WTI', 'asset_type': 'oil'},
   {'symbol': 'EURUSD', 'name': 'Euro / dolar', 'asset_type': 'forex'},
@@ -70,6 +74,7 @@ class _DashboardPageState extends State<DashboardPage> {
   String? aiError;
   bool aiLoading = false;
   Map<String, dynamic>? userPortfolio;
+  Map<String, Map<String, dynamic>> assetStatuses = {};
   String? userPortfolioError;
   bool followAiSelection = false;
 
@@ -85,6 +90,7 @@ class _DashboardPageState extends State<DashboardPage> {
 
     if (widget.liveMode) {
       loadAssets();
+      loadAssetOverview();
       loadData();
       loadAi();
       loadUserPortfolio();
@@ -93,6 +99,7 @@ class _DashboardPageState extends State<DashboardPage> {
         loadData();
         loadAi();
         loadUserPortfolio();
+        loadAssetOverview();
       });
     } else {
       _loadTestData();
@@ -187,11 +194,13 @@ class _DashboardPageState extends State<DashboardPage> {
   }
 
   Future<dynamic> postJson(String endpoint, double amount) async {
-    final response = await http.post(
-      Uri.parse('$apiBaseUrl$endpoint'),
-      headers: {'content-type': 'application/json'},
-      body: jsonEncode({'amount': amount}),
-    ).timeout(const Duration(seconds: 5));
+    final response = await http
+        .post(
+          Uri.parse('$apiBaseUrl$endpoint'),
+          headers: {'content-type': 'application/json'},
+          body: jsonEncode({'amount': amount}),
+        )
+        .timeout(const Duration(seconds: 5));
     if (response.statusCode < 200 || response.statusCode >= 300) {
       throw Exception('HTTP ${response.statusCode}: ${response.body}');
     }
@@ -216,7 +225,9 @@ class _DashboardPageState extends State<DashboardPage> {
     final amount = await showDialog<double>(
       context: context,
       builder: (context) => AlertDialog(
-        title: Text(deposit ? 'Wpłata do mojego portfela' : 'Wypłata z mojego portfela'),
+        title: Text(
+          deposit ? 'Wpłata do mojego portfela' : 'Wypłata z mojego portfela',
+        ),
         content: TextField(
           controller: controller,
           keyboardType: const TextInputType.numberWithOptions(decimal: true),
@@ -224,11 +235,15 @@ class _DashboardPageState extends State<DashboardPage> {
           decoration: const InputDecoration(labelText: 'Kwota PLN'),
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Anuluj')),
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Anuluj'),
+          ),
           FilledButton(
-            onPressed: () => Navigator.pop(context, double.tryParse(
-              controller.text.replaceAll(',', '.'),
-            )),
+            onPressed: () => Navigator.pop(
+              context,
+              double.tryParse(controller.text.replaceAll(',', '.')),
+            ),
             child: const Text('Zapisz'),
           ),
         ],
@@ -238,10 +253,16 @@ class _DashboardPageState extends State<DashboardPage> {
     if (amount == null || amount <= 0) return;
     try {
       final result = await postJson(
-        deposit ? '/api/user-portfolio/deposit' : '/api/user-portfolio/withdraw',
+        deposit
+            ? '/api/user-portfolio/deposit'
+            : '/api/user-portfolio/withdraw',
         amount,
       );
-      if (mounted) setState(() => userPortfolio = Map<String, dynamic>.from(result as Map));
+      if (mounted) {
+        setState(
+          () => userPortfolio = Map<String, dynamic>.from(result as Map),
+        );
+      }
     } catch (exc) {
       if (mounted) setState(() => userPortfolioError = exc.toString());
     }
@@ -250,7 +271,12 @@ class _DashboardPageState extends State<DashboardPage> {
   Widget buildUserPortfolio() {
     final portfolio = userPortfolio;
     if (portfolio == null) {
-      return const Card(child: ListTile(title: Text('MÓJ PORTFEL'), subtitle: Text('Ładowanie...')));
+      return const Card(
+        child: ListTile(
+          title: Text('MÓJ PORTFEL'),
+          subtitle: Text('Ładowanie...'),
+        ),
+      );
     }
     final balance = (portfolio['balance'] as num?)?.toDouble() ?? 0;
     final deposited = (portfolio['total_deposited'] as num?)?.toDouble() ?? 0;
@@ -260,21 +286,51 @@ class _DashboardPageState extends State<DashboardPage> {
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(18),
-        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          const Text('MÓJ PORTFEL', style: TextStyle(fontSize: 19, fontWeight: FontWeight.bold)),
-          const SizedBox(height: 8),
-          Text('Saldo: ${balance.toStringAsFixed(2)} PLN', style: const TextStyle(fontSize: 20)),
-          Text('Wpłaty: ${deposited.toStringAsFixed(2)} PLN • Wypłaty: ${withdrawn.toStringAsFixed(2)} PLN'),
-          Text('Wynik: ${result >= 0 ? '+' : ''}${result.toStringAsFixed(2)} PLN'),
-          Text('Zysk przekazany przez AI: ${aiProfit.toStringAsFixed(2)} PLN'),
-          if (userPortfolioError != null)
-            Text(userPortfolioError!, style: const TextStyle(color: Colors.redAccent)),
-          Wrap(spacing: 8, children: [
-            FilledButton.tonal(onPressed: () => changeUserFunds(deposit: true), child: const Text('Wpłać')),
-            OutlinedButton(onPressed: () => changeUserFunds(deposit: false), child: const Text('Wypłać')),
-          ]),
-          const Text('Ten portfel jest niezależny od portfela AI i nie składa zleceń.', style: TextStyle(color: Colors.white60, fontSize: 12)),
-        ]),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'MÓJ PORTFEL',
+              style: TextStyle(fontSize: 19, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Saldo: ${balance.toStringAsFixed(2)} PLN',
+              style: const TextStyle(fontSize: 20),
+            ),
+            Text(
+              'Wpłaty: ${deposited.toStringAsFixed(2)} PLN • Wypłaty: ${withdrawn.toStringAsFixed(2)} PLN',
+            ),
+            Text(
+              'Wynik: ${result >= 0 ? '+' : ''}${result.toStringAsFixed(2)} PLN',
+            ),
+            Text(
+              'Zysk przekazany przez AI: ${aiProfit.toStringAsFixed(2)} PLN',
+            ),
+            if (userPortfolioError != null)
+              Text(
+                userPortfolioError!,
+                style: const TextStyle(color: Colors.redAccent),
+              ),
+            Wrap(
+              spacing: 8,
+              children: [
+                FilledButton.tonal(
+                  onPressed: () => changeUserFunds(deposit: true),
+                  child: const Text('Wpłać'),
+                ),
+                OutlinedButton(
+                  onPressed: () => changeUserFunds(deposit: false),
+                  child: const Text('Wypłać'),
+                ),
+              ],
+            ),
+            const Text(
+              'Ten portfel jest niezależny od portfela AI i nie składa zleceń.',
+              style: TextStyle(color: Colors.white60, fontSize: 12),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -282,10 +338,14 @@ class _DashboardPageState extends State<DashboardPage> {
   Future<void> loadAi() async {
     if (aiLoading) return;
     aiLoading = true;
+    final requestedSymbol = selectedSymbol;
     try {
-      final result = await getJson('/api/ai');
+      final result = await getJson(
+        "/api/ai?symbol=${Uri.encodeQueryComponent(requestedSymbol)}",
+      );
       if (!mounted) return;
       setState(() {
+        if (requestedSymbol != selectedSymbol) return;
         aiData = Map<String, dynamic>.from(result as Map);
         aiError = null;
       });
@@ -304,6 +364,8 @@ class _DashboardPageState extends State<DashboardPage> {
     if (symbol == selectedSymbol) return;
     setState(() {
       selectedSymbol = symbol;
+      aiData = null;
+      aiError = null;
       requestGeneration++;
       status = null;
       trades = [];
@@ -313,7 +375,10 @@ class _DashboardPageState extends State<DashboardPage> {
       error = null;
       if (!widget.liveMode) _loadTestData();
     });
-    if (widget.liveMode) loadData(symbol: symbol);
+    if (widget.liveMode) {
+      loadData(symbol: symbol);
+      loadAi();
+    }
   }
 
   void followAiAsset() {
@@ -353,9 +418,108 @@ class _DashboardPageState extends State<DashboardPage> {
             .map((asset) => Map<String, dynamic>.from(asset as Map))
             .toList();
       });
+      await loadAssetOverview();
     } catch (_) {
       // The legacy BTC-only API can still drive the dashboard.
     }
+  }
+
+  Future<void> loadAssetOverview() async {
+    final symbols = assets
+        .map((a) => a['symbol']?.toString())
+        .whereType<String>()
+        .toList();
+    if (symbols.isEmpty) return;
+    try {
+      final results = await Future.wait(
+        symbols.map((symbol) async {
+          final value = await getJson(
+            '/api/status?symbol=${Uri.encodeQueryComponent(symbol)}',
+          );
+          return MapEntry(symbol, Map<String, dynamic>.from(value as Map));
+        }),
+      );
+      if (mounted) {
+        setState(
+          () => assetStatuses = {
+            for (final entry in results) entry.key: entry.value,
+          },
+        );
+      }
+    } catch (_) {}
+  }
+
+  Widget buildAssetOverview() {
+    if (assetStatuses.isEmpty) return const SizedBox.shrink();
+    final cards = assets.map((asset) {
+      final symbol = asset['symbol']?.toString() ?? '';
+      final state = assetStatuses[symbol];
+      final account = state?['account'] as Map?;
+      final strategy = state?['strategy'] as Map?;
+      final available = state?['available'] == true;
+      final pnl = (account?['net_profit'] as num?)?.toDouble() ?? 0;
+      return InkWell(
+        onTap: available ? () => selectAsset(symbol) : null,
+        child: Card(
+          child: Padding(
+            padding: const EdgeInsets.all(12),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  symbol,
+                  style: const TextStyle(fontWeight: FontWeight.bold),
+                ),
+                Text(
+                  strategy?['asset_name']?.toString() ??
+                      asset['name']?.toString() ??
+                      '',
+                  style: const TextStyle(color: Colors.white54, fontSize: 12),
+                ),
+                const Spacer(),
+                Text(
+                  available ? money(account?['market_price']) : 'Brak danych',
+                  style: const TextStyle(fontSize: 18),
+                ),
+                Text(
+                  available
+                      ? '${pnl >= 0 ? '+' : ''}${money(pnl)} jedn.'
+                      : 'Oczekiwanie',
+                  style: TextStyle(
+                    color: pnl >= 0 ? Colors.greenAccent : Colors.redAccent,
+                  ),
+                ),
+                Text(
+                  account?['position']?.toString() ?? 'FLAT',
+                  style: const TextStyle(color: Colors.white54, fontSize: 11),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }).toList();
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        sectionTitle('WSZYSTKIE AKTYWA · PORTFELE AI'),
+        LayoutBuilder(
+          builder: (context, constraints) => GridView.count(
+            crossAxisCount: constraints.maxWidth >= 1200
+                ? 5
+                : constraints.maxWidth >= 700
+                ? 3
+                : 2,
+            crossAxisSpacing: 10,
+            mainAxisSpacing: 10,
+            childAspectRatio: 1.55,
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            children: cards,
+          ),
+        ),
+      ],
+    );
   }
 
   Future<void> loadData({String? symbol}) async {
@@ -917,6 +1081,7 @@ class _DashboardPageState extends State<DashboardPage> {
           padding: const EdgeInsets.all(18),
           children: [
             buildAssetSelector(),
+            buildAssetOverview(),
             buildUserPortfolio(),
             const SizedBox(height: 24),
             buildAiPanel(),
@@ -972,6 +1137,7 @@ class _DashboardPageState extends State<DashboardPage> {
               ),
 
             buildAssetSelector(),
+            buildAssetOverview(),
             buildUserPortfolio(),
 
             sectionTitle('KONTO'),
@@ -1074,17 +1240,25 @@ class _DashboardPageState extends State<DashboardPage> {
                   spacing: 35,
                   runSpacing: 18,
                   children: [
-                    infoItem('BUY RSI', strategy['buy_rsi'].toString()),
-                    infoItem('SELL RSI', strategy['sell_rsi'].toString()),
-                    infoItem(
-                      'MAKS. CZAS',
-                      strategy['max_position_candles'].toString(),
-                    ),
-                    infoItem(
-                      'MIN. RÓŻNICA',
-                      strategy['min_difference'].toString(),
-                    ),
-                    infoItem('RSI', strategy['rsi_method'].toString()),
+                    if (strategy['execution_model'] ==
+                        'INDEPENDENT_AI_PAPER') ...[
+                      infoItem('MODEL', 'AI k-NN · osobny portfel'),
+                      infoItem('POZYCJA', '5% testowa / 20% standardowa'),
+                      infoItem('STOP / TAKE', '1% / 2%'),
+                      infoItem('MAKS. CZAS', '10 świec'),
+                    ] else ...[
+                      infoItem('BUY RSI', strategy['buy_rsi'].toString()),
+                      infoItem('SELL RSI', strategy['sell_rsi'].toString()),
+                      infoItem(
+                        'MAKS. CZAS',
+                        strategy['max_position_candles'].toString(),
+                      ),
+                      infoItem(
+                        'MIN. RÓŻNICA',
+                        strategy['min_difference'].toString(),
+                      ),
+                      infoItem('RSI', strategy['rsi_method'].toString()),
+                    ],
                     infoItem('PROWIZJA', strategy['trading_fee'].toString()),
                   ],
                 ),
