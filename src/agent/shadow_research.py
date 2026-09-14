@@ -1,8 +1,7 @@
 """Real-market observation loop with an explicit no-execution boundary.
 
-This module evaluates the existing strategy selector on fresh candles and
-stores hypothetical signals. It deliberately has no order, position, or
-portfolio mutation code; the runner is safe to use while tuning the strategy.
+This module evaluates signals and simulates fractional positions in PLN.
+It mutates only the local simulated ledger and cannot place external orders.
 """
 
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -14,7 +13,8 @@ from time import time
 from src.agent.ai_manager import clean_candles, rank_asset
 from src.data.assets import SUPPORTED_ASSETS
 from src.data.data_provider import DataProvider
-from src.agent.virtual_broker import VirtualBroker
+from src.agent.pln_broker import PlnLedger, PlnBroker
+from src.data.fx_rates import fetch_pln_rates
 
 
 EXECUTION_ENABLED = False
@@ -27,11 +27,7 @@ class ShadowResearchRunner:
     def __init__(self, path=STATE_PATH, assets=SUPPORTED_ASSETS):
         self.path = Path(path)
         self.assets = tuple(assets)
-        try:
-            previous = json.loads(self.path.read_text(encoding="utf-8"))
-            self.broker = VirtualBroker.from_state(previous.get("virtual_broker", {}))
-        except (OSError, ValueError, TypeError):
-            self.broker = VirtualBroker()
+        self.ledger = PlnLedger(self.path.parent)
 
     @staticmethod
     def _fetch(asset):
@@ -98,7 +94,8 @@ class ShadowResearchRunner:
                 asset = futures[future]
                 try:
                     _, candles = future.result()
-                    latest_candles[asset.symbol] = candles[-1] if candles else None
+                    closed = clean_candles(candles, now_ms)
+                    latest_candles[asset.symbol] = closed[-1] if closed else None
                     assets[asset.symbol] = self._analyze(asset, candles, now_ms)
                 except Exception as exc:
                     assets[asset.symbol] = {
@@ -118,24 +115,39 @@ class ShadowResearchRunner:
                         },
                         "issue": str(exc),
                     }
-        for symbol, result in assets.items():
-            candle = latest_candles.get(symbol)
-            if candle is not None:
-                self.broker.mark(symbol, candle, candle.timestamp)
-                if result.get("recommendation") == "OBSERVE_SIGNAL":
-                    self.broker.open(symbol, candle.close, candle.timestamp)
-                result["virtual_execution"]["position"] = (
-                    "LONG" if symbol in self.broker.positions else "FLAT")
-        prices = {s: r["market_price"] for s, r in assets.items()
-                  if r.get("market_price") is not None}
-        self.broker.snapshot(prices, now_ms)
+        try:
+            fx = fetch_pln_rates(a.quote for a in self.assets)
+        except Exception as exc:
+            fx = {'rates': {}, 'issue': str(exc), 'currency': 'PLN'}
+        specs = {a.symbol: a for a in self.assets}
+        with self.ledger.transaction() as account:
+            broker = PlnBroker(account)
+            prices = {}
+            for symbol, result in sorted(assets.items()):
+                candle = latest_candles.get(symbol)
+                rate = fx['rates'].get(specs[symbol].quote)
+                # Yahoo agricultural futures prices are quoted in cents.
+                if rate is not None and symbol in {'CORNUSD', 'WHEATUSD', 'SOYUSD', 'COFFEEUSD'}:
+                    rate *= 0.01
+                fresh = candle is not None and 0 <= now_ms - candle.timestamp <= 180000
+                if rate is not None and fresh:
+                    broker.process(symbol, candle, result.get('recommendation') == 'OBSERVE_SIGNAL', rate, now_ms)
+                    prices[symbol] = (candle.close, rate)
+                    result['market_price_pln'] = candle.close * rate
+                else:
+                    result['issue'] = 'Brak aktualnego kursu waluty lub świec; symulacja wstrzymana'
+                result['virtual_execution']['position'] = 'LONG' if symbol in account['positions'] else 'FLAT'
+            broker.rebalance(now_ms)
+            broker.snapshot(prices, now_ms)
+            broker_state = broker.public_state()
         state = {
             "version": 1,
             "mode": "RESEARCH_ONLY",
             "execution_enabled": EXECUTION_ENABLED,
             "model": "k-NN returns v1 shadow validation",
             "last_cycle": datetime.now(timezone.utc).isoformat(),
-            "virtual_broker": self.broker.state(),
+            "virtual_broker": broker_state,
+            "fx": fx,
             "assets": {symbol: assets[symbol] for symbol in sorted(assets)},
         }
         self._write(state)

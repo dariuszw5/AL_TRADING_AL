@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import time
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -497,6 +498,11 @@ def ai_research_status(symbol: str | None = None) -> dict[str, Any]:
 
 
 def user_portfolio_state() -> dict[str, Any]:
+    from src.agent.pln_broker import PlnLedger
+    if (LIVE_STATE_DIR / 'pln_ledger.sqlite3').exists():
+        with PlnLedger(LIVE_STATE_DIR).transaction() as account:
+            return {**account['user_portfolio'], 'currency': 'PLN', 'available': True,
+                    'result': account['user_portfolio']['profit_transferred']}
     default = {
         'version': 1, 'currency': 'PLN', 'balance': 0.0,
         'total_deposited': 0.0, 'total_withdrawn': 0.0,
@@ -528,20 +534,25 @@ def get_user_portfolio() -> dict[str, Any]:
 
 @app.post('/api/user-portfolio/deposit')
 def deposit_user_portfolio(request: PortfolioAmount) -> dict[str, Any]:
-    state = user_portfolio_state()
-    state['balance'] += request.amount
-    state['total_deposited'] += request.amount
-    return save_user_portfolio(state)
+    from src.agent.pln_broker import PlnLedger, PlnBroker
+    with PlnLedger(LIVE_STATE_DIR).transaction() as account:
+        wallet = account['user_portfolio']
+        wallet['balance'] = round(wallet['balance'] + request.amount, 2)
+        wallet['total_deposited'] = round(wallet['total_deposited'] + request.amount, 2)
+        PlnBroker(account).rebalance(int(time.time() * 1000))
+    return user_portfolio_state()
 
 
 @app.post('/api/user-portfolio/withdraw')
 def withdraw_user_portfolio(request: PortfolioAmount) -> dict[str, Any]:
-    state = user_portfolio_state()
-    if request.amount > state['balance']:
-        raise HTTPException(status_code=400, detail='Niewystarczające saldo portfela')
-    state['balance'] -= request.amount
-    state['total_withdrawn'] += request.amount
-    return save_user_portfolio(state)
+    from src.agent.pln_broker import PlnLedger
+    with PlnLedger(LIVE_STATE_DIR).transaction() as account:
+        wallet = account['user_portfolio']
+        if request.amount > wallet['balance']:
+            raise HTTPException(status_code=400, detail='Niewystarczające saldo portfela')
+        wallet['balance'] = round(wallet['balance'] - request.amount, 2)
+        wallet['total_withdrawn'] = round(wallet['total_withdrawn'] + request.amount, 2)
+    return user_portfolio_state()
 
 
 @app.get("/api/market")

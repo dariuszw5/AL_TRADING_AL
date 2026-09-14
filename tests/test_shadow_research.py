@@ -4,6 +4,8 @@ from src.data.candle import Candle
 
 
 def test_shadow_research_never_enables_execution_and_persists(tmp_path, monkeypatch):
+    monkeypatch.setattr('src.agent.shadow_research.fetch_pln_rates',
+                        lambda currencies: {'rates': {'USDT': 4}, 'received_at': 0})
     bars = [Candle(i * 60_000, 100.0, 101.0, 99.0, 100.5, 10.0)
             for i in range(520)]
     assets = SUPPORTED_ASSETS[:3]
