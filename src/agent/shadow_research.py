@@ -14,6 +14,7 @@ from time import time
 from src.agent.ai_manager import clean_candles, rank_asset
 from src.data.assets import SUPPORTED_ASSETS
 from src.data.data_provider import DataProvider
+from src.agent.virtual_broker import VirtualBroker
 
 
 EXECUTION_ENABLED = False
@@ -26,6 +27,7 @@ class ShadowResearchRunner:
     def __init__(self, path=STATE_PATH, assets=SUPPORTED_ASSETS):
         self.path = Path(path)
         self.assets = tuple(assets)
+        self.broker = VirtualBroker()
 
     @staticmethod
     def _fetch(asset):
@@ -79,12 +81,14 @@ class ShadowResearchRunner:
     def run_once(self):
         now_ms = int(time() * 1000)
         assets = {}
+        latest_candles = {}
         with ThreadPoolExecutor(max_workers=min(8, len(self.assets))) as pool:
             futures = {pool.submit(self._fetch, asset): asset for asset in self.assets}
             for future in as_completed(futures):
                 asset = futures[future]
                 try:
                     _, candles = future.result()
+                    latest_candles[asset.symbol] = candles[-1] if candles else None
                     assets[asset.symbol] = self._analyze(asset, candles, now_ms)
                 except Exception as exc:
                     assets[asset.symbol] = {
@@ -104,12 +108,30 @@ class ShadowResearchRunner:
                         },
                         "issue": str(exc),
                     }
+        for symbol, result in assets.items():
+            candle = latest_candles.get(symbol)
+            if candle is not None:
+                self.broker.mark(symbol, candle, candle.timestamp)
+                if result.get("recommendation") == "OBSERVE_SIGNAL":
+                    self.broker.open(symbol, candle.close, candle.timestamp)
+                result["virtual_execution"]["position"] = (
+                    "LONG" if symbol in self.broker.positions else "FLAT")
+        prices = {s: r["market_price"] for s, r in assets.items()
+                  if r.get("market_price") is not None}
+        self.broker.snapshot(prices, now_ms)
         state = {
             "version": 1,
             "mode": "RESEARCH_ONLY",
             "execution_enabled": EXECUTION_ENABLED,
             "model": "k-NN returns v1 shadow validation",
             "last_cycle": datetime.now(timezone.utc).isoformat(),
+            "virtual_broker": {
+                "initial_balance": self.broker.initial_balance,
+                "balance": self.broker.balance,
+                "execution_enabled": False,
+                "trades": self.broker.trades[-300:],
+                "equity_curve": self.broker.equity_curve[-300:],
+            },
             "assets": {symbol: assets[symbol] for symbol in sorted(assets)},
         }
         self._write(state)
