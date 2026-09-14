@@ -69,7 +69,13 @@ class ShadowResearchRunner:
                 result["best"] = best
                 result["recommendation"] = "OBSERVE_SIGNAL"
             elif rows:
-                result["best"] = max(rows, key=lambda row: row["score"])
+                # Shadow mode also records technical signals that have not yet
+                # collected five validation trades. This keeps the virtual
+                # broker learning across all markets without enabling orders.
+                exploratory = [row for row in rows if row.get("current_signal")]
+                result["best"] = max(exploratory or rows, key=lambda row: row["score"])
+                if exploratory:
+                    result["recommendation"] = "OBSERVE_SIGNAL"
             if len(clean) < 500:
                 result["issue"] = f"Za mało zamkniętych świec: {len(clean)}/500"
         except Exception as exc:  # One unavailable market must not stop the cycle.
