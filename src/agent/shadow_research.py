@@ -27,7 +27,11 @@ class ShadowResearchRunner:
     def __init__(self, path=STATE_PATH, assets=SUPPORTED_ASSETS):
         self.path = Path(path)
         self.assets = tuple(assets)
-        self.broker = VirtualBroker()
+        try:
+            previous = json.loads(self.path.read_text(encoding="utf-8"))
+            self.broker = VirtualBroker.from_state(previous.get("virtual_broker", {}))
+        except (OSError, ValueError, TypeError):
+            self.broker = VirtualBroker()
 
     @staticmethod
     def _fetch(asset):
@@ -125,13 +129,7 @@ class ShadowResearchRunner:
             "execution_enabled": EXECUTION_ENABLED,
             "model": "k-NN returns v1 shadow validation",
             "last_cycle": datetime.now(timezone.utc).isoformat(),
-            "virtual_broker": {
-                "initial_balance": self.broker.initial_balance,
-                "balance": self.broker.balance,
-                "execution_enabled": False,
-                "trades": self.broker.trades[-300:],
-                "equity_curve": self.broker.equity_curve[-300:],
-            },
+            "virtual_broker": self.broker.state(),
             "assets": {symbol: assets[symbol] for symbol in sorted(assets)},
         }
         self._write(state)

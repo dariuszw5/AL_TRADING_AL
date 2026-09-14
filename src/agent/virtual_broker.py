@@ -26,6 +26,27 @@ class VirtualBroker:
         self.trades = []
         self.equity_curve = []
 
+    @classmethod
+    def from_state(cls, state):
+        broker = cls(state.get('initial_balance', 1000.0))
+        broker.balance = state.get('balance', broker.initial_balance)
+        broker.trades = state.get('trades', [])[-300:]
+        broker.equity_curve = state.get('equity_curve', [])[-300:]
+        for symbol, raw in state.get('positions', {}).items():
+            broker.positions[symbol] = VirtualPosition(**raw)
+        return broker
+
+    def state(self):
+        return {
+            'initial_balance': self.initial_balance,
+            'balance': self.balance,
+            'positions': {symbol: asdict(position)
+                          for symbol, position in self.positions.items()},
+            'trades': self.trades[-300:],
+            'equity_curve': self.equity_curve[-300:],
+            'execution_enabled': False,
+        }
+
     def open(self, symbol, price, timestamp, allocation=0.2):
         if symbol in self.positions or price <= 0:
             return False
