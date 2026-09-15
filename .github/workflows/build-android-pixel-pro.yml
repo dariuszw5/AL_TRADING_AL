@@ -27,14 +27,29 @@ jobs:
         shell: bash
         run: |
           python3 - <<'PY'
-          import base64, gzip
+          import base64, gzip, hashlib
           from pathlib import Path
+
           root = Path('app/frontend/al_trading_dashboard/lib')
           root.mkdir(parents=True, exist_ok=True)
-          main_data = base64.b64decode(Path('ci/pixel_main.gz.b64').read_text().strip())
-          api_data = base64.b64decode(Path('ci/pixel_api.gz.b64').read_text().strip())
-          (root / 'main.dart').write_bytes(gzip.decompress(main_data))
-          (root / 'api_client.dart').write_bytes(gzip.decompress(api_data))
+
+          main_b64 = ''.join(
+              Path(f'ci/pixel_main.part{i}').read_text().strip()
+              for i in range(1, 5)
+          )
+          api_b64 = Path('ci/pixel_api.part1').read_text().strip()
+
+          main_bytes = gzip.decompress(base64.b64decode(main_b64))
+          api_bytes = gzip.decompress(base64.b64decode(api_b64))
+
+          expected = '83d946cc305460b00de7964614515b881ddac8ab9bdf9f55b9e8d92587fda464'
+          actual = hashlib.sha256(main_bytes).hexdigest()
+          if actual != expected:
+              raise SystemExit(f'Pixel Pro source checksum mismatch: {actual}')
+
+          (root / 'main.dart').write_bytes(main_bytes)
+          (root / 'api_client.dart').write_bytes(api_bytes)
+          print('Pixel Pro sources restored and verified')
           PY
 
       - name: Configure Android networking
@@ -43,19 +58,26 @@ jobs:
           from pathlib import Path
           path = Path('app/frontend/al_trading_dashboard/android/app/src/main/AndroidManifest.xml')
           text = path.read_text(encoding='utf-8')
+
           if 'android.permission.INTERNET' not in text:
               text = text.replace(
                   '<manifest xmlns:android="http://schemas.android.com/apk/res/android">',
                   '<manifest xmlns:android="http://schemas.android.com/apk/res/android">\n    <uses-permission android:name="android.permission.INTERNET" />',
                   1,
               )
-          text = text.replace('android:label="al_trading_dashboard"', 'android:label="AL Trading"')
+
+          text = text.replace(
+              'android:label="al_trading_dashboard"',
+              'android:label="AL Trading"',
+          )
+
           if 'android:usesCleartextTraffic' not in text:
               text = text.replace(
                   '<application\n',
                   '<application\n        android:usesCleartextTraffic="true"\n',
                   1,
               )
+
           path.write_text(text, encoding='utf-8')
 
       - name: Get dependencies
