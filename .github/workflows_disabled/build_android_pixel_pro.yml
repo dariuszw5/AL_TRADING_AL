@@ -1,0 +1,96 @@
+name: Build Android Pixel Pro APK
+
+on:
+  push:
+    branches:
+      - android-pixel-pro-20260915
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-apk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.4'
+          channel: stable
+          cache: true
+
+      - name: Configure Android build
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          manifest = Path('app/frontend/al_trading_dashboard/android/app/src/main/AndroidManifest.xml')
+          text = manifest.read_text(encoding='utf-8')
+          if 'android.permission.INTERNET' not in text:
+              text = text.replace(
+                  '<application',
+                  '<uses-permission android:name="android.permission.INTERNET"/>\n    <application',
+                  1,
+              )
+          text = text.replace('android:label="al_trading_dashboard"', 'android:label="AL Trading Pixel Pro"')
+          if 'android:usesCleartextTraffic=' not in text:
+              text = text.replace(
+                  'android:label="AL Trading Pixel Pro"',
+                  'android:label="AL Trading Pixel Pro"\n        android:usesCleartextTraffic="true"',
+                  1,
+              )
+          manifest.write_text(text, encoding='utf-8')
+
+          gradle = Path('app/frontend/al_trading_dashboard/android/app/build.gradle.kts')
+          g = gradle.read_text(encoding='utf-8')
+          g = g.replace(
+              'applicationId = "com.example.al_trading_dashboard"',
+              'applicationId = "com.example.al_trading_dashboard.pixelpro"',
+          )
+          gradle.write_text(g, encoding='utf-8')
+          PY
+
+      - name: Get packages
+        working-directory: app/frontend/al_trading_dashboard
+        run: flutter pub get
+
+      - name: Format current source
+        working-directory: app/frontend/al_trading_dashboard
+        run: dart format lib/main.dart
+
+      - name: Analyze current source
+        working-directory: app/frontend/al_trading_dashboard
+        run: flutter analyze lib/main.dart --no-fatal-infos
+
+      - name: Build APK
+        working-directory: app/frontend/al_trading_dashboard
+        run: flutter build apk --debug --dart-define=API_BASE_URL=http://100.77.193.89:8000
+
+      - name: Prepare artifact
+        shell: bash
+        run: |
+          cp app/frontend/al_trading_dashboard/build/app/outputs/flutter-apk/app-debug.apk AL_Trading_Android_Pixel_Pro.apk
+          sha256sum AL_Trading_Android_Pixel_Pro.apk > AL_Trading_Android_Pixel_Pro.sha256
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: AL_Trading_Android_Pixel_Pro
+          path: |
+            AL_Trading_Android_Pixel_Pro.apk
+            AL_Trading_Android_Pixel_Pro.sha256
+          if-no-files-found: error
+          retention-days: 30
