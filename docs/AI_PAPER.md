@@ -5,7 +5,81 @@ exchange orders and has no keys or broker integration. It does not guarantee
 profits or a maximum loss. The nine existing per-asset paper agents remain
 comparison accounts; their balances are not added to the AI account.
 
+## PLN simulation and risk boundary
+
+The multi-market research account is denominated in PLN. Indicative FX rates
+are fetched at the time of each research cycle, so a result includes both the
+market move and the currency move. It is an accounting simulation, never a
+bank balance or a broker account.
+
+Every virtual long position receives a 1% stop loss and a 2% take profit. The
+simulator applies 0.04% fee and 0.05% slippage on each side. Before a new
+entry it enforces all of the following persistent safeguards:
+
+- maximum estimated loss of the current entry is limited by the remaining
+  daily loss budget;
+- maximum position cost is 200 PLN, with at most five open positions;
+- at most 400 PLN can be allocated to one asset class, reducing concentration
+  in correlated markets such as crypto;
+- a 20 PLN realized loss halts new entries for the current UTC day;
+- a 5% marked equity drawdown latches a halt across restarts.
+
+Open positions still receive stop/take management after a halt. Gaps, stale
+data and unavailable markets can exceed modeled costs or stop levels, which is
+why these are safeguards for a simulation, not a claim of capped losses.
+
+`virtual_broker.decision_log` preserves the latest 300 decisions with the
+symbol, category, strategy, score, candle close, action and reason. It is the
+machine-readable trading journal for review and backtesting; it deliberately
+does not record human "emotions" for an automated system.
+
+`virtual_broker.daily_equity` retains the final complete valuation for each
+UTC day. It is the source for a precise dashboard comparison against the prior
+day; a missing valuation is displayed as unavailable rather than invented.
+
+## Geopolitical historical-analogue research
+
+`src/agent/geopolitical_analyst.py` maps public-news headlines to event tags
+(for example conflict, sanctions, energy supply and financial stress) and
+compares them with dated historical scenarios. It calculates an explainable
+stress score by asset class, retaining the nearest historical analogues in the
+API response. `src/data/geopolitical_feed.py` obtains public GDELT article
+metadata at most once every 15 minutes; it uses no account, secret or broker
+endpoint.
+
+Only `ELEVATED` or `CRITICAL` historical stress blocks **new simulated
+entries** for the affected class. Existing simulated positions still receive
+their stop/take handling. A news-source failure is displayed as unavailable
+data and never creates a synthetic geopolitical signal. The model does not
+predict prices, validate facts in news articles or make real orders.
+
 ## Model and selection
+
+The research runner scores every configured asset on each closed-candle cycle
+and publishes `top_10`: the ten highest conservative historical probabilities
+of a positive net result, with deterministic tie handling. The probability is
+the 95% Wilson lower bound of positive outcomes in chronological validation,
+not the raw percentage of wins and not a promise of profit. Only a current
+technical signal inside this selected group may open a new simulated position.
+It must also have at least 20 independent validation examples, positive net
+score after costs and a lower-bound probability of at least 55%. A held
+position leaving Top 10 is closed at the current simulated close with the
+explicit `ROTATED_OUT` reason, then the next selected candidate may use its
+released virtual capital. The remaining assets continue to be fetched,
+analysed and ranked; they are not ignored.
+
+## Professional validation and broker-demo boundary
+
+Each closed virtual trade retains the historical probability used for its
+entry. `probability_calibration` compares these forecasts with later paper
+results, reports a Brier score and does not draw conclusions until at least 30
+closed forecasts exist. It never changes parameters automatically.
+
+The recommended broad multi-asset demo is Interactive Brokers Paper Trading.
+The project exposes only a readiness status through `paper_broker`; no API
+credential is read, stored or used to submit orders. `execution_enabled` is
+forced to `false`, including if an environment variable asks for execution.
+This boundary remains until a separately reviewed demo adapter is requested.
 
 `src/agent/ai_manager.py` implements a small k-nearest-neighbor return regressor
 in Python without another service, paid API or a heavy ML dependency. It uses

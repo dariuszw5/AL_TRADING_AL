@@ -15,7 +15,7 @@ def test_capital_reserved_and_no_leverage():
     for i in range(40):
         broker.process(str(i), bar(60000), True, 4, 120000)
     broker.snapshot({str(i): (100, 4) for i in range(40)}, 120000)
-    assert len(state['positions']) == 5
+    assert len(state['positions']) == 10
     assert state['free_cash'] == 0
     assert state['equity'] < 1000  # fees and spread
 
@@ -67,6 +67,59 @@ def test_stale_and_invalid_rates_do_not_open():
     b.process('A', bar(60000), True, float('nan'), 120000)
     b.process('B', bar(60000), True, 4, 900000)
     assert not s['positions']
+
+
+def test_daily_loss_circuit_breaker_blocks_new_entries():
+    s = initial_state()
+    s['risk']['daily_loss_limit_pln'] = 0.5
+    b = PlnBroker(s)
+    assert b.process('A', bar(60000), True, 4, 120000) == 'OPEN_LONG'
+    gap = Candle(120000, 98, 100, 97, 98, 1)
+    assert b.process('A', gap, False, 4, 180000) == 'STOP_GAP'
+    assert s['risk']['halted'] is True
+    assert s['risk']['halt_reason'] == 'DAILY_LOSS_LIMIT'
+    assert b.process('B', bar(180000), True, 4, 240000) == 'RISK_HALT'
+
+
+def test_risk_budget_sizes_entry_to_remaining_daily_loss():
+    s = initial_state()
+    s['risk']['daily_loss_limit_pln'] = 1.0
+    b = PlnBroker(s)
+    b.process('A', bar(60000), True, 4, 120000)
+    assert s['positions']['A']['cost_pln'] < 100
+    assert s['positions']['A']['max_loss_pln'] <= 1.0
+
+
+def test_category_concentration_limit_and_decision_journal():
+    s = initial_state()
+    b = PlnBroker(s)
+    b.process('A', bar(60000), True, 4, 120000, asset_type='crypto', strategy='trend', score=.1)
+    b.process('B', bar(60000), True, 4, 120000, asset_type='crypto')
+    b.process('C', bar(60000), True, 4, 120000, asset_type='crypto')
+    assert len(s['positions']) == 3
+    assert b.process('D', bar(60000), True, 4, 120000, asset_type='crypto') == 'RISK_BUDGET'
+    assert s['decision_log'][0]['strategy'] == 'trend'
+    assert s['decision_log'][-1]['action'] == 'RISK_BUDGET'
+
+
+def test_rotation_closes_a_position_that_leaves_top_ten():
+    s = initial_state()
+    b = PlnBroker(s)
+    b.process('A', bar(60000), True, 4, 120000, asset_type='stock')
+    assert b.close_for_rotation('A', bar(120000, close=101), 4, 180000) == 'ROTATED_OUT'
+    assert not s['positions']
+    assert s['trades'][-1]['reason'] == 'ROTATED_OUT'
+
+
+def test_daily_equity_keeps_the_last_complete_value_for_each_utc_day():
+    s = initial_state()
+    b = PlnBroker(s)
+    b.snapshot({}, 60_000)
+    b.snapshot({}, 120_000)
+    b.snapshot({}, 86_400_000)
+    assert len(s['daily_equity']) == 2
+    assert s['daily_equity'][0]['timestamp'] == 120_000
+    assert s['daily_equity'][1]['date'] == '1970-01-02'
 
 
 def test_transaction_rollback_and_legacy_preservation(tmp_path):

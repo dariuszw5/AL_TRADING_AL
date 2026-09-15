@@ -41,12 +41,18 @@ def test_model_learns_local_returns():
     assert model.predict((0.9,))[0] == 0.04
 
 
+def test_probability_lower_bound_requires_enough_wins_and_samples():
+    assert ai.wilson_lower_bound(20, 20) > 0.55
+    assert ai.wilson_lower_bound(4, 5) < 0.55
+
+
 def test_temporal_validation_has_no_training_label_leak():
     rows = ai.rank_asset('BTCUSDT', candles())
     assert len(rows) == 3
     assert all(r['train_label_end'] < r['validation_start'] for r in rows)
     assert rows[0]['validation_trades'] >= 5
     assert rows[0]['eligible']
+    assert 0 <= rows[0]['profit_probability_lower'] <= 1
 
 
 def test_falling_and_flat_markets_cannot_pass_after_costs():

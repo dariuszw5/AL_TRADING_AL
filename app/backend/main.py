@@ -489,7 +489,9 @@ def ai_research_status(symbol: str | None = None) -> dict[str, Any]:
             asset = asset_or_error(symbol)
             state = {**state, 'assets': {
                 asset.symbol: state.get('assets', {}).get(asset.symbol, {})}}
+        from src.broker.paper_readiness import paper_broker_readiness
         return {**state, 'available': True, 'stale': age > 180,
+                'paper_broker': paper_broker_readiness(),
                 'age_seconds': age, 'execution_enabled': False}
     except (OSError, ValueError, KeyError, TypeError):
         return {'available': False, 'mode': 'RESEARCH_ONLY',

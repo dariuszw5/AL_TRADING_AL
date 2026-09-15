@@ -26,6 +26,8 @@ TAKE = 0.02
 STRATEGIES = ('trend', 'mean_reversion', 'breakout')
 LEARNING_WEIGHT = 0.25
 USER_PORTFOLIO_PATH = 'data/live_state/user_portfolio.json'
+MIN_CONFIDENCE_TRADES = 20
+MIN_PROFIT_PROBABILITY = 0.55
 
 
 def clean_candles(candles, now_ms):
@@ -114,6 +116,17 @@ class NearestReturnModel:
         return mean(values), pstdev(values)
 
 
+def wilson_lower_bound(wins, observations, z=1.96):
+    """Conservative lower bound for a historical positive-return rate."""
+    if observations <= 0:
+        return 0.0
+    p = wins / observations
+    denominator = 1 + z*z / observations
+    centre = p + z*z / (2 * observations)
+    spread = z * sqrt((p * (1-p) + z*z / (4 * observations)) / observations)
+    return max(0.0, (centre - spread) / denominator)
+
+
 def rank_asset(symbol, candles):
     if len(candles) < 500:
         return []
@@ -146,11 +159,26 @@ def rank_asset(symbol, candles):
             validation.append(outcome(candles, i))
             next_free = i + HORIZON + 1
         score = min(prediction - spread, mean(validation)) if validation else -1.0
+        validation_wins = sum(value > 0 for value in validation)
+        validation_probability = (validation_wins / len(validation)
+                                  if validation else 0.0)
+        probability_lower = wilson_lower_bound(validation_wins, len(validation))
         current_signal = signal(strategy, candles, len(candles)-1)
         eligible = (len(validation) >= 5 and score > 0 and current_signal)
+        confidence_eligible = (
+            len(validation) >= MIN_CONFIDENCE_TRADES
+            and score > 0
+            and probability_lower >= MIN_PROFIT_PROBABILITY
+            and current_signal
+        )
         rows.append(dict(symbol=symbol, strategy=strategy, eligible=eligible,
                          score=score, expected_net_return=prediction,
                          neighbor_spread=spread, validation_trades=len(validation),
+                         validation_wins=validation_wins,
+                         validation_probability=validation_probability,
+                         profit_probability_lower=probability_lower,
+                         confidence_score=probability_lower,
+                         confidence_eligible=confidence_eligible,
                          current_score=current_score, current_signal=current_signal,
                          validation_mean=mean(validation) if validation else None,
                          train_samples=len(train_indices),

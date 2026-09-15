@@ -179,6 +179,8 @@ class _ProDashboardState extends State<ProDashboard> {
         : (curve.isEmpty ? balance : curve.last['equity']);
     final initial = broker['initial_balance'];
     final reserve = broker['user_portfolio'] as Map? ?? {};
+    final risk = broker['risk'] as Map? ?? {};
+    final riskHalted = risk['halted'] == true;
     final gain = equity is num && initial is num
         ? (isPln
               ? (broker['realized_profit'] as num? ?? 0) +
@@ -220,6 +222,15 @@ class _ProDashboardState extends State<ProDashboard> {
               Icons.warning_amber,
               color: Colors.amber,
             ),
+          if (isPln)
+            stat(
+              'Ochrona ryzyka',
+              riskHalted
+                  ? 'ZATRZYMANO'
+                  : 'Limit dzienny ${number(risk['daily_loss_pln'])} / ${number(risk['daily_loss_limit_pln'])} zł',
+              Icons.shield_outlined,
+              color: riskHalted ? Colors.redAccent : mint,
+            ),
         ];
         if (c.maxWidth < 850) {
           return Column(
@@ -257,7 +268,7 @@ class _ProDashboardState extends State<ProDashboard> {
       Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          heading('Wartość portfela', 'Historia symulacji'),
+          heading('Wartość portfela • $unit', 'Historia symulacji'),
           if (values.length < 2)
             const SizedBox(
               height: 220,
@@ -307,6 +318,7 @@ class _ProDashboardState extends State<ProDashboard> {
   void assetDetail(String symbol) {
     final asset = markets[symbol] as Map;
     final account = researchCard(data!, symbol)['account'] as Map;
+    final best = asset['best'] as Map? ?? {};
     showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
@@ -325,6 +337,14 @@ class _ProDashboardState extends State<ProDashboard> {
               const SizedBox(height: 12),
               Text('Pozycja: ${account['position']}'),
               Text('Wynik: ${number(account['net_profit'])} $unit'),
+              if (best['profit_probability_lower'] is num)
+                Text(
+                  'Prawdopodobieństwo dodatniego wyniku: '
+                  '${((best['profit_probability_lower'] as num) * 100).toStringAsFixed(1)}% '
+                  '(dolna granica historyczna)',
+                ),
+              if (best['validation_trades'] is num)
+                Text('Przykłady walidacyjne: ${best['validation_trades']}'),
               const SizedBox(height: 18),
               Text(
                 asset['issue']?.toString() ??
@@ -458,9 +478,9 @@ class _ProDashboardState extends State<ProDashboard> {
                               ),
                             ),
                             Text(
-                              account['position'] == 'FLAT'
-                                  ? 'Obserwacja'
-                                  : 'Pozycja otwarta',
+                              asset['portfolio_rank'] is num
+                                  ? 'Top ${asset['portfolio_rank']} • ${account['position'] == 'FLAT' ? 'obserwacja' : 'pozycja otwarta'}'
+                                  : 'Poza Top 10 • obserwacja',
                               style: const TextStyle(
                                 color: muted,
                                 fontSize: 11,
@@ -479,8 +499,15 @@ class _ProDashboardState extends State<ProDashboard> {
     );
   }
 
-  Widget activity() => box(
-    Column(
+  Widget activity() {
+    final geo = data?['geopolitical_research'] as Map? ?? {};
+    final geoRisk = geo['asset_risk'] as Map? ?? {};
+    final elevated = geoRisk.entries
+        .where((entry) => (entry.value as Map?)?['level'] != 'NORMAL')
+        .map((entry) => '${entry.key}: ${(entry.value as Map?)?['level']}')
+        .toList();
+    return box(
+      Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         heading('Aktywność AI'),
@@ -490,6 +517,27 @@ class _ProDashboardState extends State<ProDashboard> {
           stale ? 'Oczekiwanie na aktualne dane' : 'Analiza rynków',
           style: const TextStyle(fontWeight: FontWeight.w600),
         ),
+        if (geo.isNotEmpty) ...[
+          const SizedBox(height: 16),
+          const Divider(color: Color(0xFF294152)),
+          const SizedBox(height: 12),
+          const Text(
+            'Ryzyko geopolityczne',
+            style: TextStyle(fontWeight: FontWeight.w600),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            elevated.isEmpty
+                ? 'Brak podwyższonego ryzyka w historycznych analogiach.'
+                : elevated.join(' • '),
+            style: const TextStyle(color: muted, height: 1.5),
+          ),
+          if (geo['issue'] != null)
+            Text(
+              'Źródło wiadomości niedostępne: ${geo['issue']}',
+              style: const TextStyle(color: Colors.orange, fontSize: 12),
+            ),
+        ],
         const SizedBox(height: 8),
         Text(
           '${markets.length} instrumentów w ostatnim cyklu. ${(markets.values.where((a) => a['recommendation'] == 'OBSERVE_SIGNAL')).length} zakwalifikowanych sygnałów.',
@@ -516,7 +564,7 @@ class _ProDashboardState extends State<ProDashboard> {
             leading: const Icon(Icons.swap_horiz, color: cyan),
             title: Text(t['symbol'].toString()),
             subtitle: Text(t['reason']?.toString() ?? ''),
-            trailing: Text(number(t['profit'])),
+            trailing: Text('${number(t['profit'])} $unit'),
           ),
         const SizedBox(height: 20),
         const Text(
@@ -524,8 +572,9 @@ class _ProDashboardState extends State<ProDashboard> {
           style: TextStyle(color: mint, height: 1.6),
         ),
       ],
-    ),
-  );
+      ),
+    );
+  }
   Widget history() => box(
     Column(
       crossAxisAlignment: CrossAxisAlignment.start,
