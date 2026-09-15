@@ -1,9 +1,9 @@
-name: Build Android Pixel Pro APK
+name: Build Android Pixel Pro Standalone APK
 
 on:
   push:
     branches:
-      - android-pixel-pro-20260915
+      - android-pixel-pro-side-by-side-20260915
   workflow_dispatch:
 
 permissions:
@@ -52,7 +52,7 @@ jobs:
           print('Pixel Pro sources restored and verified')
           PY
 
-      - name: Configure Android networking
+      - name: Configure Android networking and app label
         shell: python
         run: |
           from pathlib import Path
@@ -68,7 +68,11 @@ jobs:
 
           text = text.replace(
               'android:label="al_trading_dashboard"',
+              'android:label="AL Trading Pixel Pro"',
+          )
+          text = text.replace(
               'android:label="AL Trading"',
+              'android:label="AL Trading Pixel Pro"',
           )
 
           if 'android:usesCleartextTraffic' not in text:
@@ -95,15 +99,15 @@ jobs:
       - name: Prepare artifact
         shell: bash
         run: |
-          cp app/frontend/al_trading_dashboard/build/app/outputs/flutter-apk/app-release.apk AL_Trading_Android_Pixel_Pro.apk
-          sha256sum AL_Trading_Android_Pixel_Pro.apk > AL_Trading_Android_Pixel_Pro.sha256
+          cp app/frontend/al_trading_dashboard/build/app/outputs/flutter-apk/app-release.apk AL_Trading_Pixel_Pro_Standalone.apk
+          sha256sum AL_Trading_Pixel_Pro_Standalone.apk > AL_Trading_Pixel_Pro_Standalone.sha256
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: AL_Trading_Android_Pixel_Pro
+          name: AL_Trading_Pixel_Pro_Standalone
           path: |
-            AL_Trading_Android_Pixel_Pro.apk
-            AL_Trading_Android_Pixel_Pro.sha256
+            AL_Trading_Pixel_Pro_Standalone.apk
+            AL_Trading_Pixel_Pro_Standalone.sha256
           retention-days: 14
           if-no-files-found: error
