@@ -174,3 +174,59 @@ Planned canonical crypto conversion path:
 USDT -> USD -> PLN
 
 No runtime FX conversion is enabled by Phase 07.
+
+## Phase 08 REALISTIC_V2 evidence update ? 2026-09-16
+
+Phase 08 validated the REALISTIC_V2 execution path without changing LEGACY_V1.
+
+Important distinction:
+
+- runtime `DataQuality` remains the Phase 06 enum,
+- PAPER_READINESS uses the Annex ?151 reporting taxonomy,
+- runtime `STALE` / `UNKNOWN` are not silently renamed in code,
+- the table below is a reporting-layer readiness assessment.
+
+Live preflight evidence:
+
+- BTCUSDT: REALTIME / REAL_BOOK / OPEN / CONNECTED
+- ETHUSDT: REALTIME / REAL_BOOK / OPEN / CONNECTED
+- SOLUSDT: REALTIME / REAL_BOOK / OPEN / CONNECTED
+- BNBUSDT: REALTIME / REAL_BOOK / OPEN / CONNECTED
+- XRPUSDT: REALTIME / REAL_BOOK / OPEN / CONNECTED
+- GOLD_FUT_CONT: STALE / UNTRADEABLE / OPEN / APPROXIMATED
+- WTI_FUT_CONT: STALE / UNTRADEABLE / OPEN / APPROXIMATED
+- EURUSD: UNKNOWN / UNTRADEABLE / OPEN / APPROXIMATED
+- AAPL: UNKNOWN / UNTRADEABLE / REGULAR / EXCHANGE_CALENDAR
+
+The nine-asset live cycle improved from 11.1200591 s sequentially to 2.5214423 s with bounded parallel fetch. This is 12.61% of the 20 s cycle budget.
+
+Controlled BTCUSDT paper smoke evidence completed:
+
+`OPEN -> restart -> CLOSE -> restart`
+
+Final smoke state:
+
+- open positions: 0
+- unresolved WAL records: 0
+- real exchange orders sent: 0
+- main REALISTIC_V2 `--execute`: still blocked
+
+### PAPER_READINESS per asset after Phase 08
+
+| Asset | DATA_QUALITY | EXECUTION_QUALITY | FX_QUALITY | SESSION_QUALITY | INSTRUMENT_CLARITY | PAPER_READINESS |
+|---|---|---|---|---|---|---|
+| BTCUSDT | REALTIME_BOOK | REAL_BOOK | UNAVAILABLE | EXCHANGE_CALENDAR | CONFIRMED | NOT_READY |
+| ETHUSDT | REALTIME_BOOK | REAL_BOOK | UNAVAILABLE | EXCHANGE_CALENDAR | CONFIRMED | NOT_READY |
+| SOLUSDT | REALTIME_BOOK | REAL_BOOK | UNAVAILABLE | EXCHANGE_CALENDAR | CONFIRMED | NOT_READY |
+| BNBUSDT | REALTIME_BOOK | REAL_BOOK | UNAVAILABLE | EXCHANGE_CALENDAR | CONFIRMED | NOT_READY |
+| XRPUSDT | REALTIME_BOOK | REAL_BOOK | UNAVAILABLE | EXCHANGE_CALENDAR | CONFIRMED | NOT_READY |
+| GOLD_FUT_CONT | UNRELIABLE | UNTRADEABLE | UNAVAILABLE | APPROXIMATED | PROXY | NOT_READY |
+| WTI_FUT_CONT | UNRELIABLE | UNTRADEABLE | UNAVAILABLE | APPROXIMATED | PROXY | NOT_READY |
+| EURUSD | UNRELIABLE | UNTRADEABLE | UNAVAILABLE | APPROXIMATED | CONFIRMED | NOT_READY |
+| AAPL | UNRELIABLE | UNTRADEABLE | UNAVAILABLE | EXCHANGE_CALENDAR | CONFIRMED | NOT_READY |
+
+The five crypto assets gained verified REALTIME_BOOK / REAL_BOOK execution evidence, but overall PAPER_READINESS does **not** advance because FX_QUALITY is still UNAVAILABLE for PLN reporting.
+
+Yahoo-backed instruments remain NOT_READY for REALISTIC_V2 execution because the current provider path does not provide execution-quality bid/ask evidence sufficient to move them out of UNTRADEABLE.
+
+The deterministic REALISTIC_V2 benchmark is an execution fixture only. It must not be described as market-performance evidence.

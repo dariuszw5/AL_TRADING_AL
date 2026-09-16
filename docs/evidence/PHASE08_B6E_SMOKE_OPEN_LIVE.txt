@@ -1,0 +1,33 @@
+﻿PHASE 08 B.6E - CONTROLLED LIVE PAPER OPEN
+Observed: 2026-09-16
+Asset: BTCUSDT
+Mode: realistic_paper
+Execution profile: REALISTIC_V2
+Purpose: technical execution smoke only
+Strategy signal: NO
+Real exchange order: NO
+
+Runtime status: FILLED
+Execution ID: exec-ord-rv2-BTCUSDT-c4dd568a704e8d039ec2fc07
+Reference price: 75770.01
+Execution price: 75777.58700099999
+Spread: 0.00999999999476131
+Slippage: 7.577000999997836
+Fee: 0.0030311034800399998
+Config hash: a8c84046f4919a1c39bcaef86e926a287240b14359b9b60b7f626252f7c5e781
+
+Post-fill:
+Persisted positions: ['BTCUSDT']
+Journal expected open assets: ['BTCUSDT']
+Journal unresolved: []
+
+Restart recovery:
+Recovery check: OK
+Open positions: ['BTCUSDT']
+Journal expected open assets: ['BTCUSDT']
+Journal unresolved: []
+
+REAL EXCHANGE ORDERS SENT: 0
+
+This evidence records execution mechanics only.
+It is not a strategy-performance result and is not PLN accounting.
