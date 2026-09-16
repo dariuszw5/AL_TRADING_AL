@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import Enum
@@ -7,8 +7,8 @@ from typing import Mapping
 
 from src.core.clock import Clock, SystemClock
 from src.data.data_provider import DataProvider
-from src.data.market_data_service import (
-    MarketDataService,
+from src.data.parallel_market_data_service import (
+    ParallelMarketDataService,
 )
 from src.market.market_session import (
     MarketSessionService,
@@ -343,6 +343,8 @@ def build_live_preflight(
     cycle_timeout_seconds=20.0,
     stale_after_seconds=120.0,
     request_timeout_seconds=10.0,
+    per_asset_timeout_seconds=8.0,
+    max_workers=5,
 ):
     clock = (
         clock
@@ -357,7 +359,7 @@ def build_live_preflight(
     )
 
     market_data_service = (
-        MarketDataService(
+        ParallelMarketDataService(
             provider,
             clock=clock,
             cycle_timeout_seconds=(
@@ -366,6 +368,10 @@ def build_live_preflight(
             stale_after_seconds=(
                 stale_after_seconds
             ),
+            per_asset_timeout_seconds=(
+                per_asset_timeout_seconds
+            ),
+            max_workers=max_workers,
         )
     )
 
