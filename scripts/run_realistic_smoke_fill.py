@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import argparse
 from pathlib import Path
@@ -54,9 +54,14 @@ class SmokeEntryDecision:
         self,
         *,
         quantity,
+        close_existing=False,
     ):
         self.quantity = float(
             quantity
+        )
+
+        self.close_existing = bool(
+            close_existing
         )
 
     def __call__(
@@ -67,7 +72,21 @@ class SmokeEntryDecision:
         position,
     ):
         if position is not None:
-            return None
+            if not self.close_existing:
+                return None
+
+            return ExecutionDecision(
+                side=OrderSide.SELL,
+                intent=OrderIntent.EXIT,
+                quantity=float(
+                    position.quantity
+                ),
+                exit_reason="SMOKE_CLOSE",
+                signal_reference=(
+                    "CONTROLLED_SMOKE_EXIT_"
+                    "NOT_STRATEGY_SIGNAL"
+                ),
+            )
 
         reference = (
             snapshot.ask
@@ -112,6 +131,7 @@ def build_runtime(
     *,
     state_dir,
     quantity,
+    close_existing=False,
 ):
     clock = SystemClock()
 
@@ -173,7 +193,10 @@ def build_runtime(
         broker=broker,
         decision_provider=(
             SmokeEntryDecision(
-                quantity=quantity
+                quantity=quantity,
+                close_existing=(
+                    close_existing
+                ),
             )
         ),
         clock=clock,
@@ -225,6 +248,15 @@ def _parser():
     parser.add_argument(
         "--verify-only",
         action="store_true",
+    )
+
+    parser.add_argument(
+        "--close-smoke-position",
+        action="store_true",
+        help=(
+            "Close the existing controlled "
+            "BTCUSDT smoke position."
+        ),
     )
 
     return parser
@@ -284,6 +316,7 @@ def main(argv=None):
                     quantity=(
                         args.quantity
                     ),
+                    close_existing=False,
                 )
             )
 
@@ -346,10 +379,22 @@ def main(argv=None):
         )
         return 4
 
+    print(
+        "Smoke action:",
+        (
+            "CLOSE_EXISTING_POSITION"
+            if args.close_smoke_position
+            else "OPEN_POSITION"
+        ),
+    )
+
     runtime, store, journal = (
         build_runtime(
             state_dir=args.state_dir,
             quantity=args.quantity,
+            close_existing=(
+                args.close_smoke_position
+            ),
         )
     )
 
