@@ -210,3 +210,105 @@ Implementation of PLN accounting is Phase 09 work and remains subject
 to the MASTER_SPEC HARD STOP rules.
 
 This file is policy and research only.
+
+## Phase 09 A.4 provider implementation
+
+The FX provider layer now contains three isolated adapters.
+
+### NBP Table A
+
+Implemented for:
+
+- USD/PLN
+- EUR/PLN
+
+Classification:
+
+`DAILY_REFERENCE`
+
+The adapter preserves:
+
+- NBP table number,
+- effective date,
+- rate,
+- provider identity.
+
+Important limitation:
+
+The NBP response used by this project does not expose a reliable
+intraday publication timestamp.
+
+Therefore the adapter deliberately stores:
+
+`provider_timestamp = None`
+
+and labels the quote:
+
+- `REFERENCE_ACCOUNTING_ONLY`
+- `PUBLICATION_TIMESTAMP_UNAVAILABLE`
+
+The system must not invent a publication time or use this
+DAILY_REFERENCE as ordinary fresh intraday MTM.
+
+### Yahoo PLN FX
+
+Implemented candidates:
+
+- `PLN=X` for USD/PLN,
+- `EURPLN=X` for EUR/PLN.
+
+Classification ceiling:
+
+`STALE_PRONE`
+
+Permanent labels include:
+
+- `UNOFFICIAL`
+- `DEGRADED_BY_DESIGN`
+
+A successful request or `exchangeDataDelayedBy=0` does not upgrade
+Yahoo to `LIVE`.
+
+Provider timestamp comes from `regularMarketTime` when available.
+If it is missing, the quote remains timestamp-unavailable and the
+freshness layer fails closed.
+
+### Coinbase USDT/USD
+
+Implemented from public `USDT-USD` level-1 book data.
+
+The provider preserves:
+
+- bid,
+- ask,
+- provider timestamp,
+- provider identity.
+
+Reference conversion rate:
+
+`(bid + ask) / 2`
+
+The midpoint is a reporting/reference rate only. It is not a claim
+that real FX conversion executes without cost.
+
+`KNOWN_LIMITATION: FX_CONVERSION_COST_NOT_MODELLED`
+
+### Deterministic testing
+
+Provider tests use repository JSON fixtures and injected HTTP clients.
+
+Offline tests perform zero network access.
+
+The default live adapters use only Python standard-library HTTP
+facilities and add no dependency.
+
+### Phase boundary
+
+A.4 still does not:
+
+- book realized PLN,
+- update cash PLN,
+- modify REALISTIC_V2 runtime,
+- modify LEGACY_V1,
+- migrate persistence,
+- introduce SQLite.

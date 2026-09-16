@@ -1,0 +1,17 @@
+﻿{
+  "chart": {
+    "result": [
+      {
+        "meta": {
+          "currency": "PLN",
+          "symbol": "EURPLN=X",
+          "exchangeName": "CCY",
+          "regularMarketPrice": 4.3512,
+          "regularMarketTime": 1789580463,
+          "exchangeDataDelayedBy": 0
+        }
+      }
+    ],
+    "error": null
+  }
+}
