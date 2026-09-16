@@ -49,7 +49,7 @@ def asset_or_error(symbol: str):
 
 def state_file_for(symbol: str) -> Path:
     asset = asset_or_error(symbol)
-    return LIVE_STATE_DIR / f"paper_live_{asset.symbol}_1m.json"
+    return LIVE_STATE_DIR / f"paper_live_{asset.state_key}_{asset.interval}.json"
 
 
 def load_state(symbol: str = "BTCUSDT") -> dict[str, Any]:
@@ -132,11 +132,11 @@ def root() -> dict[str, Any]:
 @app.get("/api/health")
 def health(symbol: str = "BTCUSDT") -> dict[str, Any]:
     asset = asset_or_error(symbol)
-    state = load_state(asset.symbol)
+    state = load_state(asset.asset_id)
 
     return {
         "api": "OK",
-        "symbol": asset.symbol,
+        "symbol": asset.asset_id,
         "state_available": state.get("available", False),
         "state_version": state.get("version"),
         "last_processed_timestamp": state.get("last_processed_timestamp"),
@@ -147,7 +147,7 @@ def health(symbol: str = "BTCUSDT") -> dict[str, Any]:
 @app.get("/api/status")
 def status(symbol: str = "BTCUSDT") -> dict[str, Any]:
     asset = asset_or_error(symbol)
-    state = load_state(asset.symbol)
+    state = load_state(asset.asset_id)
 
     if not state.get("available"):
         return state
@@ -190,18 +190,26 @@ def status(symbol: str = "BTCUSDT") -> dict[str, Any]:
     return {
         "available": True,
         "strategy": {
-            "symbol": asset.symbol,
-            "asset_name": asset.name,
+            "symbol": asset.asset_id,
+            "asset_name": asset.display_name,
             "asset_type": asset.asset_type,
             "provider": asset.provider,
-            "quote": asset.quote,
-            "interval": "1m",
-            "buy_rsi": 33.8,
-            "sell_rsi": 68.5,
-            "max_position_candles": 241,
-            "min_difference": asset.min_difference,
-            "rsi_method": "classic",
-            "trading_fee": 0.0004,
+            "quote": asset.quote_currency,
+            "interval": asset.interval,
+            "buy_rsi": asset.strategy.buy_rsi,
+            "sell_rsi": asset.strategy.sell_rsi,
+            "max_position_candles": (
+                asset.execution.max_position_candles
+            ),
+            "min_difference": (
+                asset.strategy.min_difference
+            ),
+            "rsi_method": asset.strategy.rsi_method,
+            "trading_fee": asset.execution.trading_fee,
+            "validation_status": (
+                asset.validation_status.value
+            ),
+            "instrument_type": asset.instrument_type,
         },
         "system": {
             "state_version": state.get("version"),
@@ -256,7 +264,7 @@ def status(symbol: str = "BTCUSDT") -> dict[str, Any]:
 @app.get("/api/trades")
 def trades(symbol: str = "BTCUSDT") -> list[dict[str, Any]]:
     asset = asset_or_error(symbol)
-    state = load_state(asset.symbol)
+    state = load_state(asset.asset_id)
 
     if not state.get("available"):
         return []
@@ -272,7 +280,7 @@ def trades(symbol: str = "BTCUSDT") -> list[dict[str, Any]]:
 @app.get("/api/equity")
 def equity(symbol: str = "BTCUSDT") -> dict[str, Any]:
     asset = asset_or_error(symbol)
-    state = load_state(asset.symbol)
+    state = load_state(asset.asset_id)
 
     if not state.get("available"):
         return {
@@ -360,7 +368,7 @@ def load_market_candles(
 
     asset = asset_or_error(symbol)
     cache = MARKET_CACHE.setdefault(
-        asset.symbol,
+        asset.asset_id,
         {"timestamp": 0.0, "points": []},
     )
     now = time.time()
@@ -368,7 +376,7 @@ def load_market_candles(
     if cache["points"] and now - cache["timestamp"] < 5.0:
         return {
             "available": True,
-            "symbol": asset.symbol,
+            "symbol": asset.asset_id,
             "interval": "1m",
             "points": cache["points"],
             "cached": True,
@@ -376,8 +384,8 @@ def load_market_candles(
 
     try:
         candles = DataProvider().get_candles(
-            symbol=asset.symbol,
-            interval="1m",
+            symbol=asset.asset_id,
+            interval=asset.interval,
             limit=limit,
         )
         points = [
@@ -397,7 +405,7 @@ def load_market_candles(
 
         return {
             "available": True,
-            "symbol": asset.symbol,
+            "symbol": asset.asset_id,
             "interval": "1m",
             "points": points,
             "cached": False,
@@ -407,7 +415,7 @@ def load_market_candles(
         if cache["points"]:
             return {
                 "available": True,
-                "symbol": asset.symbol,
+                "symbol": asset.asset_id,
                 "interval": "1m",
                 "points": cache["points"],
                 "cached": True,
@@ -417,7 +425,7 @@ def load_market_candles(
 
         return {
             "available": False,
-            "symbol": asset.symbol,
+            "symbol": asset.asset_id,
             "interval": "1m",
             "points": [],
             "error": str(exc),
@@ -429,7 +437,7 @@ def assets() -> list[dict[str, Any]]:
     result = []
 
     for asset in SUPPORTED_ASSETS:
-        state = load_state(asset.symbol)
+        state = load_state(asset.asset_id)
         result.append(
             {
                 **asset_payload(asset),
@@ -518,7 +526,7 @@ def market(symbol: str = "BTCUSDT") -> dict[str, Any]:
 @app.get("/api/files")
 def files(symbol: str = "BTCUSDT") -> dict[str, bool]:
     asset = asset_or_error(symbol)
-    state_file = state_file_for(asset.symbol)
+    state_file = state_file_for(asset.asset_id)
 
     return {
         "state": state_file.exists(),

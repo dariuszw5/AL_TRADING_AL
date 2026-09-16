@@ -18,7 +18,7 @@ print("Assets:")
 
 for asset in SUPPORTED_ASSETS:
     print(
-        f"- {asset.symbol:<8} {asset.name:<18} "
+        f"- {asset.asset_id:<14} {asset.display_name:<32} "
         f"({asset.asset_type}, {asset.provider})"
     )
 
