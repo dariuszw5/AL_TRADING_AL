@@ -1,4 +1,4 @@
-﻿# FX POLICY
+# FX POLICY
 
 Status: Phase 07 research/design
 Date reviewed: 2026-09-16
@@ -128,10 +128,10 @@ approved EUR/PLN market-data source with freshness metadata.
 The future CurrencyConverter must expose:
 
 FX_FRESH
-- quote age <= configured freshness threshold
+- quote age < configured freshness threshold
 
 FX_STALE
-- quote older than the freshness threshold
+- quote age >= configured freshness threshold
 - but not older than 96 hours
 - show PLN with a visible FX_STALE label
 - show quote age
@@ -142,6 +142,8 @@ FX_UNAVAILABLE
 - display PLN as UNAVAILABLE
 
 The 96-hour boundary follows MASTER_SPEC.
+
+At exactly 96 hours the quote remains `FX_STALE`; only age strictly greater than 96 hours is `FX_UNAVAILABLE`.
 
 ## Weekend policy
 
