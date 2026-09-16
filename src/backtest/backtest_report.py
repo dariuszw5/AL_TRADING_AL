@@ -90,3 +90,4 @@ class BacktestReport:
 
     def print_trades(self):
         print(self.format_trades())
+        

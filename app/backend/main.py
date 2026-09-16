@@ -4,49 +4,76 @@ import json
 from pathlib import Path
 from typing import Any
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
+from pydantic import BaseModel, Field
 from fastapi.middleware.cors import CORSMiddleware
+
+from src.data.assets import SUPPORTED_ASSETS, asset_payload, get_asset
+from src.data.data_provider import DataProvider
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
-STATE_FILE = PROJECT_ROOT / "data" / "live_state" / "paper_live_BTCUSDT_1m.json"
-TRADE_HISTORY_FILE = PROJECT_ROOT / "data" / "live_state" / "paper_live_history.csv"
-SNAPSHOTS_FILE = PROJECT_ROOT / "data" / "live_state" / "paper_live_snapshots.csv"
-DAILY_FILE = PROJECT_ROOT / "data" / "live_state" / "paper_live_daily.csv"
+LIVE_STATE_DIR = PROJECT_ROOT / "data" / "live_state"
+STATE_FILE = LIVE_STATE_DIR / "paper_live_BTCUSDT_1m.json"
+TRADE_HISTORY_FILE = LIVE_STATE_DIR / "paper_live_history.csv"
+SNAPSHOTS_FILE = LIVE_STATE_DIR / "paper_live_snapshots.csv"
+DAILY_FILE = LIVE_STATE_DIR / "paper_live_daily.csv"
+USER_PORTFOLIO_FILE = LIVE_STATE_DIR / "user_portfolio.json"
+
+
+class PortfolioAmount(BaseModel):
+    amount: float = Field(gt=0, le=1_000_000)
 
 
 app = FastAPI(
     title="AL TRADING AGENT API",
     version="1.0.0",
-    description="Read-only API for the AL TRADING AGENT dashboard.",
+    description="Dashboard API and paper portfolio ledger for the AL TRADING AGENT.",
 )
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
     allow_credentials=False,
-    allow_methods=["GET"],
+    allow_methods=["GET", "POST"],
     allow_headers=["*"],
 )
 
 
-def load_state() -> dict[str, Any]:
-    if not STATE_FILE.exists():
+def asset_or_error(symbol: str):
+    try:
+        return get_asset(symbol)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+def state_file_for(symbol: str) -> Path:
+    asset = asset_or_error(symbol)
+    return LIVE_STATE_DIR / f"paper_live_{asset.symbol}_1m.json"
+
+
+def load_state(symbol: str = "BTCUSDT") -> dict[str, Any]:
+    state_file = state_file_for(symbol)
+
+    if not state_file.exists():
         return {
             "available": False,
-            "error": f"State file not found: {STATE_FILE}",
+            "symbol": symbol.upper(),
+            "error": f"State file not found: {state_file}",
         }
 
     try:
-        with STATE_FILE.open("r", encoding="utf-8") as handle:
+        with state_file.open("r", encoding="utf-8") as handle:
             state = json.load(handle)
 
         state["available"] = True
+        state["symbol"] = symbol.upper()
         return state
 
     except (OSError, json.JSONDecodeError) as exc:
         return {
             "available": False,
+            "symbol": symbol.upper(),
             "error": str(exc),
         }
 
@@ -103,11 +130,13 @@ def root() -> dict[str, Any]:
 
 
 @app.get("/api/health")
-def health() -> dict[str, Any]:
-    state = load_state()
+def health(symbol: str = "BTCUSDT") -> dict[str, Any]:
+    asset = asset_or_error(symbol)
+    state = load_state(asset.symbol)
 
     return {
         "api": "OK",
+        "symbol": asset.symbol,
         "state_available": state.get("available", False),
         "state_version": state.get("version"),
         "last_processed_timestamp": state.get("last_processed_timestamp"),
@@ -116,8 +145,9 @@ def health() -> dict[str, Any]:
 
 
 @app.get("/api/status")
-def status() -> dict[str, Any]:
-    state = load_state()
+def status(symbol: str = "BTCUSDT") -> dict[str, Any]:
+    asset = asset_or_error(symbol)
+    state = load_state(asset.symbol)
 
     if not state.get("available"):
         return state
@@ -160,12 +190,16 @@ def status() -> dict[str, Any]:
     return {
         "available": True,
         "strategy": {
-            "symbol": "BTCUSDT",
+            "symbol": asset.symbol,
+            "asset_name": asset.name,
+            "asset_type": asset.asset_type,
+            "provider": asset.provider,
+            "quote": asset.quote,
             "interval": "1m",
             "buy_rsi": 33.8,
             "sell_rsi": 68.5,
             "max_position_candles": 241,
-            "min_difference": 1.0,
+            "min_difference": asset.min_difference,
             "rsi_method": "classic",
             "trading_fee": 0.0004,
         },
@@ -220,8 +254,9 @@ def status() -> dict[str, Any]:
 
 
 @app.get("/api/trades")
-def trades() -> list[dict[str, Any]]:
-    state = load_state()
+def trades(symbol: str = "BTCUSDT") -> list[dict[str, Any]]:
+    asset = asset_or_error(symbol)
+    state = load_state(asset.symbol)
 
     if not state.get("available"):
         return []
@@ -235,8 +270,9 @@ def trades() -> list[dict[str, Any]]:
 
 
 @app.get("/api/equity")
-def equity() -> dict[str, Any]:
-    state = load_state()
+def equity(symbol: str = "BTCUSDT") -> dict[str, Any]:
+    asset = asset_or_error(symbol)
+    state = load_state(asset.symbol)
 
     if not state.get("available"):
         return {
@@ -311,75 +347,69 @@ def daily() -> list[dict[str, Any]]:
     return result
 
 
-# Short-lived cache prevents the dashboard from requesting Binance on every refresh.
-MARKET_CACHE: dict[str, Any] = {
-    "timestamp": 0.0,
-    "points": [],
-}
+# Short-lived per-symbol cache prevents the dashboard from requesting a public
+# provider on every refresh.
+MARKET_CACHE: dict[str, dict[str, Any]] = {}
 
 
-def load_market_candles(limit: int = 120) -> dict[str, Any]:
+def load_market_candles(
+    symbol: str = "BTCUSDT",
+    limit: int = 120,
+) -> dict[str, Any]:
     import time
-    import urllib.parse
-    import urllib.request
 
+    asset = asset_or_error(symbol)
+    cache = MARKET_CACHE.setdefault(
+        asset.symbol,
+        {"timestamp": 0.0, "points": []},
+    )
     now = time.time()
 
-    if MARKET_CACHE["points"] and now - MARKET_CACHE["timestamp"] < 5.0:
+    if cache["points"] and now - cache["timestamp"] < 5.0:
         return {
             "available": True,
-            "symbol": "BTCUSDT",
+            "symbol": asset.symbol,
             "interval": "1m",
-            "points": MARKET_CACHE["points"],
+            "points": cache["points"],
             "cached": True,
         }
 
-    query = urllib.parse.urlencode(
-        {
-            "symbol": "BTCUSDT",
-            "interval": "1m",
-            "limit": limit,
-        }
-    )
-
-    url = f"https://data-api.binance.vision/api/v3/klines?{query}"
-
     try:
-        with urllib.request.urlopen(url, timeout=10) as response:
-            payload = json.loads(response.read().decode("utf-8"))
+        candles = DataProvider().get_candles(
+            symbol=asset.symbol,
+            interval="1m",
+            limit=limit,
+        )
+        points = [
+            {
+                "timestamp": int(candle.timestamp),
+                "open": float(candle.open),
+                "high": float(candle.high),
+                "low": float(candle.low),
+                "close": float(candle.close),
+                "volume": float(candle.volume),
+            }
+            for candle in candles
+        ]
 
-        points = []
-
-        for candle in payload:
-            points.append(
-                {
-                    "timestamp": int(candle[0]),
-                    "open": float(candle[1]),
-                    "high": float(candle[2]),
-                    "low": float(candle[3]),
-                    "close": float(candle[4]),
-                    "volume": float(candle[5]),
-                }
-            )
-
-        MARKET_CACHE["timestamp"] = now
-        MARKET_CACHE["points"] = points
+        cache["timestamp"] = now
+        cache["points"] = points
 
         return {
             "available": True,
-            "symbol": "BTCUSDT",
+            "symbol": asset.symbol,
             "interval": "1m",
             "points": points,
             "cached": False,
         }
 
     except Exception as exc:
-        if MARKET_CACHE["points"]:
+        if cache["points"]:
             return {
                 "available": True,
-                "symbol": "BTCUSDT",
+                "symbol": asset.symbol,
                 "interval": "1m",
-                "points": MARKET_CACHE["points"],
+                "points": cache["points"],
                 "cached": True,
                 "stale": True,
                 "error": str(exc),
@@ -387,22 +417,111 @@ def load_market_candles(limit: int = 120) -> dict[str, Any]:
 
         return {
             "available": False,
-            "symbol": "BTCUSDT",
+            "symbol": asset.symbol,
             "interval": "1m",
             "points": [],
             "error": str(exc),
         }
 
 
+@app.get("/api/assets")
+def assets() -> list[dict[str, Any]]:
+    result = []
+
+    for asset in SUPPORTED_ASSETS:
+        state = load_state(asset.symbol)
+        result.append(
+            {
+                **asset_payload(asset),
+                "state_available": state.get("available", False),
+                "market_price": float(state.get("market_price", 0.0)),
+                "position": (
+                    state.get("position", {}).get("side")
+                    if state.get("position")
+                    else "FLAT"
+                ),
+            }
+        )
+
+    return result
+
+
+@app.get('/api/ai')
+def ai_status() -> dict[str, Any]:
+    import time
+
+    path = LIVE_STATE_DIR / 'ai_paper.json'
+    try:
+        with path.open(encoding='utf-8') as handle:
+            state = json.load(handle)
+        age = time.time() - state['last_cycle'] / 1000
+        return {**state, 'available': True, 'stale': age > 180,
+                'age_seconds': max(0, age)}
+    except (OSError, ValueError, KeyError, TypeError):
+        return {'available': False, 'mode': 'PAPER_ONLY',
+                'reason': 'Moduł AI nie zapisał jeszcze poprawnego cyklu'}
+
+
+def user_portfolio_state() -> dict[str, Any]:
+    default = {
+        'version': 1, 'currency': 'PLN', 'balance': 0.0,
+        'total_deposited': 0.0, 'total_withdrawn': 0.0,
+        'profit_transferred': 0.0, 'profit_transfers': [],
+        'result': 0.0, 'available': True,
+    }
+    try:
+        with USER_PORTFOLIO_FILE.open(encoding='utf-8') as handle:
+            state = {**default, **json.load(handle)}
+        state['result'] = state.get('profit_transferred', 0.0)
+        return state
+    except (OSError, ValueError, TypeError, KeyError):
+        return default
+
+
+def save_user_portfolio(state: dict[str, Any]) -> dict[str, Any]:
+    LIVE_STATE_DIR.mkdir(parents=True, exist_ok=True)
+    temporary = USER_PORTFOLIO_FILE.with_suffix('.tmp')
+    temporary.write_text(json.dumps(state, ensure_ascii=False, indent=2),
+                         encoding='utf-8')
+    temporary.replace(USER_PORTFOLIO_FILE)
+    return user_portfolio_state()
+
+
+@app.get('/api/user-portfolio')
+def get_user_portfolio() -> dict[str, Any]:
+    return user_portfolio_state()
+
+
+@app.post('/api/user-portfolio/deposit')
+def deposit_user_portfolio(request: PortfolioAmount) -> dict[str, Any]:
+    state = user_portfolio_state()
+    state['balance'] += request.amount
+    state['total_deposited'] += request.amount
+    return save_user_portfolio(state)
+
+
+@app.post('/api/user-portfolio/withdraw')
+def withdraw_user_portfolio(request: PortfolioAmount) -> dict[str, Any]:
+    state = user_portfolio_state()
+    if request.amount > state['balance']:
+        raise HTTPException(status_code=400, detail='Niewystarczające saldo portfela')
+    state['balance'] -= request.amount
+    state['total_withdrawn'] += request.amount
+    return save_user_portfolio(state)
+
+
 @app.get("/api/market")
-def market() -> dict[str, Any]:
-    return load_market_candles(limit=120)
+def market(symbol: str = "BTCUSDT") -> dict[str, Any]:
+    return load_market_candles(symbol=symbol, limit=120)
 
 
 @app.get("/api/files")
-def files() -> dict[str, bool]:
+def files(symbol: str = "BTCUSDT") -> dict[str, bool]:
+    asset = asset_or_error(symbol)
+    state_file = state_file_for(asset.symbol)
+
     return {
-        "state": STATE_FILE.exists(),
+        "state": state_file.exists(),
         "trade_history": TRADE_HISTORY_FILE.exists(),
         "snapshots": SNAPSHOTS_FILE.exists(),
         "daily": DAILY_FILE.exists(),
