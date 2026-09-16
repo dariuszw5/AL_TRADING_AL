@@ -44,6 +44,7 @@ class PaperBroker(
         simulated_spread_bps=None,
         derived_spread_bps=None,
         derived_spread_validated=False,
+        execution_journal=None,
     ):
         trading_fee_rate = float(
             trading_fee_rate
@@ -120,6 +121,15 @@ class PaperBroker(
         )
 
         self._results_by_client_order_id = {}
+
+        self.execution_journal = (
+            execution_journal
+        )
+
+        if self.execution_journal is not None:
+            self.execution_journal.restore_broker(
+                self
+            )
 
     def config_hash_for(
         self,
@@ -425,6 +435,108 @@ class PaperBroker(
             (),
         )
 
+    def order_fingerprint(
+        self,
+        order,
+    ):
+        payload = {
+            "client_order_id": (
+                order.client_order_id
+            ),
+            "asset_id": (
+                order.asset_id
+            ),
+            "side": (
+                order.side.value
+            ),
+            "quantity": (
+                order.quantity
+            ),
+            "intent": (
+                order.intent.value
+            ),
+            "execution_profile": (
+                order.execution_profile.value
+            ),
+            "paper_mode": (
+                order.paper_mode.value
+            ),
+            "signal_reference": (
+                order.signal_reference
+            ),
+            "requested_exit_reason": (
+                order.requested_exit_reason
+            ),
+            "stop_loss": (
+                order.stop_loss
+            ),
+            "take_profit": (
+                order.take_profit
+            ),
+        }
+
+        encoded = json.dumps(
+            payload,
+            sort_keys=True,
+            separators=(",", ":"),
+        ).encode("utf-8")
+
+        return hashlib.sha256(
+            encoded
+        ).hexdigest()
+
+    def restore_idempotency_result(
+        self,
+        result,
+    ):
+        client_id = (
+            result.order.client_order_id
+        )
+
+        existing = (
+            self
+            ._results_by_client_order_id
+            .get(client_id)
+        )
+
+        if existing is not None:
+            if (
+                self.order_fingerprint(
+                    existing.order
+                )
+                != self.order_fingerprint(
+                    result.order
+                )
+            ):
+                raise ValueError(
+                    "Conflicting restored "
+                    "idempotency result"
+                )
+
+            return existing
+
+        self._results_by_client_order_id[
+            client_id
+        ] = result
+
+        return result
+
+    def commit_journal_result(
+        self,
+        result,
+    ):
+        if self.execution_journal is None:
+            return
+
+        self.execution_journal.commit(
+            broker_result=result,
+            order_fingerprint=(
+                self.order_fingerprint(
+                    result.order
+                )
+            ),
+        )
+
     def submit_order(
         self,
         order,
@@ -440,7 +552,14 @@ class PaperBroker(
         )
 
         if existing is not None:
-            if existing.order == order:
+            if (
+                self.order_fingerprint(
+                    existing.order
+                )
+                == self.order_fingerprint(
+                    order
+                )
+            ):
                 return existing
 
             return BrokerResult(
@@ -451,6 +570,40 @@ class PaperBroker(
                 ),
                 labels=(
                     "IDEMPOTENCY_CONFLICT",
+                ),
+            )
+
+        if self.execution_journal is not None:
+            if (
+                self.execution_journal
+                .has_unresolved_asset(
+                    order.asset_id
+                )
+            ):
+                blocked = BrokerResult(
+                    status=OrderStatus.REJECTED,
+                    order=order,
+                    rejection_reason=(
+                        RejectionReason
+                        .RECOVERY_REQUIRED
+                    ),
+                    labels=(
+                        "RECOVERY_REQUIRED",
+                    ),
+                )
+
+                self._results_by_client_order_id[
+                    order.client_order_id
+                ] = blocked
+
+                return blocked
+
+            self.execution_journal.prepare(
+                order=order,
+                order_fingerprint=(
+                    self.order_fingerprint(
+                        order
+                    )
                 ),
             )
 

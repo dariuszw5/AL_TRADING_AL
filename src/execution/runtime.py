@@ -154,6 +154,19 @@ class RealisticPaperRuntime:
         self.paper_mode = paper_mode
         self.state_store = state_store
 
+        if (
+            getattr(
+                self.broker,
+                "execution_journal",
+                None,
+            )
+            is not None
+            and self.state_store is None
+        ):
+            raise ValueError(
+                "execution_journal requires state_store"
+            )
+
         self.positions: dict[
             str,
             Position,
@@ -486,6 +499,18 @@ class RealisticPaperRuntime:
         if self.state_store is not None:
             self.state_store.save_positions(
                 self.positions
+            )
+
+        if (
+            getattr(
+                self.broker,
+                "execution_journal",
+                None,
+            )
+            is not None
+        ):
+            self.broker.commit_journal_result(
+                broker_result
             )
 
         return RuntimeAssetResult(
