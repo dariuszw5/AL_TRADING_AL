@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import hashlib
 import json
@@ -131,6 +131,7 @@ class RealisticPaperRuntime:
         paper_mode: PaperMode = (
             PaperMode.REALISTIC_PAPER
         ),
+        state_store=None,
     ):
         self.market_data_service = (
             market_data_service
@@ -151,11 +152,22 @@ class RealisticPaperRuntime:
         )
 
         self.paper_mode = paper_mode
+        self.state_store = state_store
 
         self.positions: dict[
             str,
             Position,
         ] = {}
+
+        if self.state_store is not None:
+            restored = (
+                self.state_store
+                .load_positions()
+            )
+
+            self.positions.update(
+                restored
+            )
 
     @staticmethod
     def _snapshot_identity(
@@ -470,6 +482,11 @@ class RealisticPaperRuntime:
             asset_id,
             broker_result,
         )
+
+        if self.state_store is not None:
+            self.state_store.save_positions(
+                self.positions
+            )
 
         return RuntimeAssetResult(
             asset_id=asset_id,
