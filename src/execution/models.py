@@ -155,6 +155,7 @@ class Execution:
     pending_reason: str | None
     execution_reason: str
     labels: tuple[str, ...] = ()
+    config_hash: str | None = None
 
     def __post_init__(self):
         _require_aware_utc(

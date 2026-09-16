@@ -121,11 +121,24 @@ class PaperBroker(
 
         self._results_by_client_order_id = {}
 
-    @property
-    def config_hash(self):
+    def config_hash_for(
+        self,
+        paper_mode,
+    ):
+        if not isinstance(
+            paper_mode,
+            PaperMode,
+        ):
+            paper_mode = PaperMode(
+                str(paper_mode)
+            )
+
         payload = {
             "execution_profile": (
                 ExecutionProfile.REALISTIC_V2.value
+            ),
+            "paper_mode": (
+                paper_mode.value
             ),
             "trading_fee_rate": (
                 self.trading_fee_rate
@@ -153,6 +166,12 @@ class PaperBroker(
         return hashlib.sha256(
             encoded
         ).hexdigest()
+
+    @property
+    def config_hash(self):
+        return self.config_hash_for(
+            PaperMode.REALISTIC_PAPER
+        )
 
     @staticmethod
     def _value(value):
@@ -720,6 +739,11 @@ class PaperBroker(
                 execution_reason
             ),
             labels=labels,
+            config_hash=(
+                self.config_hash_for(
+                    order.paper_mode
+                )
+            ),
         )
 
         if (
