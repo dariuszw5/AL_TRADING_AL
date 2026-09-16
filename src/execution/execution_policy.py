@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 from dataclasses import dataclass
 
@@ -54,6 +54,39 @@ class ExecutionPolicy:
         market_session,
     ):
         labels = []
+
+        provider_status = str(
+            enum_value(
+                market_snapshot.provider_status
+            )
+        ).upper()
+
+        if provider_status in {
+            "DISCONNECTED",
+            "RATE_LIMITED",
+            "ERROR",
+        }:
+            return PolicyDecision(
+                False,
+                RejectionReason.PROVIDER_UNAVAILABLE,
+            )
+
+        if provider_status == "DEGRADED":
+            labels.append(
+                "PROVIDER_DEGRADED"
+            )
+
+        session_quality = str(
+            enum_value(
+                market_session.session_quality
+            )
+        ).upper()
+
+        if session_quality == "UNKNOWN":
+            return PolicyDecision(
+                False,
+                RejectionReason.SESSION_UNAVAILABLE,
+            )
 
         session_state = enum_value(
             market_session.state

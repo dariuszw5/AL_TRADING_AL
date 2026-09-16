@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -52,6 +52,10 @@ class RejectionReason(str, Enum):
     DELAYED_DATA = "DELAYED_DATA"
     UNTRADEABLE = "UNTRADEABLE"
     SHORT_NOT_SUPPORTED = "SHORT_NOT_SUPPORTED"
+    LONG_NOT_SUPPORTED = "LONG_NOT_SUPPORTED"
+    PROVIDER_UNAVAILABLE = "PROVIDER_UNAVAILABLE"
+    SESSION_UNAVAILABLE = "SESSION_UNAVAILABLE"
+    IDEMPOTENCY_CONFLICT = "IDEMPOTENCY_CONFLICT"
     SIMULATED_SPREAD_NOT_ALLOWED = (
         "SIMULATED_SPREAD_NOT_ALLOWED"
     )

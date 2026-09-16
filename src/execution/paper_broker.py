@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import hashlib
 import json
@@ -421,7 +421,19 @@ class PaperBroker(
         )
 
         if existing is not None:
-            return existing
+            if existing.order == order:
+                return existing
+
+            return BrokerResult(
+                status=OrderStatus.REJECTED,
+                order=order,
+                rejection_reason=(
+                    RejectionReason.IDEMPOTENCY_CONFLICT
+                ),
+                labels=(
+                    "IDEMPOTENCY_CONFLICT",
+                ),
+            )
 
         if (
             order.execution_profile
@@ -432,9 +444,53 @@ class PaperBroker(
                 RejectionReason.PROFILE_NOT_ALLOWED,
             )
 
+        if (
+            market_snapshot.asset_id
+            != order.asset_id
+            or market_session.asset_id
+            != order.asset_id
+            or (
+                position is not None
+                and position.asset_id
+                != order.asset_id
+            )
+        ):
+            return self._reject(
+                order,
+                RejectionReason.INVALID_ORDER,
+            )
+
         asset = self.asset_resolver(
             order.asset_id
         )
+
+        if (
+            order.intent
+            is OrderIntent.ENTRY
+            and position is not None
+        ):
+            return self._reject(
+                order,
+                RejectionReason.INVALID_ORDER,
+            )
+
+        if (
+            order.intent
+            is OrderIntent.ENTRY
+            and order.side
+            is OrderSide.BUY
+            and not bool(
+                getattr(
+                    asset,
+                    "allow_long",
+                    False,
+                )
+            )
+        ):
+            return self._reject(
+                order,
+                RejectionReason.LONG_NOT_SUPPORTED,
+            )
 
         if (
             order.intent
@@ -445,6 +501,42 @@ class PaperBroker(
                 order,
                 RejectionReason.INVALID_ORDER,
             )
+
+        if (
+            order.intent
+            is OrderIntent.EXIT
+            and position is not None
+        ):
+            expected_side = (
+                OrderSide.SELL
+                if position.side
+                is PositionSide.LONG
+                else OrderSide.BUY
+            )
+
+            if order.side is not expected_side:
+                return self._reject(
+                    order,
+                    RejectionReason.INVALID_ORDER,
+                )
+
+            if (
+                order.quantity
+                != position.quantity
+            ):
+                return self._reject(
+                    order,
+                    RejectionReason.INVALID_ORDER,
+                )
+
+            if (
+                position.status
+                is PositionStatus.CLOSED
+            ):
+                return self._reject(
+                    order,
+                    RejectionReason.INVALID_ORDER,
+                )
 
         short_error, short_labels = (
             self._check_short(
@@ -541,10 +633,14 @@ class PaperBroker(
             order.intent
             is OrderIntent.EXIT
             and position is not None
-            and order.requested_exit_reason
-            == "STOP_LOSS"
             and position.stop_loss
             is not None
+            and (
+                order.requested_exit_reason
+                == "STOP_LOSS"
+                or position.status
+                is PositionStatus.EXIT_PENDING
+            )
         ):
             if (
                 position.side
