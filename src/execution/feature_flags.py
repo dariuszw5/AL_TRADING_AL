@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import os
 from dataclasses import dataclass
@@ -81,6 +81,8 @@ class RealisticV2FeatureFlags:
     """
 
     enabled: bool = False
+    execution_enabled: bool = False
+
     paper_mode: PaperMode = (
         PaperMode.REALISTIC_PAPER
     )
@@ -104,6 +106,14 @@ class RealisticV2FeatureFlags:
             default=False,
         )
 
+        execution_enabled = _parse_bool(
+            "AL_TRADING_REALISTIC_V2_EXECUTION_ENABLED",
+            source.get(
+                "AL_TRADING_REALISTIC_V2_EXECUTION_ENABLED"
+            ),
+            default=False,
+        )
+
         paper_mode = _parse_paper_mode(
             source.get(
                 "AL_TRADING_REALISTIC_V2_PAPER_MODE"
@@ -112,5 +122,6 @@ class RealisticV2FeatureFlags:
 
         return cls(
             enabled=enabled,
+            execution_enabled=execution_enabled,
             paper_mode=paper_mode,
         )

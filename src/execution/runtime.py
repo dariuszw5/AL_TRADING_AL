@@ -182,6 +182,47 @@ class RealisticPaperRuntime:
                 restored
             )
 
+        journal = getattr(
+            self.broker,
+            "execution_journal",
+            None,
+        )
+
+        if (
+            journal is not None
+            and self.state_store is not None
+        ):
+            unresolved = (
+                journal
+                .unresolved_client_order_ids()
+            )
+
+            if unresolved:
+                raise RuntimeError(
+                    "RECOVERY_REQUIRED: "
+                    "unresolved execution journal "
+                    + ", ".join(unresolved)
+                )
+
+            expected_assets = set(
+                journal
+                .expected_open_assets()
+            )
+
+            actual_assets = set(
+                self.positions
+            )
+
+            if (
+                expected_assets
+                != actual_assets
+            ):
+                raise RuntimeError(
+                    "STATE_JOURNAL_MISMATCH: "
+                    f"journal={sorted(expected_assets)} "
+                    f"state={sorted(actual_assets)}"
+                )
+
     @staticmethod
     def _snapshot_identity(
         snapshot,

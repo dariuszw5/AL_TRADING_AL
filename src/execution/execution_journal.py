@@ -763,6 +763,45 @@ class RealisticExecutionJournal:
             results
         )
 
+    def expected_open_assets(
+        self,
+    ):
+        active = set()
+
+        for result in self.committed_results():
+            status = getattr(
+                result.status,
+                "value",
+                str(result.status),
+            )
+
+            if status != "FILLED":
+                continue
+
+            intent = getattr(
+                result.order.intent,
+                "value",
+                str(result.order.intent),
+            )
+
+            asset_id = (
+                result.order.asset_id
+            )
+
+            if intent == "ENTRY":
+                active.add(
+                    asset_id
+                )
+
+            elif intent == "EXIT":
+                active.discard(
+                    asset_id
+                )
+
+        return tuple(
+            sorted(active)
+        )
+
     def restore_broker(
         self,
         broker,

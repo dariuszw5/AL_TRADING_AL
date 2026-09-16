@@ -1,4 +1,4 @@
-﻿# Python
+# Python
 .venv/
 __pycache__/
 *.py[cod]
@@ -31,3 +31,6 @@ app/frontend/al_trading_dashboard/windows/flutter/ephemeral/
 .env
 .env.*
 !.env.example
+
+# REALISTIC_V2 runtime state / WAL
+data/realistic_v2_state/
