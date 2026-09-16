@@ -1,4 +1,4 @@
-﻿# MARKET SESSION POLICY
+# MARKET SESSION POLICY
 
 Status: Phase 07 research/design
 Date reviewed: 2026-09-16
@@ -9,8 +9,8 @@ Date reviewed: 2026-09-16
 market-session state.
 
 It will use:
-- Python standard-library `zoneinfo`
 - versioned calendar data stored in the repository
+- deterministic US DST transition rules for `America/New_York` and `America/Chicago`
 - no new third-party dependency in Phase 07
 
 No execution rule is changed by introducing the service.
@@ -60,7 +60,7 @@ SESSION_QUALITY = UNKNOWN
 and market status must not be guessed.
 
 DST:
-handled through `zoneinfo`, never through fixed UTC offsets.
+handled by deterministic US transition rules evaluated from UTC. The current Windows Python environment does not provide the IANA timezone database required by `zoneinfo`. Fixed year-round UTC offsets are not used.
 
 ## EURUSD
 

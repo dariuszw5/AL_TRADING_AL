@@ -1,4 +1,4 @@
-﻿# ADR-0001 — Market calendars
+# ADR-0001 — Market calendars and timezone rules
 
 Date: 2026-09-16
 Status: Accepted for Phase 07
@@ -10,40 +10,64 @@ sessions for crypto, FX, Nasdaq equities and futures proxies.
 
 No market-calendar package is currently installed.
 
-Adding a dependency requires HARD STOP approval.
+The initial Phase 07 research decision expected Python standard-library
+`zoneinfo` to provide the required IANA time zones.
+
+Runtime verification on the project's Windows/Python environment
+showed that the local IANA timezone database is unavailable:
+
+- `America/New_York` cannot be assumed available
+- `America/Chicago` cannot be assumed available
+
+Installing the external `tzdata` package would add a dependency and
+therefore requires a MASTER_SPEC HARD STOP.
 
 ## Options considered
 
-1. Add a third-party exchange-calendar package.
-2. Hardcode dates directly in Python.
-3. Use standard-library `zoneinfo` plus versioned repository calendar
-   data.
+1. Add the `tzdata` dependency.
+2. Add a third-party exchange-calendar package.
+3. Hardcode fixed UTC offsets.
+4. Use versioned repository market calendars plus deterministic US DST
+   transition rules for the two currently required US time zones.
 
 ## Decision
 
-Use option 3.
+Use option 4 in Phase 07.
 
-`MarketSessionService` will use:
+MarketSessionService uses:
 - timezone-aware UTC input
-- `zoneinfo`
 - versioned calendar data in the repository
+- deterministic US DST rules for:
+  - America/New_York
+  - America/Chicago
+- no new external dependency
 
-Holiday and early-close dates will not be hidden in Python logic.
+The implemented US DST rules follow the post-2007 United States rule:
+- DST starts on the second Sunday in March
+- DST ends on the first Sunday in November
+
+Conversion is performed from a UTC instant, avoiding ambiguous local
+input timestamps.
+
+Holiday and early-close dates remain versioned data and are not hidden
+inside Python session logic.
 
 ## Consequences
 
 Advantages:
 - zero new dependency
+- works on the current Windows Python environment
 - deterministic offline tests
-- source versions visible in Git
-- explicit expiry behaviour
-- exceptional closures can be represented
+- DST transition tests are independent of host timezone data
+- source versions remain visible in Git
+- calendar expiry can fail closed
 
 Costs:
-- calendar data requires maintenance
-- new exchange rules require an explicit calendar update
-- futures holiday hours remain UNKNOWN until product-level hours are
-  recorded
+- timezone law changes require a code/config review
+- the deterministic converter is intentionally limited to currently
+  required US zones
+- this is not a general-purpose world timezone database
 
-If a future phase determines that a maintained external calendar
-library is preferable, adding it requires the normal HARD STOP.
+If a future phase adopts `tzdata`, `exchange_calendars`,
+`pandas_market_calendars`, or another timezone/calendar dependency,
+the normal HARD STOP is required first.
