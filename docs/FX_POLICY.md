@@ -312,3 +312,85 @@ A.4 still does not:
 - modify LEGACY_V1,
 - migrate persistence,
 - introduce SQLite.
+
+## Phase 09 A.6 realized source selection
+
+Realized FX evidence selection is deterministic and fail-closed.
+
+### NBP DAILY_REFERENCE
+
+The verified NBP Table A response used by this project does not expose
+a reliable intraday publication timestamp.
+
+Therefore the selector never invents such a timestamp.
+
+For a daily reference:
+
+- effective_date after the trade-close date is never eligible,
+- a same-day table is eligible only when the system actually observed
+  that table no later than the trade close,
+- a table with an earlier effective_date may be used as the known
+  prior daily reference,
+- among eligible references the latest effective_date is selected,
+- ambiguity on the selected effective_date fails closed.
+
+This avoids retroactively using a same-day NBP table that the system
+first learned about after the transaction had already closed.
+
+It also avoids pretending that effective_date is an intraday
+publication timestamp.
+
+The maximum permitted age of a daily reference remains configurable.
+A.6 does not freeze the production threshold.
+
+### Timestamped market FX legs
+
+For timestamped market evidence, including Coinbase USDT/USD:
+
+    provider_timestamp <= closed_at
+
+The newest eligible quote is selected.
+
+A quote newer than the transaction close is never used.
+
+The maximum market quote age remains configurable.
+A.6 does not freeze the production threshold.
+
+### Canonical realized paths
+
+    PLN
+    USD -> PLN
+    EUR -> PLN
+    USDT -> USD -> PLN
+
+The complete evidence selected here is passed to the immutable
+RealizedFxBooker introduced in Phase 09 A.5.
+
+### Accounting interpretation
+
+NBP remains DAILY_REFERENCE.
+
+A prior-day NBP middle rate is not described as an executable FX rate
+at the exact trade-close instant.
+
+If a same-day table was actually observed before the trade close, its
+use is auditable through observed_at.
+
+No synthetic NBP publication timestamp is created.
+
+KNOWN_LIMITATION: FX_CONVERSION_COST_NOT_MODELLED
+
+### Phase boundary
+
+A.6 does not:
+
+- update paper cash,
+- update equity PLN,
+- create a financial ledger,
+- modify PaperBroker,
+- modify REALISTIC_V2 runtime,
+- modify LEGACY_V1,
+- change frozen strategy parameters,
+- migrate JSON state,
+- introduce SQLite,
+- add a dependency.
