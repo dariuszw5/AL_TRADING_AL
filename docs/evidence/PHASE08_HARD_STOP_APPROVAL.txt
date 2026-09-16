@@ -1,0 +1,26 @@
+﻿PHASE 08 HARD STOP APPROVAL
+
+Date: 2026-09-16
+
+User approval:
+
+ZGADZAM SIĘ NA HARD STOP 08:
+wdrożenie REALISTIC_V2 zgodnie z docs/REALISTIC_V2_EXECUTION_DESIGN.md,
+bez zmiany LEGACY_V1, frozen strategii, istniejących assertions ani danych live_state.
+
+Authorized scope:
+- REALISTIC_V2 execution implementation
+- PaperBroker implementation
+- explicit execution-quality handling
+- explicit slippage
+- STOP_GAP
+- EXIT_PENDING
+- short capability enforcement
+- isolated REALISTIC_V2 benchmark/integration work
+
+Not authorized:
+- changing LEGACY_V1 behavior
+- changing frozen strategy parameters
+- changing existing test assertions
+- overwriting data/live_state
+- adding a new dependency without another HARD STOP
