@@ -226,28 +226,16 @@ class AIPaperManager:
                 break
 
     def _sweep_surplus(self, now_ms):
-        """Move realized AI profit above its base into the user's ledger."""
-        s = self.state
-        surplus = max(0.0, s['balance'] - s['initial_balance'])
-        amount = surplus - s.get('profit_swept', 0.0)
-        if amount <= 1e-9:
-            return
-        store = LiveStateStore(USER_PORTFOLIO_PATH)
-        portfolio = store.load() or dict(
-            version=1, currency='PLN', balance=0.0,
-            total_deposited=0.0, total_withdrawn=0.0,
-            profit_transferred=0.0, profit_transfers=[],
-        )
-        portfolio['balance'] += amount
-        portfolio['profit_transferred'] = portfolio.get('profit_transferred', 0.0) + amount
-        transfer = dict(timestamp=now_ms, amount=amount, source='AI_PAPER_PROFIT')
-        portfolio['profit_transfers'] = (portfolio.get('profit_transfers', []) + [transfer])[-300:]
-        store.save(portfolio)
-        s['balance'] -= amount
-        s['equity'] -= amount
-        s['profit_swept'] += amount
-        s['profit_transfers'] = (s['profit_transfers'] + [transfer])[-300:]
-        s['realized_pnl'] = (s['balance'] - s['initial_balance']) + s['profit_swept']
+        """Legacy compatibility hook.
+
+        AI account values are denominated in simulation_units.
+
+        They must never be copied 1:1 into the user's PLN cash ledger.
+        Historical profit_swept/profit_transfers fields are preserved for
+        audit and a future explicit migration, but no new portfolio transfer
+        is performed here.
+        """
+        return None
 
     def step(self, raw_markets, now_ms, errors=None):
         previous = deepcopy(self.state)
@@ -303,7 +291,6 @@ class AIPaperManager:
             rows.extend(ranked)
             if not ranked:
                 issues[symbol] = 'Za mało danych do treningu i walidacji'
-        rows.sort(key=lambda row: row['score'], reverse=True)
         for row in rows:
             learning = s['strategy_learning'].get(row['strategy'], {})
             sample_count = int(learning.get('trades', 0))
@@ -316,6 +303,10 @@ class AIPaperManager:
             row['learning_bonus'] = (LEARNING_WEIGHT * observed
                                       if sample_count >= 3 else 0.0)
             row['score'] += row['learning_bonus']
+
+        # Selection must use the FINAL score after the bounded online bonus.
+        rows.sort(key=lambda row: row['score'], reverse=True)
+
         s.update(ranking=rows, data_issues=issues, last_cycle=now_ms,
                  limits=dict(exposure=EXPOSURE, daily_loss=20, drawdown=0.05,
                              stop=STOP, take=TAKE, horizon_minutes=HORIZON))

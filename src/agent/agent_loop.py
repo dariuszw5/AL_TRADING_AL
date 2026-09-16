@@ -226,11 +226,19 @@ class AgentLoop:
                 "result": None
             }
 
-        self.last_processed_timestamp = closed_candle.timestamp
+        previous_processed_timestamp = self.last_processed_timestamp
 
         result = self.agent.run_cycle(self.history)
 
-        self._save_state()
+        self.last_processed_timestamp = closed_candle.timestamp
+
+        try:
+            self._save_state()
+        except Exception:
+            # The candle is not considered processed unless persistence
+            # succeeds. Preserve retryability after a failed save.
+            self.last_processed_timestamp = previous_processed_timestamp
+            raise
 
         return {
             "status": "PROCESSED",

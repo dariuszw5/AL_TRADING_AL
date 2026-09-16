@@ -133,6 +133,9 @@ class BacktestRunner:
     def get_max_drawdown(self):
         return self.backtest_engine.get_max_drawdown()
 
+    def get_mtm_max_drawdown(self):
+        return self.backtest_engine.get_mtm_max_drawdown()
+
     def get_equity_curve(self):
         return self.backtest_engine.get_equity_curve()
 

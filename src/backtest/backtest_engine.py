@@ -347,5 +347,28 @@ class BacktestEngine:
     def get_max_drawdown(self):
         return self.backtest_result.get_max_drawdown()
 
+    def get_mtm_max_drawdown(self):
+        """Return full mark-to-market drawdown tracked by the agent.
+
+        This is deliberately separate from get_max_drawdown(), whose
+        LEGACY_V1 realized-equity semantics remain frozen.
+        """
+        getter = getattr(
+            self.agent,
+            "get_max_drawdown",
+            None,
+        )
+
+        if callable(getter):
+            return float(getter())
+
+        return float(
+            getattr(
+                self.agent,
+                "max_drawdown",
+                0.0,
+            )
+        )
+
     def get_equity_curve(self):
         return self.backtest_result.get_equity_curve()
