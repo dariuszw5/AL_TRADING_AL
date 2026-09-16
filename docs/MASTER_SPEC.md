@@ -81,7 +81,11 @@ REALIZED:
 - fx_path,
 - fx_rate,
 - fx_provider,
-- fx_timestamp,
+- fx_timestamp, jeżeli provider udostępnia wiarygodny timestamp źródłowy,
+- dla źródła dziennego bez wiarygodnego intraday timestampu:
+  `fx_timestamp = null` oraz obowiązkowo `fx_table` / `fx_effective_date`
+  (jeżeli provider je udostępnia),
+- nie wolno syntetyzować publication timestamp z samej `fx_effective_date`,
 - pnl_pln zapisane na stałe,
 - nie przeliczaj ponownie historycznego realized PnL.
 
@@ -765,13 +769,18 @@ Polityka:
 
 ```text
 REALIZED PnL (księgowanie, nieodwracalne)
-    kurs z momentu zamknięcia transakcji
-    zapisany na stałe wraz z fx_timestamp i fx_provider
+    kurs zgodny z polityką źródła i bez danych z przyszłości
+    zapisany na stałe wraz z fx_provider i metadanymi źródła
+    wiarygodny timestamp źródłowy -> zapisz fx_timestamp
+    brak wiarygodnego intraday timestampu w źródle dziennym:
+        fx_timestamp = null
+        zapisz fx_table / fx_effective_date, jeżeli dostępne
+        nie syntetyzuj publication timestamp z samej daty
     nigdy nie przeliczany ponownie
 
 UNREALIZED PnL / MTM (prezentacja)
     FX_FRESH        wiek kursu < max_fx_age        → pokaż PLN normalnie
-    FX_STALE        wiek > max_fx_age, < 96h       → pokaż PLN z etykietą FX_STALE
+    FX_STALE        wiek >= max_fx_age, <= 96h       → pokaż PLN z etykietą FX_STALE
                                                       i jawnym wiekiem kursu
     FX_UNAVAILABLE  wiek > 96h lub brak kursu      → PLN: UNAVAILABLE (§6)
 ```
@@ -782,6 +791,10 @@ Wymagania:
    punktem odniesienia dla księgowania jest NBP (tabela A, kurs średni) — ale NBP
    **nie publikuje kursów intraday ani weekendowych**, więc do MTM potrzebne jest
    drugie źródło. Zweryfikuj dostępność obu i opisz w `docs/FX_POLICY.md`.
+   Weryfikacja empiryczna Phase 09: odpowiedź NBP Table A używana przez projekt
+   nie dostarcza wiarygodnego intraday publication timestamp. Dla tego źródła
+   `fx_timestamp = null` jest dopuszczalne wyłącznie z zapisanymi `fx_table`
+   i `fx_effective_date`. Nie syntetyzuj intraday timestamp z samej daty.
 2. `max_fx_age` konfigurowalny, osobny dla dni roboczych i weekendu.
 3. Kurs USDT→PLN: zdecyduj jawnie, czy idziesz ścieżką `USDT→USD→PLN` z realnym
    kursem USDT/USD (depeg bywa realny), czy przyjmujesz `USDT ≈ USD` jako
