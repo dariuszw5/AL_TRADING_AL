@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 from datetime import datetime, timezone
 from types import (
@@ -6,7 +6,19 @@ from types import (
     SimpleNamespace,
 )
 
+from src.accounting.feature_flags import (
+    PlnAccountingFeatureFlags,
+)
+from src.config_fingerprint import (
+    asset_registry_hash,
+    build_phase09_feature_flags,
+    global_config_hash,
+)
 from src.core.clock import FixedClock
+from src.execution.feature_flags import (
+    RealisticV2FeatureFlags,
+)
+from src.fx.feature_flags import FxFeatureFlags
 from src.data.assets import get_asset
 from src.data.market_data import (
     DataQuality,
@@ -205,6 +217,47 @@ def run_benchmark():
         trading_fee_rate=0.0004,
     )
 
+    execution_flags = RealisticV2FeatureFlags(
+        enabled=True,
+        execution_enabled=True,
+        paper_mode=PaperMode.REALISTIC_PAPER,
+    )
+    fx_flags = FxFeatureFlags(enabled=False)
+    pln_flags = PlnAccountingFeatureFlags(
+        enabled=False
+    )
+
+    phase09_flags = build_phase09_feature_flags(
+        realistic_v2_enabled=(
+            execution_flags.enabled
+        ),
+        realistic_v2_execution_enabled=(
+            execution_flags.execution_enabled
+        ),
+        fx_enabled=fx_flags.enabled,
+        pln_accounting_enabled=(
+            pln_flags.enabled
+        ),
+    )
+
+    execution_config_hash = (
+        broker.config_hash_for(
+            execution_flags.paper_mode
+        )
+    )
+
+    benchmark_global_config_hash = (
+        global_config_hash(
+            execution_config_hash=(
+                execution_config_hash
+            ),
+            paper_mode=(
+                execution_flags.paper_mode
+            ),
+            feature_flags=phase09_flags,
+        )
+    )
+
     runtime = RealisticPaperRuntime(
         market_data_service=(
             FixtureMarketData()
@@ -269,6 +322,23 @@ def run_benchmark():
             "DETERMINISTIC_EXECUTION_FIXTURE_"
             "NOT_MARKET_PERFORMANCE"
         ),
+        "benchmark_metadata": {
+            "metadata_schema": "phase09-a11-v1",
+            "execution_profile": "REALISTIC_V2",
+            "paper_mode": (
+                execution_flags.paper_mode.value
+            ),
+            "feature_flags": phase09_flags,
+            "asset_registry_hash": (
+                asset_registry_hash()
+            ),
+            "execution_config_hash": (
+                execution_config_hash
+            ),
+            "global_config_hash": (
+                benchmark_global_config_hash
+            ),
+        },
         "entry_reference_price": (
             entry_execution.reference_price
         ),
@@ -351,6 +421,31 @@ def main():
 
     print(
         "FEE_RATE: 0.0004"
+    )
+
+    print(
+        "EXECUTION_CONFIG_HASH:",
+        result["benchmark_metadata"][
+            "execution_config_hash"
+        ],
+    )
+    print(
+        "GLOBAL_CONFIG_HASH:",
+        result["benchmark_metadata"][
+            "global_config_hash"
+        ],
+    )
+    print(
+        "ASSET_REGISTRY_HASH:",
+        result["benchmark_metadata"][
+            "asset_registry_hash"
+        ],
+    )
+    print(
+        "FEATURE_FLAGS:",
+        result["benchmark_metadata"][
+            "feature_flags"
+        ],
     )
 
     print()
