@@ -230,3 +230,82 @@ The five crypto assets gained verified REALTIME_BOOK / REAL_BOOK execution evide
 Yahoo-backed instruments remain NOT_READY for REALISTIC_V2 execution because the current provider path does not provide execution-quality bid/ask evidence sufficient to move them out of UNTRADEABLE.
 
 The deterministic REALISTIC_V2 benchmark is an execution fixture only. It must not be described as market-performance evidence.
+
+## Phase 09 - PLN / FX / Accounting closure - 2026-09-17
+
+This section is the current readiness state after Phase 09 and supersedes
+older per-asset rows for current-state reporting.
+
+Phase 09 verified and implemented, behind explicit feature flags:
+
+- deterministic FX conversion contracts,
+- NBP / Yahoo / Coinbase FX provider adapters,
+- exact FX freshness boundaries,
+- immutable realized FX booking evidence,
+- Decimal-based realized PLN accounting,
+- Decimal-based unrealized PLN MTM,
+- instrument accounting contracts,
+- PLN portfolio snapshot aggregation,
+- global configuration fingerprint metadata,
+- runtime Phase 09 feature-flag resolution,
+- a fail-closed accounting bridge,
+- additive REALISTIC_V2 accounting integration.
+
+The production REALISTIC_V2 entrypoint remains PRE-FLIGHT ONLY.
+Phase 09 does not enable a new production paper-execution path.
+
+The additive accounting runtime requires injected production FX,
+exit-fee and cash resolvers. Those production construction paths are
+not yet wired into the public REALISTIC_V2 entrypoint.
+
+Therefore FX_QUALITY is not promoted in the current production-readiness
+table even though the underlying FX/accounting components are verified.
+A verified component that is not yet wired into the production runtime
+must not be reported as an available production FX path.
+
+### PAPER_READINESS per asset after Phase 09
+
+| Asset | DATA_QUALITY | EXECUTION_QUALITY | FX_QUALITY | SESSION_QUALITY | INSTRUMENT_CLARITY | PAPER_READINESS |
+|---|---|---|---|---|---|---|
+| BTCUSDT | REALTIME_BOOK | REAL_BOOK | UNAVAILABLE | EXCHANGE_CALENDAR | CONFIRMED | NOT_READY |
+| ETHUSDT | REALTIME_BOOK | REAL_BOOK | UNAVAILABLE | EXCHANGE_CALENDAR | CONFIRMED | NOT_READY |
+| SOLUSDT | REALTIME_BOOK | REAL_BOOK | UNAVAILABLE | EXCHANGE_CALENDAR | CONFIRMED | NOT_READY |
+| BNBUSDT | REALTIME_BOOK | REAL_BOOK | UNAVAILABLE | EXCHANGE_CALENDAR | CONFIRMED | NOT_READY |
+| XRPUSDT | REALTIME_BOOK | REAL_BOOK | UNAVAILABLE | EXCHANGE_CALENDAR | CONFIRMED | NOT_READY |
+| GOLD_FUT_CONT | UNRELIABLE | UNTRADEABLE | UNAVAILABLE | APPROXIMATED | PROXY | NOT_READY |
+| WTI_FUT_CONT | UNRELIABLE | UNTRADEABLE | UNAVAILABLE | APPROXIMATED | PROXY | NOT_READY |
+| EURUSD | UNRELIABLE | UNTRADEABLE | UNAVAILABLE | APPROXIMATED | CONFIRMED | NOT_READY |
+| AAPL | UNRELIABLE | UNTRADEABLE | UNAVAILABLE | EXCHANGE_CALENDAR | CONFIRMED | NOT_READY |
+
+### Phase 09 readiness rationale
+
+Crypto assets retain REALTIME_BOOK / REAL_BOOK evidence from Phase 08,
+but no production entrypoint currently constructs the verified Phase 09
+FX/accounting runtime with production FX resolvers. Reporting them as
+FX LIVE, DAILY_REFERENCE or STALE_PRONE at the production-readiness level
+would therefore overstate the current system.
+
+Yahoo-backed instruments remain UNTRADEABLE in REALISTIC_V2 because the
+current market-data path still lacks execution-quality bid/ask evidence.
+Phase 09 does not change that execution classification.
+
+GOLD_FUT_CONT and WTI_FUT_CONT also remain blocked by the accounting
+contract because the runtime multiplier is unresolved. Reference contract
+multipliers are not activated by Phase 09.
+
+Known Phase 09 accounting limitations:
+
+- accounting persistence is not implemented,
+- full entry Execution evidence is cached only in memory by the additive
+  accounting wrapper,
+- after restart, realized accounting fails closed when the original full
+  entry Execution is unavailable,
+- production FX / exit-fee / cash resolver construction is not yet wired
+  into the public REALISTIC_V2 entrypoint,
+- FX conversion cost remains a documented limitation,
+- Yahoo remains UNOFFICIAL / DEGRADED_BY_DESIGN,
+- no SQLite migration is started,
+- no existing live_state data is modified.
+
+Phase 09 therefore closes with conservative overall PAPER_READINESS:
+NOT_READY for all nine assets.
