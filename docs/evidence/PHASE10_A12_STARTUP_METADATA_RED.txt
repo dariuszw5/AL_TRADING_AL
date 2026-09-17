@@ -1,0 +1,16 @@
+
+=================================== ERRORS ====================================
+________ ERROR collecting tests/test_phase10_startup_metadata_store.py ________
+ImportError while importing test module 'C:\Users\ddare\Desktop\Al_Trading_Al\tests\test_phase10_startup_metadata_store.py'.
+Hint: make sure your test modules/packages have valid Python names.
+Traceback:
+..\..\AppData\Local\Python\pythoncore-3.14-64\Lib\importlib\__init__.py:88: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests\test_phase10_startup_metadata_store.py:10: in <module>
+    from src.accounting.startup_metadata_store import (
+E   ModuleNotFoundError: No module named 'src.accounting.startup_metadata_store'
+=========================== short test summary info ===========================
+ERROR tests/test_phase10_startup_metadata_store.py
+!!!!!!!!!!!!!!!!!!! Interrupted: 1 error during collection !!!!!!!!!!!!!!!!!!!!
+1 error in 0.11s
