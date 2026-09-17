@@ -1,0 +1,16 @@
+
+=================================== ERRORS ====================================
+________ ERROR collecting tests/test_fx_production_freshness_policy.py ________
+ImportError while importing test module 'C:\Users\ddare\Desktop\Al_Trading_Al\tests\test_fx_production_freshness_policy.py'.
+Hint: make sure your test modules/packages have valid Python names.
+Traceback:
+..\..\AppData\Local\Python\pythoncore-3.14-64\Lib\importlib\__init__.py:88: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests\test_fx_production_freshness_policy.py:4: in <module>
+    from src.fx.freshness import (
+E   ImportError: cannot import name 'PRODUCTION_WEEKDAY_MAX_FX_AGE_SECONDS' from 'src.fx.freshness' (C:\Users\ddare\Desktop\Al_Trading_Al\src\fx\freshness.py)
+=========================== short test summary info ===========================
+ERROR tests/test_fx_production_freshness_policy.py
+!!!!!!!!!!!!!!!!!!! Interrupted: 1 error during collection !!!!!!!!!!!!!!!!!!!!
+1 error in 0.11s

@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import timezone
@@ -11,6 +11,32 @@ from .models import (
 
 UNAVAILABLE_AFTER_SECONDS = (
     96.0
+    * 60.0
+    * 60.0
+)
+
+
+# Phase 09 A.12 accepted production defaults.
+#
+# The 2026-09-17 empirical Yahoo PLN FX probe showed:
+# - median update cadence: 1 hour,
+# - observed weekend market-data gap: 49 hours.
+#
+# A two-hour freshness threshold allows one missed hourly update
+# without pretending an old Friday FX quote remains fresh through
+# the weekend. Weekend continuity is provided by FX_STALE up to the
+# existing 96-hour hard-unavailable boundary.
+#
+# Weekday and weekend values remain separate configuration fields
+# even though the accepted defaults are currently equal.
+PRODUCTION_WEEKDAY_MAX_FX_AGE_SECONDS = (
+    2.0
+    * 60.0
+    * 60.0
+)
+
+PRODUCTION_WEEKEND_MAX_FX_AGE_SECONDS = (
+    2.0
     * 60.0
     * 60.0
 )
@@ -214,3 +240,20 @@ class FxFreshnessPolicy:
             age_seconds=age,
             max_age_seconds=threshold,
         )
+
+def production_fx_freshness_policy():
+    """
+    Return the Phase 09 accepted production freshness policy.
+
+    Runtime integration must include the resolved threshold values
+    in reproducibility metadata/config fingerprint.
+    """
+
+    return FxFreshnessPolicy(
+        weekday_max_age_seconds=(
+            PRODUCTION_WEEKDAY_MAX_FX_AGE_SECONDS
+        ),
+        weekend_max_age_seconds=(
+            PRODUCTION_WEEKEND_MAX_FX_AGE_SECONDS
+        ),
+    )

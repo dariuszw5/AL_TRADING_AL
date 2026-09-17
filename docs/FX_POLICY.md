@@ -71,7 +71,7 @@ a newer rate.
 
 Candidate source:
 Yahoo chart source for:
-- USDPLN=X
+- PLN=X (canonical project symbol for USD/PLN)
 - EURPLN=X
 
 Status:
@@ -185,7 +185,7 @@ NBP Table A:
 - role: reference accounting
 - FX_QUALITY: DAILY_REFERENCE
 
-Yahoo USDPLN=X / EURPLN=X:
+Yahoo PLN=X / EURPLN=X:
 - role: MTM research candidate
 - API: UNOFFICIAL / DEGRADED_BY_DESIGN
 - FX_QUALITY ceiling: STALE_PRONE
@@ -394,3 +394,55 @@ A.6 does not:
 - migrate JSON state,
 - introduce SQLite,
 - add a dependency.
+
+## Phase 09 A.12 accepted production freshness policy
+
+The read-only empirical probe on 2026-09-17 observed:
+
+- Yahoo `PLN=X`: current quote available,
+- Yahoo `USDPLN=X`: same observed USD/PLN value as `PLN=X`,
+- Yahoo `EURPLN=X`: current quote available,
+- median observed Yahoo chart cadence: 1 hour,
+- observed weekend Yahoo gap: 49 hours,
+- `exchangeDataDelayedBy`: unavailable/None,
+- Coinbase USDT-USD bid/ask available,
+- NBP Table A USD/PLN and EUR/PLN available.
+
+Project canonical Yahoo symbol for USD/PLN is:
+
+`PLN=X`
+
+`USDPLN=X` was empirically observed to resolve to the same USD/PLN
+value on 2026-09-17, but it is not the canonical project symbol.
+
+Accepted production freshness defaults:
+
+- weekday `max_fx_age`: 2 hours,
+- weekend `max_fx_age`: 2 hours,
+- hard unavailable boundary: strictly greater than 96 hours.
+
+The measured normal Yahoo cadence is one hour. A two-hour threshold
+allows one missed hourly update while still detecting a genuinely stale
+feed quickly.
+
+The weekend policy does not make a Friday quote fresh for the whole
+weekend. Once the quote reaches two hours of age it becomes `FX_STALE`;
+indicative PLN MTM may remain visible with stale label and age until the
+existing 96-hour hard-unavailable boundary.
+
+Weekday and weekend thresholds remain separately configurable even
+though their accepted defaults are currently equal.
+
+### Future timestamps
+
+The strict rule remains unchanged:
+
+- any `provider_timestamp > now` is `FX_UNAVAILABLE`,
+- reason: `FUTURE_FX_TIMESTAMP`.
+
+The A.12 probe printed Coinbase provider clock age around `-1.4s`, but
+the probe captured its `NOW` value before the sequential network
+requests. That observation therefore does not prove provider clock skew
+and is not evidence for adding a future-timestamp tolerance.
+
+No clock-skew grace is introduced in A.12.
