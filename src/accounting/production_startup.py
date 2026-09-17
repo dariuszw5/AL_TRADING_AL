@@ -10,6 +10,10 @@ from types import MappingProxyType
 from src.accounting.production_fx_scheduler import (
     ParallelProductionFxResolver,
 )
+from src.accounting.journal_entry_recovery import (
+    JournalBackedPhase09AccountingRuntime,
+    JournalEntryExecutionResolver,
+)
 from src.accounting.production_resolvers import (
     BrokerExitFeeEstimator,
     Phase10ProductionAccountingRuntime,
@@ -711,9 +715,23 @@ def wire_phase10_production_runtime(
         snapshot_capture
     )
 
+    execution_journal = getattr(
+        broker,
+        "execution_journal",
+        None,
+    )
+
+    entry_execution_resolver = (
+        None
+        if execution_journal is None
+        else JournalEntryExecutionResolver(
+            execution_journal
+        )
+    )
+
     try:
         accounting_runtime = (
-            Phase09AccountingRuntime(
+            JournalBackedPhase09AccountingRuntime(
                 runtime=runtime,
                 accounting_bridge=(
                     accounting_bridge
@@ -733,6 +751,9 @@ def wire_phase10_production_runtime(
                 ),
                 cash_pln_resolver=(
                     cash_pln_resolver
+                ),
+                entry_execution_resolver=(
+                    entry_execution_resolver
                 ),
             )
         )
