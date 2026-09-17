@@ -1,10 +1,13 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import argparse
 
 from src.data.assets import get_asset
 from src.execution.feature_flags import (
     RealisticV2FeatureFlags,
+)
+from src.runtime_feature_flags import (
+    resolve_phase09_runtime_flags,
 )
 from src.execution.live_preflight import (
     build_live_preflight,
@@ -146,9 +149,28 @@ def main(argv=None):
 
         return 4
 
+    runtime_flags = resolve_phase09_runtime_flags(
+        execution_flags=flags,
+    )
+
     print(
         "Paper mode:",
         flags.paper_mode.value,
+    )
+
+    print(
+        "FX enabled:",
+        runtime_flags.fx.enabled,
+    )
+
+    print(
+        "PLN accounting enabled:",
+        runtime_flags.pln_accounting.enabled,
+    )
+
+    print(
+        "Phase 09 feature flags:",
+        dict(runtime_flags.fingerprint_flags()),
     )
 
     print(
