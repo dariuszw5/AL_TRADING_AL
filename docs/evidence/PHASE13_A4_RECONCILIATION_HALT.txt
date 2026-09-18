@@ -1,0 +1,102 @@
+﻿PHASE 13 A.4 - SQLITE RECONCILIATION + PERSISTENT HALT
+============================================================
+
+UTC:
+2026-09-18T16:29:06.9418710Z
+
+BASE HEAD:
+425ede0
+
+BRANCH:
+phase-13-sqlite-ledger-preflight
+
+CONTROLLED RED:
+CONFIRMED
+
+LIVE SQLITE DATABASE CREATED:
+NO
+
+LIVE DATA MIGRATED:
+NO
+
+RUNTIME SQLITE WIRING:
+NO
+
+PHASE 13 A.4 TESTS:
+------------------------------------------------------------
+.......                                                                  [100%]
+7 passed in 0.27s
+
+SQLITE REPOSITORY REGRESSION:
+------------------------------------------------------------
+....................                                                     [100%]
+20 passed in 0.51s
+
+TARGETED PERSISTENCE REGRESSION:
+------------------------------------------------------------
+........................................................................ [ 42%]
+........................................................................ [ 85%]
+........................                                                 [100%]
+168 passed in 1.22s
+
+FULL OFFLINE REGRESSION:
+------------------------------------------------------------
+........................................................................ [  7%]
+........................................................................ [ 15%]
+........................................................................ [ 22%]
+........................................................................ [ 30%]
+........................................................................ [ 37%]
+........................................................................ [ 45%]
+........................................................................ [ 53%]
+........................................................................ [ 60%]
+........................................................................ [ 68%]
+........................................................................ [ 75%]
+........................................................................ [ 83%]
+........................................................................ [ 90%]
+........................................................................ [ 98%]
+..............                                                           [100%]
+950 passed in 77.33s (0:01:17)
+
+BTC LEGACY_V1 GOLDEN:
+------------------------------------------------------------
+=== BACKTEST BENCHMARK ===
+Symbol:           BTCUSDT
+Interval:         1m
+îwiece:           5000
+Kapita│ pocz╣tk.: 1000.0
+Kapita│ ko˝cowy:  1014.8392976799995
+Transakcje:       13
+Wygrane:          7
+Przegrane:        6
+Win rate:         53.84615384615385
+Total profit:     14.839297679999504
+Max drawdown:     18.485012400000187
+Profit factor:    1.692128777090018
+Average win:      5.182768514285695
+Average loss:     3.573346986666712
+Largest win:     13.000798400000047
+Largest loss:     9.580003080000042
+Expectancy:       1.1414844369230388
+
+CONTRACTS VERIFIED:
+------------------------------------------------------------
+- realized trade PnL equals linked REALIZED_PNL ledger
+- aggregate realized PnL equality
+- unlinked realized ledger rows rejected
+- exact Decimal reconciliation
+- mismatch raises RECONCILIATION_MISMATCH
+- mismatch persists HALT
+- HALT survives reopen
+- HALT writes system audit event
+- HALT clear requires explicit reason
+- HALT clear writes audit event
+- read-only connection observes persistent HALT
+- no live database
+- no migration
+- no runtime wiring
+
+CONCLUSION:
+PHASE 13 A.4 PASS
+
+REAL LIVE MIGRATION:
+NOT AUTHORIZED

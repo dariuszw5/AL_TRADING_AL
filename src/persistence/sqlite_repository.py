@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import hashlib
 import json
@@ -1022,6 +1022,496 @@ class SQLiteLedgerRepository:
             )
 
         return result
+
+
+    def save_position_idempotent(
+        self,
+        payload,
+    ):
+        self._require_transaction()
+
+        normalized = self._normalize_payload(
+            "positions",
+            payload,
+        )
+
+        position_id = normalized[
+            "position_id"
+        ]
+
+        existing = self.connection.execute(
+            """
+            SELECT *
+            FROM positions
+            WHERE position_id = ?
+            """,
+            (
+                position_id,
+            ),
+        ).fetchone()
+
+        if existing is not None:
+            if self._rows_match(
+                existing,
+                normalized,
+            ):
+                return (
+                    dict(existing),
+                    False,
+                )
+
+            raise IdempotencyConflictError(
+                "position_id "
+                "idempotency conflict"
+            )
+
+        try:
+            self._insert(
+                "positions",
+                normalized,
+            )
+        except sqlite3.IntegrityError as exc:
+            raise IdempotencyConflictError(
+                "position persistence conflict"
+            ) from exc
+
+        row = self.connection.execute(
+            """
+            SELECT *
+            FROM positions
+            WHERE position_id = ?
+            """,
+            (
+                position_id,
+            ),
+        ).fetchone()
+
+        return (
+            dict(row),
+            True,
+        )
+
+    def append_trade_idempotent(
+        self,
+        payload,
+    ):
+        self._require_transaction()
+
+        normalized = self._normalize_payload(
+            "trades",
+            payload,
+        )
+
+        trade_id = normalized[
+            "trade_id"
+        ]
+
+        existing = self.connection.execute(
+            """
+            SELECT *
+            FROM trades
+            WHERE trade_id = ?
+            """,
+            (
+                trade_id,
+            ),
+        ).fetchone()
+
+        if existing is not None:
+            if self._rows_match(
+                existing,
+                normalized,
+            ):
+                return (
+                    dict(existing),
+                    False,
+                )
+
+            raise IdempotencyConflictError(
+                "trade_id "
+                "idempotency conflict"
+            )
+
+        try:
+            self._insert(
+                "trades",
+                normalized,
+            )
+        except sqlite3.IntegrityError as exc:
+            raise IdempotencyConflictError(
+                "trade persistence conflict"
+            ) from exc
+
+        row = self.connection.execute(
+            """
+            SELECT *
+            FROM trades
+            WHERE trade_id = ?
+            """,
+            (
+                trade_id,
+            ),
+        ).fetchone()
+
+        return (
+            dict(row),
+            True,
+        )
+
+    def append_system_event_idempotent(
+        self,
+        payload,
+    ):
+        self._require_transaction()
+
+        normalized = self._normalize_payload(
+            "system_events",
+            payload,
+        )
+
+        event_id = normalized[
+            "event_id"
+        ]
+
+        existing = self.connection.execute(
+            """
+            SELECT *
+            FROM system_events
+            WHERE event_id = ?
+            """,
+            (
+                event_id,
+            ),
+        ).fetchone()
+
+        if existing is not None:
+            if self._rows_match(
+                existing,
+                normalized,
+            ):
+                return (
+                    dict(existing),
+                    False,
+                )
+
+            raise IdempotencyConflictError(
+                "event_id "
+                "idempotency conflict"
+            )
+
+        self._insert(
+            "system_events",
+            normalized,
+        )
+
+        row = self.connection.execute(
+            """
+            SELECT *
+            FROM system_events
+            WHERE event_id = ?
+            """,
+            (
+                event_id,
+            ),
+        ).fetchone()
+
+        return (
+            dict(row),
+            True,
+        )
+
+    def set_halt(
+        self,
+        *,
+        reason,
+        updated_at_utc,
+        event_id,
+        event_timestamp_utc,
+        payload_json=None,
+    ):
+        self._require_transaction()
+
+        reason_text = str(
+            reason
+        ).strip()
+
+        if not reason_text:
+            raise ValueError(
+                "HALT reason is required"
+            )
+
+        state = self.read_system_state()
+
+        if state is None:
+            raise ReconciliationMismatchError(
+                "RECONCILIATION_MISMATCH: "
+                "system_state missing"
+            )
+
+        self.connection.execute(
+            """
+            UPDATE system_state
+            SET
+                halted = 1,
+                halt_reason = ?,
+                updated_at_utc = ?
+            WHERE state_id = 1
+            """,
+            (
+                reason_text,
+                str(
+                    updated_at_utc
+                ),
+            ),
+        )
+
+        event_payload = (
+            payload_json
+            if payload_json is not None
+            else {
+                "reason": reason_text,
+            }
+        )
+
+        self.append_system_event_idempotent(
+            {
+                "event_id": str(
+                    event_id
+                ),
+                "event_timestamp_utc": str(
+                    event_timestamp_utc
+                ),
+                "level": "ERROR",
+                "event_type": "SYSTEM_HALT",
+                "asset_id": None,
+                "correlation_id": None,
+                "payload_json": event_payload,
+            }
+        )
+
+        return self.read_system_state()
+
+    def clear_halt_explicitly(
+        self,
+        *,
+        reason,
+        updated_at_utc,
+        event_id,
+        event_timestamp_utc,
+    ):
+        self._require_transaction()
+
+        reason_text = str(
+            reason
+        ).strip()
+
+        if not reason_text:
+            raise ValueError(
+                "Explicit HALT clear reason is required"
+            )
+
+        state = self.read_system_state()
+
+        if state is None:
+            raise SQLiteLedgerRepositoryError(
+                "system_state missing"
+            )
+
+        self.connection.execute(
+            """
+            UPDATE system_state
+            SET
+                halted = 0,
+                halt_reason = NULL,
+                updated_at_utc = ?
+            WHERE state_id = 1
+            """,
+            (
+                str(
+                    updated_at_utc
+                ),
+            ),
+        )
+
+        self.append_system_event_idempotent(
+            {
+                "event_id": str(
+                    event_id
+                ),
+                "event_timestamp_utc": str(
+                    event_timestamp_utc
+                ),
+                "level": "WARN",
+                "event_type": "SYSTEM_HALT_CLEARED",
+                "asset_id": None,
+                "correlation_id": None,
+                "payload_json": {
+                    "reason": reason_text,
+                },
+            }
+        )
+
+        return self.read_system_state()
+
+    def reconcile_realized_pnl(
+        self,
+    ):
+        trades = self.connection.execute(
+            """
+            SELECT
+                trade_id,
+                realized_pnl_pln,
+                realized_transaction_id
+            FROM trades
+            ORDER BY trade_id
+            """
+        ).fetchall()
+
+        ledger_rows = self.connection.execute(
+            """
+            SELECT
+                transaction_id,
+                transaction_type,
+                amount_pln
+            FROM portfolio_transactions
+            WHERE transaction_type = 'REALIZED_PNL'
+            ORDER BY transaction_id
+            """
+        ).fetchall()
+
+        ledger_by_id = {
+            row["transaction_id"]: row
+            for row in ledger_rows
+        }
+
+        trade_total = Decimal(
+            "0"
+        )
+
+        linked_transaction_ids = set()
+
+        for trade in trades:
+            trade_amount = Decimal(
+                trade[
+                    "realized_pnl_pln"
+                ]
+            )
+
+            trade_total += trade_amount
+
+            transaction_id = trade[
+                "realized_transaction_id"
+            ]
+
+            linked_transaction_ids.add(
+                transaction_id
+            )
+
+            transaction = (
+                ledger_by_id.get(
+                    transaction_id
+                )
+            )
+
+            if transaction is None:
+                raise ReconciliationMismatchError(
+                    "RECONCILIATION_MISMATCH: "
+                    "trade has no REALIZED_PNL "
+                    "ledger transaction"
+                )
+
+            ledger_amount = Decimal(
+                transaction[
+                    "amount_pln"
+                ]
+            )
+
+            if ledger_amount != trade_amount:
+                raise ReconciliationMismatchError(
+                    "RECONCILIATION_MISMATCH: "
+                    "trade realized PnL differs "
+                    "from linked ledger amount"
+                )
+
+        ledger_ids = set(
+            ledger_by_id
+        )
+
+        if linked_transaction_ids != ledger_ids:
+            raise ReconciliationMismatchError(
+                "RECONCILIATION_MISMATCH: "
+                "unlinked REALIZED_PNL "
+                "ledger transaction"
+            )
+
+        ledger_total = Decimal(
+            "0"
+        )
+
+        for row in ledger_rows:
+            ledger_total += Decimal(
+                row["amount_pln"]
+            )
+
+        if trade_total != ledger_total:
+            raise ReconciliationMismatchError(
+                "RECONCILIATION_MISMATCH: "
+                "aggregate realized PnL mismatch"
+            )
+
+        return {
+            "trade_realized_pnl_pln": (
+                trade_total
+            ),
+            "ledger_realized_pnl_pln": (
+                ledger_total
+            ),
+            "trade_count": len(
+                trades
+            ),
+            "ledger_transaction_count": len(
+                ledger_rows
+            ),
+            "matches": True,
+        }
+
+    def reconcile_or_halt(
+        self,
+        *,
+        updated_at_utc,
+        event_id,
+        event_timestamp_utc,
+    ):
+        try:
+            cash = self.reconcile_cash()
+            realized = (
+                self.reconcile_realized_pnl()
+            )
+
+        except ReconciliationMismatchError as exc:
+            with self.atomic_cycle():
+                self.set_halt(
+                    reason="RECONCILIATION_MISMATCH",
+                    updated_at_utc=(
+                        updated_at_utc
+                    ),
+                    event_id=event_id,
+                    event_timestamp_utc=(
+                        event_timestamp_utc
+                    ),
+                    payload_json={
+                        "error": str(
+                            exc
+                        ),
+                    },
+                )
+
+            raise
+
+        return {
+            "cash": cash,
+            "realized": realized,
+        }
 
     def count_rows(
         self,
