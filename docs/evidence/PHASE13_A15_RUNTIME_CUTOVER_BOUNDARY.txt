@@ -1,0 +1,143 @@
+﻿PHASE 13 A.15 - RUNTIME SQLITE CUTOVER BOUNDARY
+============================================================
+
+UTC:
+2026-09-18T17:51:02.0278221Z
+
+BASE HEAD:
+ba9bb86
+
+BRANCH:
+phase-13-sqlite-ledger-preflight
+
+SOURCE ORDERING AUDIT:
+------------------------------------------------------------
+SOURCE_ORDERING_AUDIT
+{
+  "broker_journal_commit": [
+    531
+  ],
+  "broker_journal_prepare": [
+    601
+  ],
+  "broker_sqlite_reference": [],
+  "broker_submit_order_definition": [
+    540
+  ],
+  "runtime_broker_submit_order": [
+    601
+  ],
+  "runtime_commit_journal_result": [
+    629
+  ],
+  "runtime_execution_journal_reference": [
+    173,
+    180,
+    200,
+    624
+  ],
+  "runtime_sqlite_reference": [],
+  "runtime_state_save_positions": [
+    617
+  ]
+}
+
+CURRENT_RUNTIME_ORDER
+BROKER_SUBMIT_LINE=601
+STATE_SAVE_LINE=617
+JOURNAL_COMMIT_LINE=629
+
+CURRENT_ORDER=BROKER_EXECUTION -> STATE_STORE_SAVE -> EXECUTION_JOURNAL_COMMIT
+TARGET_SQLITE_ORDER=ONE_ATOMIC_SQLITE_CYCLE_FOR_ORDER_EXECUTION_POSITION_FINANCIAL_TIMESTAMP
+ORDERING_COMPATIBLE_WITH_TARGET=NO
+EXECUTION_SEMANTICS_CHANGE_REQUIRED=YES
+RUNTIME_SOURCE_MODIFIED=NO
+BROKER_SOURCE_MODIFIED=NO
+LIVE_DATABASE_MODIFIED=NO
+HALT_CLEARED=NO
+TRADING_ACTIVATED=NO
+AUDIT_RESULT=PASS
+
+
+SQLITE PHASE 13 REGRESSION:
+------------------------------------------------------------
+........................................................................ [ 91%]
+.......                                                                  [100%]
+79 passed in 2.34s
+
+FULL OFFLINE REGRESSION:
+------------------------------------------------------------
+........................................................................ [  7%]
+........................................................................ [ 14%]
+........................................................................ [ 21%]
+........................................................................ [ 28%]
+........................................................................ [ 35%]
+........................................................................ [ 42%]
+........................................................................ [ 49%]
+........................................................................ [ 57%]
+........................................................................ [ 64%]
+........................................................................ [ 71%]
+........................................................................ [ 78%]
+........................................................................ [ 85%]
+........................................................................ [ 92%]
+........................................................................ [ 99%]
+.                                                                        [100%]
+1009 passed in 73.60s (0:01:13)
+
+BTC LEGACY_V1 GOLDEN:
+------------------------------------------------------------
+=== BACKTEST BENCHMARK ===
+Symbol:           BTCUSDT
+Interval:         1m
+îwiece:           5000
+Kapita│ pocz╣tk.: 1000.0
+Kapita│ ko˝cowy:  1014.8392976799995
+Transakcje:       13
+Wygrane:          7
+Przegrane:        6
+Win rate:         53.84615384615385
+Total profit:     14.839297679999504
+Max drawdown:     18.485012400000187
+Profit factor:    1.692128777090018
+Average win:      5.182768514285695
+Average loss:     3.573346986666712
+Largest win:     13.000798400000047
+Largest loss:     9.580003080000042
+Expectancy:       1.1414844369230388
+
+LIVE DATABASE SHA256 BEFORE:
+F51C2DB77B6346372340AC772DD58099CF4E842144A7F196567A2E0D4591212D
+
+LIVE DATABASE SHA256 AFTER:
+F51C2DB77B6346372340AC772DD58099CF4E842144A7F196567A2E0D4591212D
+
+LIVE DATABASE MODIFIED:
+NO
+
+A.9 BACKUP SHA256 BEFORE:
+ACBDA104422BFB48C2235CE9BEC38278D69AE3EE2536A3D90A62F5F9EA7BA5A4
+
+A.9 BACKUP SHA256 AFTER:
+ACBDA104422BFB48C2235CE9BEC38278D69AE3EE2536A3D90A62F5F9EA7BA5A4
+
+A.9 BACKUP MODIFIED:
+NO
+
+CONCLUSION:
+- current runtime order is incompatible with one atomic SQLite cycle
+- simple state-store adapter is insufficient
+- simple execution-journal adapter is insufficient
+- dual authoritative persistence is forbidden
+- runtime execution/persistence ordering change is required
+- runtime source modified: NO
+- broker source modified: NO
+- live DB modified: NO
+- HALT cleared: NO
+- trading activated: NO
+
+HARD STOP:
+REQUIRED BEFORE RUNTIME EXECUTION SEMANTICS CHANGE
+
+NEXT AFTER EXPLICIT AUTHORIZATION:
+A.16 OPTIONAL INJECTED SQLITE RUNTIME MODE
+TEMP/TEST DATABASE PATHS ONLY
