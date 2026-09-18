@@ -1,0 +1,60 @@
+PHASE 10 A.16 LIVE REALIZED PERSISTENCE SMOKE — VERIFIED SUMMARY
+
+HEAD BEFORE/AFTER:
+e7522f5
+
+OFFLINE A.15 CONTRACT CHECK:
+32 passed
+
+PROCESS 1 — OPEN:
+Execution runtime status: FILLED
+Execution ID: exec-ord-rv2-BTCUSDT-020cb08ae2ce289cde8817af
+Accounting error: None
+MTM available: True
+Realized available: False
+REALIZED ACCOUNTING PERSISTED: NOT_APPLICABLE
+REALIZED ACCOUNTING RECORD COUNT: 0
+Persisted positions: ['BTCUSDT']
+Journal unresolved: []
+Wall seconds: 4.1651842
+
+PROCESS 2 — RESTART CLOSE:
+Execution runtime status: FILLED
+Execution ID: exec-ord-rv2-BTCUSDT-2d30ce9a40dd342d707dd258
+Accounting error: None
+MTM available: False
+Realized available: True
+REALIZED ACCOUNTING PERSISTED: YES
+REALIZED ACCOUNTING INTEGRITY: VERIFIED
+REALIZED ACCOUNTING RECORD COUNT: 1
+Persisted positions: []
+Journal unresolved: []
+Wall seconds: 4.2139755
+
+PERSISTED REALIZED RECORD:
+Position ID: pos-ord-rv2-BTCUSDT-020cb08ae2ce289cde8817af
+Entry execution ID: exec-ord-rv2-BTCUSDT-020cb08ae2ce289cde8817af
+Exit execution ID: exec-ord-rv2-BTCUSDT-2d30ce9a40dd342d707dd258
+Native PnL: -0.0076996554954000013
+FX rate: 3.7963231829999997
+FX path: USDT -> USD -> PLN
+PLN PnL: -0.02923038065830037248352348928
+Execution config hash:
+a8c84046f4919a1c39bcaef86e926a287240b14359b9b60b7f626252f7c5e781
+Global config hash:
+017d9e3ef4fba21bc17102519cf6b4994dd50ae3f53a4f05b178b5913fd9127d
+Booking key:
+3d34eda280e2f64bb5d2ba4b54af232922de4a8e3bb9e67b82a3074a91c40cbc
+Record hash:
+79f9d9aa808759746129f76e709482a322dd891ba7600dc1740a724440356317
+
+FINAL:
+Startup metadata record count: 2
+Realized accounting record count: 1
+Final persisted positions: 0
+Final unresolved journal records: 0
+Real exchange orders sent: 0
+Temporary A.16 state removed
+Repository HEAD unchanged during smoke
+Index clean
+User tests/test_agent_config.py untouched

@@ -309,3 +309,26 @@ Known Phase 09 accounting limitations:
 
 Phase 09 therefore closes with conservative overall PAPER_READINESS:
 NOT_READY for all nine assets.
+<!-- PHASE10_CLOSURE_START -->
+## Phase 10 closure — persisted REALISTIC_V2 accounting
+
+Phase 10 verified a controlled BTCUSDT REALISTIC_V2 accounting path with
+bounded FX prefetch, startup metadata persistence, restart recovery of exact
+entry Execution evidence, and realized PLN persistence.
+
+No formal `PAPER_READINESS` upgrade is claimed.
+
+| Asset | Phase 10 readiness | Note |
+| --- | --- | --- |
+| BTCUSDT | NOT_READY | Controlled persisted accounting verified; normal production orchestration/cash ledger unresolved |
+| ETHUSDT | NOT_READY | Persisted Phase 10 live restart accounting not verified |
+| SOLUSDT | NOT_READY | Persisted Phase 10 live restart accounting not verified |
+| BNBUSDT | NOT_READY | Persisted Phase 10 live restart accounting not verified |
+| XRPUSDT | NOT_READY | Persisted Phase 10 live restart accounting not verified |
+| EURUSD | NOT_READY | Persisted Phase 10 live restart accounting not verified |
+| AAPL | NOT_READY | Persisted Phase 10 live restart accounting not verified |
+| GOLD_FUT_CONT | NOT_READY | Accounting remains blocked; rollover/multiplier unresolved |
+| WTI_FUT_CONT | NOT_READY | Accounting remains blocked; rollover/multiplier unresolved |
+
+See `docs/PHASE10_REPORT.md`.
+<!-- PHASE10_CLOSURE_END -->

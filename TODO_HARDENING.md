@@ -31,3 +31,23 @@
   DEGRADED_BY_DESIGN until an approved official source replaces it.
 - [ ] Re-run PAPER_READINESS only after production wiring is verified;
   component-level tests alone must not promote runtime readiness.
+<!-- PHASE10_CLOSURE_START -->
+## After Phase 10 closure
+
+- [ ] Define and approve cash / balance ledger semantics.
+- [ ] Decide whether unrealized MTM snapshots require persistence.
+- [ ] Decide whether realized-accounting JSONL needs multi-process locking or a
+      strict single-writer contract.
+- [ ] Refine the generic `ACCOUNTING_PERSISTENCE_NOT_IMPLEMENTED` limitation
+      taxonomy without weakening protected contracts.
+- [ ] Formally approve permanent production FX/runtime policy values.
+- [ ] Measure persisted accounting timing for the all-asset set before
+      enabling an all-asset persisted runner.
+- [ ] Keep Yahoo FX unofficial / degraded by design.
+- [ ] Keep FX conversion-cost modelling as explicit debt.
+- [ ] Keep GOLD_FUT_CONT and WTI_FUT_CONT blocked until multiplier/rollover
+      semantics receive a separate HARD STOP.
+- [ ] Do not start SQLite migration without its dedicated HARD STOP.
+- [ ] Do not silently replace the existing public/preflight entrypoint with
+      the controlled Phase 10 smoke entrypoint.
+<!-- PHASE10_CLOSURE_END -->
