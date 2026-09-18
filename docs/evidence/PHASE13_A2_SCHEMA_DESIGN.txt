@@ -1,0 +1,112 @@
+﻿PHASE 13 A.2 - SQLITE SCHEMA + REPOSITORY CONTRACT DESIGN
+============================================================
+
+UTC:
+2026-09-18T16:11:07.5122557Z
+
+BASE HEAD:
+530a66f
+
+BRANCH:
+phase-13-sqlite-ledger-preflight
+
+SCHEMA:
+docs/sql/phase13_trading_schema_v1.sql
+
+SCHEMA SHA256:
+BF91CC8798F804EA5959D1F4FB5A7FEF250E38C8E0C91A64912F5E6F744AB7E7
+
+PERSISTENT SQLITE DATABASE CREATED:
+NO
+
+LIVE DATA MIGRATED:
+NO
+
+EXISTING PERSISTENCE FORMAT CHANGED:
+NO
+
+NEW DEPENDENCY:
+NO
+
+RUNTIME EXECUTION SEMANTICS CHANGED:
+NO
+
+SCHEMA VALIDATION:
+------------------------------------------------------------
+SCHEMA TABLE COUNT: 11
+SCHEMA REQUIRED TABLES: PASS
+SCHEMA IDEMPOTENT DDL: PASS
+CLIENT_ORDER_ID UNIQUE: PASS
+FOREIGN KEY CONTRACT: PASS
+SYSTEM_STATE CONTRACT: PASS
+PERSISTENT DB CREATED: NO
+
+TARGETED PERSISTENCE REGRESSION:
+------------------------------------------------------------
+........................................................................ [ 48%]
+........................................................................ [ 97%]
+....                                                                     [100%]
+148 passed in 0.84s
+
+FULL OFFLINE REGRESSION:
+------------------------------------------------------------
+........................................................................ [  7%]
+........................................................................ [ 15%]
+........................................................................ [ 23%]
+........................................................................ [ 30%]
+........................................................................ [ 38%]
+........................................................................ [ 46%]
+........................................................................ [ 54%]
+........................................................................ [ 61%]
+........................................................................ [ 69%]
+........................................................................ [ 77%]
+........................................................................ [ 85%]
+........................................................................ [ 92%]
+..................................................................       [100%]
+930 passed in 73.58s (0:01:13)
+
+BTC LEGACY_V1 GOLDEN:
+------------------------------------------------------------
+=== BACKTEST BENCHMARK ===
+Symbol:           BTCUSDT
+Interval:         1m
+îwiece:           5000
+Kapita│ pocz╣tk.: 1000.0
+Kapita│ ko˝cowy:  1014.8392976799995
+Transakcje:       13
+Wygrane:          7
+Przegrane:        6
+Win rate:         53.84615384615385
+Total profit:     14.839297679999504
+Max drawdown:     18.485012400000187
+Profit factor:    1.692128777090018
+Average win:      5.182768514285695
+Average loss:     3.573346986666712
+Largest win:     13.000798400000047
+Largest loss:     9.580003080000042
+Expectancy:       1.1414844369230388
+
+DESIGN DECISIONS:
+------------------------------------------------------------
+- single paper-live writer
+- API read-only
+- WAL connection policy
+- busy_timeout
+- foreign_keys ON
+- synchronous FULL
+- canonical Decimal values stored as TEXT
+- client_order_id UNIQUE
+- execution_id unique
+- transaction_id unique
+- atomic financial cycle contract
+- persistent HALT in system_state
+- cash reconciliation required
+- realized PnL reconciliation required
+- mismatch => RECONCILIATION_MISMATCH
+- no real migration authorized
+
+CONCLUSION:
+READY FOR TEST-FIRST SQLITE REPOSITORY FOUNDATION
+
+REAL JSON/LIVE MIGRATION:
+NOT AUTHORIZED
