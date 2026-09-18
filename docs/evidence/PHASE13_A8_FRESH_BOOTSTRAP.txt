@@ -1,0 +1,109 @@
+﻿PHASE 13 A.8 - FRESH SQLITE BOOTSTRAP CONTRACT
+============================================================
+
+UTC:
+2026-09-18T17:04:00.5358167Z
+
+BASE HEAD:
+e14a576
+
+BRANCH:
+phase-13-sqlite-ledger-preflight
+
+CONTROLLED RED:
+CONFIRMED
+
+LIVE SQLITE DATABASE CREATED:
+NO
+
+LEGACY/SMOKE FINANCIAL DATA MIGRATED:
+NO
+
+RUNTIME SQLITE WIRING:
+NO
+
+A.8 TESTS:
+------------------------------------------------------------
+..........                                                               [100%]
+10 passed in 0.33s
+
+SQLITE REPOSITORY REGRESSION:
+------------------------------------------------------------
+...............................................                          [100%]
+47 passed in 1.13s
+
+TARGETED PERSISTENCE REGRESSION:
+------------------------------------------------------------
+........................................................................ [ 36%]
+........................................................................ [ 73%]
+...................................................                      [100%]
+195 passed in 1.86s
+
+FULL OFFLINE REGRESSION:
+------------------------------------------------------------
+........................................................................ [  7%]
+........................................................................ [ 14%]
+........................................................................ [ 22%]
+........................................................................ [ 29%]
+........................................................................ [ 36%]
+........................................................................ [ 44%]
+........................................................................ [ 51%]
+........................................................................ [ 58%]
+........................................................................ [ 66%]
+........................................................................ [ 73%]
+........................................................................ [ 81%]
+........................................................................ [ 88%]
+........................................................................ [ 95%]
+.........................................                                [100%]
+977 passed in 75.20s (0:01:15)
+
+BTC LEGACY_V1 GOLDEN:
+------------------------------------------------------------
+=== BACKTEST BENCHMARK ===
+Symbol:           BTCUSDT
+Interval:         1m
+îwiece:           5000
+Kapita│ pocz╣tk.: 1000.0
+Kapita│ ko˝cowy:  1014.8392976799995
+Transakcje:       13
+Wygrane:          7
+Przegrane:        6
+Win rate:         53.84615384615385
+Total profit:     14.839297679999504
+Max drawdown:     18.485012400000187
+Profit factor:    1.692128777090018
+Average win:      5.182768514285695
+Average loss:     3.573346986666712
+Largest win:     13.000798400000047
+Largest loss:     9.580003080000042
+Expectancy:       1.1414844369230388
+
+VERIFIED:
+------------------------------------------------------------
+- explicit initial cash required
+- initial cash must be finite and non-negative
+- exactly one INITIAL_CASH portfolio transaction
+- system cash equals explicit initial cash
+- cash reconciliation passes
+- fresh database starts HALTED
+- explicit activation required later
+- no inherited orders
+- no inherited executions
+- no inherited positions
+- no inherited trades
+- processed timestamp remains NULL
+- existing destination is never overwritten
+- partial failed bootstrap is cleaned up
+- backup/restore preserves fresh bootstrap state
+- no data/live/trading.db
+- no migration
+- no runtime wiring
+
+CONCLUSION:
+PHASE 13 A.8 PASS
+
+NEXT:
+HARD STOP / REAL DATABASE CREATION AND CUTOVER DECISION
+
+REAL data/live/trading.db CREATION:
+NOT AUTHORIZED
