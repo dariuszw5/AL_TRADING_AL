@@ -1,0 +1,125 @@
+﻿PHASE 13 A.14 - TEMP SQLITE TRADE CYCLE INTEGRATION
+============================================================
+
+UTC:
+2026-09-18T17:45:33.3067617Z
+
+BASE HEAD:
+0b0c739
+
+CONTROLLED RED:
+CONFIRMED
+
+INTEGRATED EXIT ATOMIC CYCLE:
+EXIT order
++ EXIT execution
++ OPEN -> CLOSED
++ REALIZED_PNL
++ trade
++ settled cash
++ processed timestamp
++ reconciliation
+
+A.14 TESTS:
+------------------------------------------------------------
+....                                                                     [100%]
+4 passed in 0.28s
+
+SQLITE PHASE 13 REGRESSION:
+------------------------------------------------------------
+........................................................................ [ 91%]
+.......                                                                  [100%]
+79 passed in 2.15s
+
+TARGETED PERSISTENCE REGRESSION:
+------------------------------------------------------------
+........................................................................ [ 31%]
+........................................................................ [ 63%]
+........................................................................ [ 95%]
+...........                                                              [100%]
+227 passed in 2.67s
+
+FULL OFFLINE REGRESSION:
+------------------------------------------------------------
+........................................................................ [  7%]
+........................................................................ [ 14%]
+........................................................................ [ 21%]
+........................................................................ [ 28%]
+........................................................................ [ 35%]
+........................................................................ [ 42%]
+........................................................................ [ 49%]
+........................................................................ [ 57%]
+........................................................................ [ 64%]
+........................................................................ [ 71%]
+........................................................................ [ 78%]
+........................................................................ [ 85%]
+........................................................................ [ 92%]
+........................................................................ [ 99%]
+.                                                                        [100%]
+1009 passed in 72.90s (0:01:12)
+
+BTC LEGACY_V1 GOLDEN:
+------------------------------------------------------------
+=== BACKTEST BENCHMARK ===
+Symbol:           BTCUSDT
+Interval:         1m
+îwiece:           5000
+Kapita│ pocz╣tk.: 1000.0
+Kapita│ ko˝cowy:  1014.8392976799995
+Transakcje:       13
+Wygrane:          7
+Przegrane:        6
+Win rate:         53.84615384615385
+Total profit:     14.839297679999504
+Max drawdown:     18.485012400000187
+Profit factor:    1.692128777090018
+Average win:      5.182768514285695
+Average loss:     3.573346986666712
+Largest win:     13.000798400000047
+Largest loss:     9.580003080000042
+Expectancy:       1.1414844369230388
+
+LIVE DATABASE SHA256 BEFORE:
+F51C2DB77B6346372340AC772DD58099CF4E842144A7F196567A2E0D4591212D
+
+LIVE DATABASE SHA256 AFTER:
+F51C2DB77B6346372340AC772DD58099CF4E842144A7F196567A2E0D4591212D
+
+LIVE DATABASE MODIFIED:
+NO
+
+A.9 BACKUP SHA256 BEFORE:
+ACBDA104422BFB48C2235CE9BEC38278D69AE3EE2536A3D90A62F5F9EA7BA5A4
+
+A.9 BACKUP SHA256 AFTER:
+ACBDA104422BFB48C2235CE9BEC38278D69AE3EE2536A3D90A62F5F9EA7BA5A4
+
+VERIFIED:
+- ENTRY persisted through A.11
+- restart preserves OPEN position
+- persistent HALT blocks new ENTRY
+- persistent HALT allows EXIT completion
+- exit order/execution/position/financial/timestamp commit atomically
+- cash 1000 -> 1025 for +25 PLN settlement
+- restart preserves CLOSED/trade/cash/timestamp
+- exact replay creates no duplicates
+- exact replay does not double-book cash
+- forced integrated failure rolls back full EXIT cycle
+- live DB unchanged
+- runtime SQLite wiring not performed
+- real HALT clear not performed
+- trading not activated
+- protected user change preserved
+
+CONCLUSION:
+PHASE 13 A.14 PASS
+
+NEXT:
+A.15 INJECTED RUNTIME SQLITE CUTOVER WIRING
+TEMP/TEST DATABASE PATHS ONLY
+
+REAL LIVE DATABASE CUTOVER:
+NOT AUTHORIZED
+
+REAL HALT CLEAR:
+NOT AUTHORIZED

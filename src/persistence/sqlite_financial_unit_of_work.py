@@ -261,6 +261,96 @@ class SQLiteFinancialUnitOfWork:
 
         return new_cash
 
+    def settle_realized_inside_atomic_cycle(
+        self,
+        *,
+        processed_timestamp_utc,
+        updated_at_utc,
+        trade,
+        portfolio_transaction,
+    ):
+        if not self.repository.connection.in_transaction:
+            raise SQLiteLedgerRepositoryError(
+                "financial settlement requires active atomic_cycle"
+            )
+
+        processed_timestamp_utc = _required_text(
+            processed_timestamp_utc,
+            "processed_timestamp_utc",
+        )
+        updated_at_utc = _required_text(
+            updated_at_utc,
+            "updated_at_utc",
+        )
+
+        amount_pln = self._validate_linkage(
+            trade=trade,
+            portfolio_transaction=portfolio_transaction,
+        )
+
+        _, transaction_created = (
+            self.repository
+            .append_portfolio_transaction_idempotent(
+                portfolio_transaction
+            )
+        )
+
+        _, trade_created = (
+            self.repository
+            .append_trade_idempotent(
+                trade
+            )
+        )
+
+        if trade_created != transaction_created:
+            raise SQLiteFinancialUnitOfWorkError(
+                "trade and REALIZED_PNL idempotency state mismatch"
+            )
+
+        if transaction_created:
+            cash_balance = self._update_cash_balance(
+                amount_pln=amount_pln,
+                updated_at_utc=updated_at_utc,
+            )
+        else:
+            state = self.repository.read_system_state()
+            if state is None:
+                raise SQLiteFinancialUnitOfWorkError(
+                    "system_state is required"
+                )
+            cash_balance = _decimal(
+                state["cash_balance_pln"],
+                "system_state.cash_balance_pln",
+            )
+
+        self.repository.set_last_processed_timestamp(
+            processed_timestamp_utc=processed_timestamp_utc,
+            updated_at_utc=updated_at_utc,
+        )
+
+        cash_reconciliation = self.repository.reconcile_cash()
+        if not cash_reconciliation.matches:
+            raise SQLiteLedgerRepositoryError(
+                "RECONCILIATION_MISMATCH: cash"
+            )
+
+        realized_reconciliation = (
+            self.repository.reconcile_realized_pnl()
+        )
+        if not realized_reconciliation["matches"]:
+            raise SQLiteLedgerRepositoryError(
+                "RECONCILIATION_MISMATCH: realized PnL"
+            )
+
+        return SQLiteFinancialSettlementResult(
+            trade_created=bool(trade_created),
+            transaction_created=bool(transaction_created),
+            cash_balance_pln=cash_balance,
+            cash_reconciliation_matches=True,
+            realized_reconciliation_matches=True,
+            processed_timestamp_utc=processed_timestamp_utc,
+        )
+
     def settle_realized_cycle(
         self,
         *,
