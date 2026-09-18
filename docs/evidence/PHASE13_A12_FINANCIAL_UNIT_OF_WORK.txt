@@ -1,0 +1,135 @@
+﻿PHASE 13 A.12 - SQLITE FINANCIAL UNIT OF WORK
+============================================================
+
+UTC:
+2026-09-18T17:29:44.5500371Z
+
+BASE HEAD:
+4cbe5ce
+
+BRANCH:
+phase-13-sqlite-ledger-preflight
+
+CONTROLLED RED:
+CONFIRMED
+
+FIRST IMPLEMENTATION RESULT:
+FAILED SAFELY ON TEMP DATABASES ONLY
+
+FIRST IMPLEMENTATION FAILURE:
+FOREIGN KEY ordering - trade referenced realized transaction before
+REALIZED_PNL transaction existed.
+
+CORRECTION:
+REALIZED_PNL portfolio transaction is persisted before trade inside the
+same atomic_cycle.
+
+SCHEMA WEAKENED:
+NO
+
+TEST ASSERTIONS WEAKENED:
+NO
+
+LIVE DATABASE SHA256 BEFORE:
+F51C2DB77B6346372340AC772DD58099CF4E842144A7F196567A2E0D4591212D
+
+LIVE DATABASE SHA256 AFTER:
+F51C2DB77B6346372340AC772DD58099CF4E842144A7F196567A2E0D4591212D
+
+LIVE DATABASE MODIFIED:
+NO
+
+A.9 BACKUP SHA256 BEFORE:
+ACBDA104422BFB48C2235CE9BEC38278D69AE3EE2536A3D90A62F5F9EA7BA5A4
+
+A.9 BACKUP SHA256 AFTER:
+ACBDA104422BFB48C2235CE9BEC38278D69AE3EE2536A3D90A62F5F9EA7BA5A4
+
+A.9 BACKUP MODIFIED:
+NO
+
+A.12 TESTS AFTER CORRECTION:
+------------------------------------------------------------
+.........                                                                [100%]
+9 passed in 0.33s
+
+SQLITE PHASE 13 REGRESSION:
+------------------------------------------------------------
+................................................................         [100%]
+64 passed in 1.67s
+
+TARGETED PERSISTENCE REGRESSION:
+------------------------------------------------------------
+........................................................................ [ 33%]
+........................................................................ [ 67%]
+....................................................................     [100%]
+212 passed in 2.25s
+
+FULL OFFLINE REGRESSION:
+------------------------------------------------------------
+........................................................................ [  7%]
+........................................................................ [ 14%]
+........................................................................ [ 21%]
+........................................................................ [ 28%]
+........................................................................ [ 36%]
+........................................................................ [ 43%]
+........................................................................ [ 50%]
+........................................................................ [ 57%]
+........................................................................ [ 65%]
+........................................................................ [ 72%]
+........................................................................ [ 79%]
+........................................................................ [ 86%]
+........................................................................ [ 94%]
+..........................................................               [100%]
+994 passed in 74.10s (0:01:14)
+
+BTC LEGACY_V1 GOLDEN:
+------------------------------------------------------------
+=== BACKTEST BENCHMARK ===
+Symbol:           BTCUSDT
+Interval:         1m
+îwiece:           5000
+Kapita│ pocz╣tk.: 1000.0
+Kapita│ ko˝cowy:  1014.8392976799995
+Transakcje:       13
+Wygrane:          7
+Przegrane:        6
+Win rate:         53.84615384615385
+Total profit:     14.839297679999504
+Max drawdown:     18.485012400000187
+Profit factor:    1.692128777090018
+Average win:      5.182768514285695
+Average loss:     3.573346986666712
+Largest win:     13.000798400000047
+Largest loss:     9.580003080000042
+Expectancy:       1.1414844369230388
+
+VERIFIED:
+------------------------------------------------------------
+- REALIZED_PNL is inserted before dependent trade row
+- trade + REALIZED_PNL + cash + timestamp are atomic
+- profit updates cash exactly
+- loss updates cash exactly
+- exact replay does not double-book cash
+- forced failure rolls back trade, transaction, cash and timestamp
+- trade/ledger realized amount must match
+- trade/transaction identities must link exactly
+- pre-existing reconciliation mismatch persists HALT
+- financial EXIT settlement is allowed while HALTED
+- HALT remains persistent
+- data/live/trading.db unchanged
+- runtime SQLite wiring not performed
+- trading not activated
+- protected user change preserved
+
+CONCLUSION:
+PHASE 13 A.12 PASS
+
+NEXT:
+A.13 TEMP SQLITE EXECUTION + FINANCIAL INTEGRATION HARNESS
+
+REAL RUNTIME CUTOVER:
+NOT AUTHORIZED
+
+HALT CLEAR:
+NOT AUTHORIZED
