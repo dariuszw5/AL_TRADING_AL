@@ -15,6 +15,11 @@ from src.accounting.startup_metadata_store import (
     StartupMetadataJournal,
     StartupMetadataStoreError,
 )
+from src.accounting.realized_persistence import (
+    PersistingAccountingRuntime,
+    RealizedAccountingJournal,
+    RealizedAccountingStoreError,
+)
 from src.execution.feature_flags import (
     RealisticV2FeatureFlags,
 )
@@ -25,6 +30,10 @@ from src.runtime_feature_flags import (
 
 STARTUP_METADATA_FILENAME = (
     "phase10_startup_metadata.jsonl"
+)
+
+REALIZED_ACCOUNTING_FILENAME = (
+    "phase10_realized_accounting.jsonl"
 )
 
 
@@ -548,15 +557,49 @@ def main(argv=None):
         "STARTUP METADATA VERIFIED BEFORE PAPER CYCLE"
     )
 
+    realized_accounting_path = (
+        Path(
+            args.state_dir
+        )
+        / REALIZED_ACCOUNTING_FILENAME
+    )
+
+    persisting_runtime = (
+        PersistingAccountingRuntime(
+            runtime=(
+                bundle.wiring.runtime
+            ),
+            journal=(
+                RealizedAccountingJournal(
+                    realized_accounting_path,
+                    clock=runtime.clock,
+                )
+            ),
+            startup_metadata=(
+                bundle.startup_metadata
+            ),
+        )
+    )
+
     try:
         result = (
-            bundle.wiring.runtime
+            persisting_runtime
             .run_cycle(
                 [
                     asset_id,
                 ]
             )
         )
+
+    except RealizedAccountingStoreError as exc:
+        print(
+            "REALIZED ACCOUNTING PERSISTENCE FAILED:",
+            f"{type(exc).__name__}: {exc}",
+        )
+        print(
+            "REAL EXCHANGE ORDERS SENT: 0"
+        )
+        return 23
 
     except Exception as exc:
         print(
@@ -569,6 +612,62 @@ def main(argv=None):
         result,
         asset_id=asset_id,
     )
+
+    persistence = (
+        persisting_runtime
+        .last_persistence
+        .get(
+            asset_id
+        )
+    )
+
+    if persistence is None:
+        print(
+            "REALIZED ACCOUNTING PERSISTED: NOT_APPLICABLE"
+        )
+        print(
+            "REALIZED ACCOUNTING RECORD COUNT: 0"
+        )
+
+    else:
+        realized_records = (
+            persisting_runtime
+            .journal
+            .read_records()
+        )
+
+        print(
+            "Realized accounting path:",
+            realized_accounting_path,
+        )
+        print(
+            "Realized accounting booking key:",
+            persistence.record[
+                "booking_key"
+            ],
+        )
+        print(
+            "Realized accounting record hash:",
+            persistence.record[
+                "record_hash"
+            ],
+        )
+        print(
+            "Realized accounting append:",
+            persistence.appended,
+        )
+        print(
+            "REALIZED ACCOUNTING PERSISTED: YES"
+        )
+        print(
+            "REALIZED ACCOUNTING INTEGRITY: VERIFIED"
+        )
+        print(
+            "REALIZED ACCOUNTING RECORD COUNT:",
+            len(
+                realized_records
+            ),
+        )
 
     print(
         "Persisted positions:",

@@ -1,0 +1,16 @@
+
+=================================== ERRORS ====================================
+___ ERROR collecting tests/test_phase10_realized_accounting_persistence.py ____
+ImportError while importing test module 'C:\Users\ddare\Desktop\Al_Trading_Al\tests\test_phase10_realized_accounting_persistence.py'.
+Hint: make sure your test modules/packages have valid Python names.
+Traceback:
+..\..\AppData\Local\Python\pythoncore-3.14-64\Lib\importlib\__init__.py:88: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests\test_phase10_realized_accounting_persistence.py:11: in <module>
+    from src.accounting.realized_persistence import (
+E   ModuleNotFoundError: No module named 'src.accounting.realized_persistence'
+=========================== short test summary info ===========================
+ERROR tests/test_phase10_realized_accounting_persistence.py
+!!!!!!!!!!!!!!!!!!! Interrupted: 1 error during collection !!!!!!!!!!!!!!!!!!!!
+1 error in 0.25s
