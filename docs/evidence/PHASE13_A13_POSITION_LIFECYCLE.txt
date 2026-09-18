@@ -1,0 +1,120 @@
+﻿PHASE 13 A.13 - SQLITE POSITION LIFECYCLE CONTRACT
+============================================================
+
+UTC:
+2026-09-18T17:39:57.6212764Z
+
+BASE HEAD:
+66dcfcb
+
+PRECHECK FINDING:
+save_position_idempotent is insert-only.
+OPEN -> CLOSED was not supported through that method.
+
+FIRST PATCH ATTEMPT:
+Stopped safely before source modification because an exact multiline
+insertion boundary was not found.
+
+RESUME PATCH:
+Robust signature-based Python patch.
+CRLF/LF independent.
+
+NEW CONTRACT:
+close_position_idempotent
+
+SUPPORTED TRANSITION:
+OPEN -> CLOSED
+
+A.13 TESTS:
+------------------------------------------------------------
+...........                                                              [100%]
+11 passed in 0.37s
+
+SQLITE PHASE 13 REGRESSION:
+------------------------------------------------------------
+........................................................................ [ 96%]
+...                                                                      [100%]
+75 passed in 2.04s
+
+TARGETED PERSISTENCE REGRESSION:
+------------------------------------------------------------
+........................................................................ [ 32%]
+........................................................................ [ 64%]
+........................................................................ [ 96%]
+.......                                                                  [100%]
+223 passed in 2.50s
+
+FULL OFFLINE REGRESSION:
+------------------------------------------------------------
+........................................................................ [  7%]
+........................................................................ [ 14%]
+........................................................................ [ 21%]
+........................................................................ [ 28%]
+........................................................................ [ 35%]
+........................................................................ [ 42%]
+........................................................................ [ 50%]
+........................................................................ [ 57%]
+........................................................................ [ 64%]
+........................................................................ [ 71%]
+........................................................................ [ 78%]
+........................................................................ [ 85%]
+........................................................................ [ 93%]
+.....................................................................    [100%]
+1005 passed in 75.90s (0:01:15)
+
+BTC LEGACY_V1 GOLDEN:
+------------------------------------------------------------
+=== BACKTEST BENCHMARK ===
+Symbol:           BTCUSDT
+Interval:         1m
+îwiece:           5000
+Kapita│ pocz╣tk.: 1000.0
+Kapita│ ko˝cowy:  1014.8392976799995
+Transakcje:       13
+Wygrane:          7
+Przegrane:        6
+Win rate:         53.84615384615385
+Total profit:     14.839297679999504
+Max drawdown:     18.485012400000187
+Profit factor:    1.692128777090018
+Average win:      5.182768514285695
+Average loss:     3.573346986666712
+Largest win:     13.000798400000047
+Largest loss:     9.580003080000042
+Expectancy:       1.1414844369230388
+
+LIVE DATABASE SHA256 BEFORE:
+F51C2DB77B6346372340AC772DD58099CF4E842144A7F196567A2E0D4591212D
+
+LIVE DATABASE SHA256 AFTER:
+F51C2DB77B6346372340AC772DD58099CF4E842144A7F196567A2E0D4591212D
+
+LIVE DATABASE MODIFIED:
+NO
+
+A.9 BACKUP SHA256 BEFORE:
+ACBDA104422BFB48C2235CE9BEC38278D69AE3EE2536A3D90A62F5F9EA7BA5A4
+
+A.9 BACKUP SHA256 AFTER:
+ACBDA104422BFB48C2235CE9BEC38278D69AE3EE2536A3D90A62F5F9EA7BA5A4
+
+VERIFIED:
+- insert-only position persistence preserved
+- explicit OPEN -> CLOSED lifecycle operation
+- existing exit execution required
+- immutable entry fields protected
+- exact close replay idempotent
+- conflicting replay fails closed
+- close rollback restores OPEN
+- CLOSED survives reopen
+- live DB unchanged
+- HALT clear not performed
+- runtime SQLite wiring not performed
+- trading not activated
+- protected user change preserved
+
+CONCLUSION:
+PHASE 13 A.13 PASS
+
+NEXT:
+A.14 TEMP SQLITE OPEN/CLOSE/FINANCIAL/RESTART INTEGRATION

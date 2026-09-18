@@ -1146,6 +1146,143 @@ class SQLiteLedgerRepository:
             True,
         )
 
+    def close_position_idempotent(
+        self,
+        payload,
+    ):
+        self._require_transaction()
+
+        normalized = self._normalize_payload(
+            "positions",
+            payload,
+        )
+
+        position_id = normalized[
+            "position_id"
+        ]
+
+        if normalized.get("status") != "CLOSED":
+            raise ValueError(
+                "position close target must have status CLOSED"
+            )
+
+        for field_name in (
+            "exit_execution_id",
+            "exit_price_native",
+            "closed_at_utc",
+        ):
+            value = normalized.get(field_name)
+            if value is None or str(value).strip() == "":
+                raise ValueError(
+                    field_name + " is required for CLOSED position"
+                )
+
+        existing = self.connection.execute(
+            "SELECT * FROM positions WHERE position_id = ?",
+            (position_id,),
+        ).fetchone()
+
+        if existing is None:
+            raise IdempotencyConflictError(
+                "position close requires existing position"
+            )
+
+        if self._rows_match(existing, normalized):
+            return (dict(existing), False)
+
+        if existing["status"] == "CLOSED":
+            raise IdempotencyConflictError(
+                "position close idempotency conflict"
+            )
+
+        if existing["status"] != "OPEN":
+            raise IdempotencyConflictError(
+                "position must be OPEN before close"
+            )
+
+        immutable_fields = (
+            "position_id",
+            "asset_id",
+            "side",
+            "quantity_native",
+            "entry_execution_id",
+            "entry_price_native",
+            "stop_loss_native",
+            "take_profit_native",
+            "opened_at_utc",
+            "short_mechanism",
+            "short_financing_model",
+            "execution_profile",
+            "execution_quality_at_entry",
+        )
+
+        for field_name in immutable_fields:
+            if existing[field_name] != normalized[field_name]:
+                raise IdempotencyConflictError(
+                    "position immutable field conflict: " + field_name
+                )
+
+        exit_execution = self.connection.execute(
+            "SELECT * FROM executions WHERE execution_id = ?",
+            (normalized["exit_execution_id"],),
+        ).fetchone()
+
+        if exit_execution is None:
+            raise IdempotencyConflictError(
+                "position close requires existing exit execution"
+            )
+
+        if exit_execution["asset_id"] != normalized["asset_id"]:
+            raise IdempotencyConflictError(
+                "position exit execution asset mismatch"
+            )
+
+        cursor = self.connection.execute(
+            "UPDATE positions SET "
+            "exit_execution_id = ?, "
+            "exit_price_native = ?, "
+            "status = ?, "
+            "closed_at_utc = ?, "
+            "unrealized_pnl_native = ?, "
+            "unrealized_pnl_pln = ?, "
+            "raw_json = ? "
+            "WHERE position_id = ? AND status = 'OPEN'",
+            (
+                normalized["exit_execution_id"],
+                normalized["exit_price_native"],
+                normalized["status"],
+                normalized["closed_at_utc"],
+                normalized["unrealized_pnl_native"],
+                normalized["unrealized_pnl_pln"],
+                normalized["raw_json"],
+                position_id,
+            ),
+        )
+
+        if cursor.rowcount != 1:
+            raise SQLiteLedgerRepositoryError(
+                "position close update affected "
+                + str(cursor.rowcount)
+                + " rows"
+            )
+
+        row = self.connection.execute(
+            "SELECT * FROM positions WHERE position_id = ?",
+            (position_id,),
+        ).fetchone()
+
+        if row is None:
+            raise SQLiteLedgerRepositoryError(
+                "position disappeared during close"
+            )
+
+        if not self._rows_match(row, normalized):
+            raise SQLiteLedgerRepositoryError(
+                "position close persistence mismatch"
+            )
+
+        return (dict(row), True)
+
     def append_trade_idempotent(
         self,
         payload,
