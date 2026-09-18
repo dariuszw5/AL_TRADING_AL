@@ -973,6 +973,61 @@ class SQLiteLedgerRepository:
             row
         )
 
+
+    def set_last_processed_timestamp(
+        self,
+        *,
+        processed_timestamp_utc,
+        updated_at_utc,
+    ):
+        self._require_transaction()
+
+        timestamp = str(
+            processed_timestamp_utc
+        ).strip()
+
+        if not timestamp:
+            raise ValueError(
+                "processed_timestamp_utc is required"
+            )
+
+        state = self.read_system_state()
+
+        if state is None:
+            raise SQLiteLedgerRepositoryError(
+                "system_state missing"
+            )
+
+        self.connection.execute(
+            """
+            UPDATE system_state
+            SET
+                last_processed_timestamp_utc = ?,
+                updated_at_utc = ?
+            WHERE state_id = 1
+            """,
+            (
+                timestamp,
+                str(
+                    updated_at_utc
+                ),
+            ),
+        )
+
+        return self.read_system_state()
+
+    def read_last_processed_timestamp(
+        self,
+    ):
+        state = self.read_system_state()
+
+        if state is None:
+            return None
+
+        return state[
+            "last_processed_timestamp_utc"
+        ]
+
     def reconcile_cash(
         self,
     ):
