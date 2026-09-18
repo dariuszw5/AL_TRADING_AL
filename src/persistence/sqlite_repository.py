@@ -1568,6 +1568,357 @@ class SQLiteLedgerRepository:
             "realized": realized,
         }
 
+
+    @staticmethod
+    def verify_database_file(
+        database_path,
+    ):
+        path = Path(
+            database_path
+        )
+
+        if not path.exists():
+            raise SQLiteLedgerRepositoryError(
+                f"Backup verification failed: "
+                f"database does not exist: {path}"
+            )
+
+        uri = (
+            "file:"
+            + path.resolve().as_posix()
+            + "?mode=ro"
+        )
+
+        connection = None
+
+        try:
+            connection = sqlite3.connect(
+                uri,
+                uri=True,
+            )
+
+            integrity_rows = tuple(
+                str(
+                    row[0]
+                )
+                for row in connection.execute(
+                    "PRAGMA integrity_check"
+                ).fetchall()
+            )
+
+            if integrity_rows != ("ok",):
+                raise SQLiteLedgerRepositoryError(
+                    "Backup verification failed: "
+                    "integrity_check="
+                    + repr(
+                        integrity_rows
+                    )
+                )
+
+            foreign_key_rows = tuple(
+                tuple(
+                    row
+                )
+                for row in connection.execute(
+                    "PRAGMA foreign_key_check"
+                ).fetchall()
+            )
+
+            if foreign_key_rows:
+                raise SQLiteLedgerRepositoryError(
+                    "Backup verification failed: "
+                    "foreign key violations="
+                    + repr(
+                        foreign_key_rows
+                    )
+                )
+
+            tables = {
+                row[0]
+                for row in connection.execute(
+                    """
+                    SELECT name
+                    FROM sqlite_master
+                    WHERE type = 'table'
+                    """
+                ).fetchall()
+                if not str(
+                    row[0]
+                ).startswith(
+                    "sqlite_"
+                )
+            }
+
+            required_tables = {
+                "schema_version",
+                "system_state",
+                "orders",
+                "executions",
+                "positions",
+                "portfolio_transactions",
+                "trades",
+                "equity_snapshots",
+                "asset_equity_snapshots",
+                "ai_decisions",
+                "system_events",
+            }
+
+            missing = (
+                required_tables
+                - tables
+            )
+
+            if missing:
+                raise SQLiteLedgerRepositoryError(
+                    "Backup verification failed: "
+                    "missing tables: "
+                    + ", ".join(
+                        sorted(
+                            missing
+                        )
+                    )
+                )
+
+            schema_row = (
+                connection.execute(
+                    """
+                    SELECT
+                        version,
+                        migration_name,
+                        checksum_sha256
+                    FROM schema_version
+                    ORDER BY version DESC
+                    LIMIT 1
+                    """
+                )
+                .fetchone()
+            )
+
+            if schema_row is None:
+                raise SQLiteLedgerRepositoryError(
+                    "Backup verification failed: "
+                    "schema_version missing"
+                )
+
+            version = int(
+                schema_row[0]
+            )
+
+            if version != SCHEMA_VERSION:
+                raise SQLiteLedgerRepositoryError(
+                    "Backup verification failed: "
+                    f"unexpected schema version "
+                    f"{version}"
+                )
+
+            return {
+                "integrity_ok": True,
+                "foreign_keys_ok": True,
+                "schema_version": version,
+                "migration_name": str(
+                    schema_row[1]
+                ),
+                "checksum_sha256": str(
+                    schema_row[2]
+                ),
+                "database_path": str(
+                    path
+                ),
+            }
+
+        except sqlite3.DatabaseError as exc:
+            raise SQLiteLedgerRepositoryError(
+                "Backup verification failed: "
+                f"{exc}"
+            ) from exc
+
+        finally:
+            if connection is not None:
+                connection.close()
+
+    def backup_to(
+        self,
+        destination_path,
+    ):
+        if self.connection.in_transaction:
+            raise SQLiteLedgerRepositoryError(
+                "Backup is not allowed during "
+                "an active atomic_cycle"
+            )
+
+        destination = Path(
+            destination_path
+        )
+
+        source_resolved = (
+            self.database_path.resolve()
+        )
+
+        destination_resolved = (
+            destination.resolve()
+        )
+
+        if destination_resolved == source_resolved:
+            raise ValueError(
+                "Backup destination must differ "
+                "from source database"
+            )
+
+        if destination.exists():
+            raise FileExistsError(
+                f"Backup destination already exists: "
+                f"{destination}"
+            )
+
+        destination.parent.mkdir(
+            parents=True,
+            exist_ok=True,
+        )
+
+        backup_connection = None
+
+        try:
+            backup_connection = sqlite3.connect(
+                str(
+                    destination
+                )
+            )
+
+            self.connection.backup(
+                backup_connection
+            )
+
+            backup_connection.commit()
+
+        except BaseException:
+            if backup_connection is not None:
+                backup_connection.close()
+                backup_connection = None
+
+            if destination.exists():
+                destination.unlink()
+
+            raise
+
+        finally:
+            if backup_connection is not None:
+                backup_connection.close()
+
+        try:
+            return self.verify_database_file(
+                destination
+            )
+
+        except BaseException:
+            if destination.exists():
+                destination.unlink()
+
+            raise
+
+    @classmethod
+    def restore_from_backup(
+        cls,
+        backup_path,
+        destination_path,
+        *,
+        busy_timeout_ms=DEFAULT_BUSY_TIMEOUT_MS,
+    ):
+        backup = Path(
+            backup_path
+        )
+
+        destination = Path(
+            destination_path
+        )
+
+        if destination.exists():
+            raise FileExistsError(
+                f"Restore destination already exists: "
+                f"{destination}"
+            )
+
+        cls.verify_database_file(
+            backup
+        )
+
+        if (
+            backup.resolve()
+            == destination.resolve()
+        ):
+            raise ValueError(
+                "Restore destination must differ "
+                "from backup source"
+            )
+
+        destination.parent.mkdir(
+            parents=True,
+            exist_ok=True,
+        )
+
+        source_connection = None
+        destination_connection = None
+
+        backup_uri = (
+            "file:"
+            + backup.resolve().as_posix()
+            + "?mode=ro"
+        )
+
+        try:
+            source_connection = sqlite3.connect(
+                backup_uri,
+                uri=True,
+            )
+
+            destination_connection = sqlite3.connect(
+                str(
+                    destination
+                )
+            )
+
+            source_connection.backup(
+                destination_connection
+            )
+
+            destination_connection.commit()
+
+        except BaseException:
+            if destination_connection is not None:
+                destination_connection.close()
+                destination_connection = None
+
+            if source_connection is not None:
+                source_connection.close()
+                source_connection = None
+
+            if destination.exists():
+                destination.unlink()
+
+            raise
+
+        finally:
+            if destination_connection is not None:
+                destination_connection.close()
+
+            if source_connection is not None:
+                source_connection.close()
+
+        try:
+            cls.verify_database_file(
+                destination
+            )
+
+        except BaseException:
+            if destination.exists():
+                destination.unlink()
+
+            raise
+
+        return cls.open_writer(
+            destination,
+            busy_timeout_ms=busy_timeout_ms,
+        )
+
     def count_rows(
         self,
         table,
