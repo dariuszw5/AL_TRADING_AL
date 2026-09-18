@@ -1,0 +1,114 @@
+﻿PHASE 13 A.18 - SQLITE-ONLY COMPOSITION + RESTART RESTORE
+============================================================
+
+UTC:
+2026-09-18T18:15:38.9503450Z
+
+BASE HEAD:
+3758977
+
+CONTROLLED RED:
+CONFIRMED
+
+A.18 TESTS:
+------------------------------------------------------------
+.......                                                                  [100%]
+7 passed in 0.32s
+
+SQLITE PHASE 13 REGRESSION:
+------------------------------------------------------------
+........................................................................ [ 72%]
+...........................                                              [100%]
+99 passed in 2.67s
+
+TARGETED PERSISTENCE REGRESSION:
+------------------------------------------------------------
+........................................................................ [ 29%]
+........................................................................ [ 58%]
+........................................................................ [ 87%]
+...............................                                          [100%]
+247 passed in 3.14s
+
+FULL OFFLINE REGRESSION:
+------------------------------------------------------------
+........................................................................ [  6%]
+........................................................................ [ 13%]
+........................................................................ [ 20%]
+........................................................................ [ 27%]
+........................................................................ [ 34%]
+........................................................................ [ 41%]
+........................................................................ [ 48%]
+........................................................................ [ 55%]
+........................................................................ [ 62%]
+........................................................................ [ 69%]
+........................................................................ [ 76%]
+........................................................................ [ 83%]
+........................................................................ [ 90%]
+........................................................................ [ 97%]
+.....................                                                    [100%]
+1029 passed in 73.82s (0:01:13)
+
+BTC LEGACY_V1 GOLDEN:
+------------------------------------------------------------
+=== BACKTEST BENCHMARK ===
+Symbol:           BTCUSDT
+Interval:         1m
+îwiece:           5000
+Kapita│ pocz╣tk.: 1000.0
+Kapita│ ko˝cowy:  1014.8392976799995
+Transakcje:       13
+Wygrane:          7
+Przegrane:        6
+Win rate:         53.84615384615385
+Total profit:     14.839297679999504
+Max drawdown:     18.485012400000187
+Profit factor:    1.692128777090018
+Average win:      5.182768514285695
+Average loss:     3.573346986666712
+Largest win:     13.000798400000047
+Largest loss:     9.580003080000042
+Expectancy:       1.1414844369230388
+
+LIVE DATABASE SHA256 BEFORE:
+F51C2DB77B6346372340AC772DD58099CF4E842144A7F196567A2E0D4591212D
+
+LIVE DATABASE SHA256 AFTER:
+F51C2DB77B6346372340AC772DD58099CF4E842144A7F196567A2E0D4591212D
+
+LIVE DATABASE MODIFIED:
+NO
+
+A.9 BACKUP SHA256 BEFORE:
+ACBDA104422BFB48C2235CE9BEC38278D69AE3EE2536A3D90A62F5F9EA7BA5A4
+
+A.9 BACKUP SHA256 AFTER:
+ACBDA104422BFB48C2235CE9BEC38278D69AE3EE2536A3D90A62F5F9EA7BA5A4
+
+VERIFIED:
+- OPEN REALISTIC_V2 positions restored from SQLite
+- restored objects are real Position instances
+- state store is volatile and has no durable path
+- no JSON state file created
+- no JSONL journal created
+- ENTRY execution evidence restored from SQLite
+- exact persisted fee/bid/ask/slippage/config_hash restored
+- missing execution id returns None
+- legacy durable state store rejected
+- non-null execution_journal rejected
+- actual RealisticPaperRuntime starts with SQLite-restored position
+- restart runtime prevents duplicate ENTRY
+- existing runtime persistence sources unchanged
+- live DB unchanged
+- real HALT not cleared
+- trading not activated
+- protected user change preserved
+
+CONCLUSION:
+PHASE 13 A.18 PASS
+
+NEXT:
+A.19 SQLITE ACCOUNTING BRIDGE + CASH AUTHORITY AFTER RESTART
+TEMP/TEST SQLITE PATHS ONLY
+
+REAL LIVE CUTOVER:
+NOT AUTHORIZED
