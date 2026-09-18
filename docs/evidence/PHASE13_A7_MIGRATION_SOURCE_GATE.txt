@@ -1,0 +1,137 @@
+﻿PHASE 13 A.7 - COPY-ONLY MIGRATION SOURCE GATE
+============================================================
+
+UTC:
+2026-09-18T16:57:28.0864200Z
+
+BASE HEAD:
+82f508a
+
+BRANCH:
+phase-13-sqlite-ledger-preflight
+
+ORIGINAL SOURCES MODIFIED:
+NO
+
+LIVE SQLITE DATABASE CREATED:
+NO
+
+FINANCIAL RECORDS MIGRATED:
+NO
+
+RUNTIME SQLITE WIRING:
+NO
+
+REAL SOURCE VALIDATION:
+------------------------------------------------------------
+PHASE13_A7_SOURCE_VALIDATION
+========================================================================
+
+CANDIDATE 1
+ORIGINAL=C:\Users\ddare\Desktop\Al_Trading_Al\data\realistic_v2_state\smoke_btcusdt
+COPY=C:\Users\ddare\AppData\Local\Temp\AL_TRADING_PHASE13_A7_cb92888377b844b782b76260d63e8891\candidate_1
+STATUS=BLOCKED_PHASE11_CASH_LEDGER_REQUIRED_FOR_EXISTING_STATE
+PHASE11_FAIL_CLOSED_GUARD=True
+ELIGIBLE_FOR_FINANCIAL_MIGRATION=False
+MISSING=phase10_startup_metadata.jsonl,phase10_realized_accounting.jsonl,phase11_cash_ledger.jsonl,phase12_startup_metadata.jsonl
+STATE_POSITIONS=0
+JOURNAL_COMMITTED_RESULTS=2
+JOURNAL_UNRESOLVED_IDS=[]
+JOURNAL_EXPECTED_OPEN_ASSETS=[]
+PHASE10_STARTUP_RECORDS=None
+PHASE10_REALIZED_RECORDS=None
+PHASE11_CASH_RECORDS=None
+PHASE11_CASH_PLN=None
+PHASE12_STARTUP_RECORDS=None
+
+========================================================================
+CANDIDATES=1
+ELIGIBLE=0
+BLOCKED=1
+RESULT=NO_ELIGIBLE_REAL_SOURCE_FOR_FINANCIAL_MIGRATION
+SQLITE_DATABASE_CREATED=NO
+LIVE_DATA_MODIFIED=NO
+
+
+ORIGINAL SOURCE HASHES:
+------------------------------------------------------------
+C:\Users\ddare\Desktop\Al_Trading_Al\data\realistic_v2_state\smoke_btcusdt|execution_journal.jsonl | 3DAC66C8B2872F70C3F7868B9C5CFD0A9BB11B6050DC8F130FC745AE17C6DFBA
+C:\Users\ddare\Desktop\Al_Trading_Al\data\realistic_v2_state\smoke_btcusdt|state.json | B526E9B97DC7065ECAAA339377C5AF7B88750C61D3D6DD21DE6FF85C5352F9A2
+
+LEGACY LIVE_STATE FILES:
+------------------------------------------------------------
+C:\Users\ddare\Desktop\Al_Trading_Al\data\live_state\___exact_audit_test.json
+C:\Users\ddare\Desktop\Al_Trading_Al\data\live_state\___exact_audit_test.tmp
+C:\Users\ddare\Desktop\Al_Trading_Al\data\live_state\agent_state.json
+C:\Users\ddare\Desktop\Al_Trading_Al\data\live_state\paper_live.log
+C:\Users\ddare\Desktop\Al_Trading_Al\data\live_state\paper_live_BTCUSDT_1m.json
+C:\Users\ddare\Desktop\Al_Trading_Al\data\live_state\paper_live_daily.csv
+C:\Users\ddare\Desktop\Al_Trading_Al\data\live_state\paper_live_error.log
+C:\Users\ddare\Desktop\Al_Trading_Al\data\live_state\paper_live_history.csv
+C:\Users\ddare\Desktop\Al_Trading_Al\data\live_state\paper_live_history.cursor
+C:\Users\ddare\Desktop\Al_Trading_Al\data\live_state\paper_live_session_report.txt
+C:\Users\ddare\Desktop\Al_Trading_Al\data\live_state\paper_live_snapshots.csv
+
+LEGACY LIVE_STATE USED AS AUTHORITATIVE CASH:
+NO
+
+SQLITE REPOSITORY REGRESSION:
+------------------------------------------------------------
+.....................................                                    [100%]
+37 passed in 1.02s
+
+FULL OFFLINE REGRESSION:
+------------------------------------------------------------
+........................................................................ [  7%]
+........................................................................ [ 14%]
+........................................................................ [ 22%]
+........................................................................ [ 29%]
+........................................................................ [ 37%]
+........................................................................ [ 44%]
+........................................................................ [ 52%]
+........................................................................ [ 59%]
+........................................................................ [ 67%]
+........................................................................ [ 74%]
+........................................................................ [ 81%]
+........................................................................ [ 89%]
+........................................................................ [ 96%]
+...............................                                          [100%]
+967 passed in 76.00s (0:01:15)
+
+BTC LEGACY_V1 GOLDEN:
+------------------------------------------------------------
+=== BACKTEST BENCHMARK ===
+Symbol:           BTCUSDT
+Interval:         1m
+îwiece:           5000
+Kapita│ pocz╣tk.: 1000.0
+Kapita│ ko˝cowy:  1014.8392976799995
+Transakcje:       13
+Wygrane:          7
+Przegrane:        6
+Win rate:         53.84615384615385
+Total profit:     14.839297679999504
+Max drawdown:     18.485012400000187
+Profit factor:    1.692128777090018
+Average win:      5.182768514285695
+Average loss:     3.573346986666712
+Largest win:     13.000798400000047
+Largest loss:     9.580003080000042
+Expectancy:       1.1414844369230388
+
+SAFETY CONCLUSION:
+------------------------------------------------------------
+A real source set is eligible for financial migration only if the
+current persistence evidence is internally valid and the authoritative
+Phase 11 cash ledger is present.
+
+Existing runtime evidence without phase11_cash_ledger.jsonl is not
+converted by inventing initial cash or reconstructing authoritative
+settled cash from non-authoritative files.
+
+NEXT:
+If RESULT reports no eligible real source, migration remains BLOCKED.
+A source/cutover decision is required before any real migration.
+
+REAL LIVE MIGRATION:
+NOT AUTHORIZED
