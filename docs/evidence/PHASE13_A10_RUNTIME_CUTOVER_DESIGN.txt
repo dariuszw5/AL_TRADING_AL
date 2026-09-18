@@ -1,0 +1,344 @@
+﻿PHASE 13 A.10 - SQLITE RUNTIME CUTOVER DESIGN
+============================================================
+
+UTC:
+2026-09-18T17:17:01.0640447Z
+
+BASE HEAD:
+73e24e4
+
+BRANCH:
+phase-13-sqlite-ledger-preflight
+
+LIVE DATABASE SHA256 BEFORE:
+F51C2DB77B6346372340AC772DD58099CF4E842144A7F196567A2E0D4591212D
+
+LIVE DATABASE SHA256 AFTER:
+F51C2DB77B6346372340AC772DD58099CF4E842144A7F196567A2E0D4591212D
+
+LIVE DATABASE MODIFIED:
+NO
+
+A.9 BACKUP:
+C:\Users\ddare\Desktop\Al_Trading_Al\data\live\backups\trading_bootstrap_20260918T171044130709Z.db
+
+A.9 BACKUP SHA256 BEFORE:
+ACBDA104422BFB48C2235CE9BEC38278D69AE3EE2536A3D90A62F5F9EA7BA5A4
+
+A.9 BACKUP SHA256 AFTER:
+ACBDA104422BFB48C2235CE9BEC38278D69AE3EE2536A3D90A62F5F9EA7BA5A4
+
+A.9 BACKUP MODIFIED:
+NO
+
+READ-ONLY RUNTIME / DATABASE AUDIT:
+------------------------------------------------------------
+LIVE_DATABASE
+{
+  "cash_balance_pln": "1000",
+  "cash_reconciliation": true,
+  "counts": {
+    "ai_decisions": 0,
+    "asset_equity_snapshots": 0,
+    "equity_snapshots": 0,
+    "executions": 0,
+    "orders": 0,
+    "portfolio_transactions": 1,
+    "positions": 0,
+    "system_events": 1,
+    "trades": 0
+  },
+  "foreign_keys_ok": true,
+  "halt_reason": "FRESH_BOOTSTRAP_REQUIRES_EXPLICIT_ACTIVATION",
+  "halted": true,
+  "integrity_ok": true,
+  "last_processed_timestamp_utc": null
+}
+
+RUNTIME_PERSISTENCE_INVENTORY
+
+========================================================================
+FILE=src/execution/runtime.py
+STATUS=PRESENT
+MATCHES=9
+173: "execution_journal",
+180: "execution_journal requires state_store"
+191: .load_positions()
+200: "execution_journal",
+601: self.broker.submit_order(
+617: self.state_store.save_positions(
+624: "execution_journal",
+650: def run_cycle(
+660: .run_cycle(
+
+========================================================================
+FILE=src/execution/state_store.py
+STATUS=PRESENT
+MATCHES=3
+282: class RealisticPaperStateStore:
+308: def load_positions(
+396: def save_positions(
+
+========================================================================
+FILE=src/execution/execution_journal.py
+STATUS=PRESENT
+MATCHES=2
+312: class RealisticExecutionJournal:
+534: def prepare(
+
+========================================================================
+FILE=src/execution/paper_broker.py
+STATUS=PRESENT
+MATCHES=11
+47: execution_journal=None,
+125: self.execution_journal = (
+126: execution_journal
+129: if self.execution_journal is not None:
+130: self.execution_journal.restore_broker(
+528: if self.execution_journal is None:
+531: self.execution_journal.commit(
+540: def submit_order(
+576: if self.execution_journal is not None:
+578: self.execution_journal
+601: self.execution_journal.prepare(
+
+========================================================================
+FILE=src/execution/capital_runtime.py
+STATUS=PRESENT
+MATCHES=6
+12: build_phase12_startup_metadata,
+127: cash_ledger,
+157: "cash_ledger": cash_ledger,
+169: phase12_metadata = build_phase12_startup_metadata(
+170: phase10_metadata=phase11_bundle.phase10_bundle.startup_metadata,
+181: cash_pln_resolver=cash_ledger.current_cash_pln,
+
+========================================================================
+FILE=src/accounting/realized_persistence.py
+STATUS=PRESENT
+MATCHES=13
+211: class RealizedAccountingJournal:
+275: startup_metadata,
+403: getattr(startup_metadata, "global_config_hash", None),
+404: "startup_metadata.global_config_hash",
+484: def __init__(self, *, runtime, journal, startup_metadata):
+487: if not isinstance(journal, RealizedAccountingJournal):
+489: "journal must be RealizedAccountingJournal"
+491: if startup_metadata is None:
+492: raise TypeError("startup_metadata is required")
+496: self.startup_metadata = startup_metadata
+499: def run_cycle(self, asset_ids):
+500: result = self.runtime.run_cycle(asset_ids)
+545: startup_metadata=self.startup_metadata,
+
+========================================================================
+FILE=src/accounting/cash_ledger.py
+STATUS=PRESENT
+MATCHES=4
+13: RealizedAccountingJournal,
+153: class Phase11CashLedger:
+638: RealizedAccountingJournal,
+641: "realized_journal must be RealizedAccountingJournal"
+
+========================================================================
+FILE=src/accounting/cash_runtime.py
+STATUS=PRESENT
+MATCHES=39
+6: from src.accounting.cash_ledger import (
+7: Phase11CashLedger,
+15: RealizedAccountingJournal,
+29: def reconcile_cash_ledger(
+31: cash_ledger,
+35: cash_ledger,
+36: Phase11CashLedger,
+39: "cash_ledger must be Phase11CashLedger"
+44: RealizedAccountingJournal,
+47: "realized_journal must be RealizedAccountingJournal"
+52: cash_ledger.current_cash_pln()
+61: cash_ledger
+99: cash_ledger,
+109: cash_ledger,
+110: Phase11CashLedger,
+113: "cash_ledger must be Phase11CashLedger"
+118: RealizedAccountingJournal,
+121: "realized_journal must be RealizedAccountingJournal"
+146: self.cash_ledger = cash_ledger
+229: self.cash_ledger
+243: def run_cycle(
+254: .run_cycle(
+267: self.cash_ledger
+340: cash_ledger: Phase11CashLedger
+341: realized_journal: RealizedAccountingJournal
+351: cash_ledger,
+370: cash_ledger,
+371: Phase11CashLedger,
+374: "cash_ledger must be Phase11CashLedger"
+379: RealizedAccountingJournal,
+382: "realized_journal must be RealizedAccountingJournal"
+386: reconcile_cash_ledger(
+387: cash_ledger=cash_ledger,
+406: cash_ledger
+432: startup_metadata=(
+434: .startup_metadata
+444: cash_ledger=(
+445: cash_ledger
+467: cash_ledger=cash_ledger,
+
+========================================================================
+FILE=src/accounting/startup_metadata_store.py
+STATUS=PRESENT
+MATCHES=6
+203: def build_startup_metadata_record(
+310: def verify_startup_metadata_record(
+363: class StartupMetadataJournal:
+368: execution_journal.jsonl, state.json or data/live_state.
+393: build_startup_metadata_record(
+495: verify_startup_metadata_record(
+
+========================================================================
+FILE=src/execution/capital_startup_store.py
+STATUS=PRESENT
+MATCHES=2
+346: class Phase12StartupMetadataJournal:
+351: mutate state.json, execution_journal.jsonl, realized accounting or
+
+========================================================================
+FILE=src/accounting/production_startup.py
+STATUS=PRESENT
+MATCHES=8
+359: startup_metadata: Phase10StartupMetadata
+436: def build_phase10_startup_metadata(
+652: build_phase10_startup_metadata(
+718: execution_journal = getattr(
+720: "execution_journal",
+726: if execution_journal is None
+728: execution_journal
+801: startup_metadata=(
+
+========================================================================
+FILE=scripts/run_phase12_capital_accounting_smoke.py
+STATUS=PRESENT
+MATCHES=38
+10: _persist_and_verify_startup_metadata,
+11: _prepare_cash_ledger,
+13: _print_startup_metadata,
+18: from src.accounting.cash_ledger import (
+26: RealizedAccountingJournal,
+39: Phase12StartupMetadataJournal,
+54: "phase12_startup_metadata.jsonl"
+136: def _persist_and_verify_phase12_startup_metadata(
+138: state_dir,
+144: state_dir
+150: Phase12StartupMetadataJournal(
+215: def _print_phase12_startup_metadata(
+389: args.run_cycle
+516: state_dir=(
+517: args.state_dir
+530: cash_ledger,
+533: _prepare_cash_ledger(
+534: state_dir=(
+535: args.state_dir
+545: RealizedAccountingJournal(
+548: args.state_dir
+566: cash_ledger=(
+567: cash_ledger
+598: .startup_metadata
+601: _print_startup_metadata(
+605: _print_phase12_startup_metadata(
+615: _persist_and_verify_startup_metadata(
+616: state_dir=args.state_dir,
+629: _persist_and_verify_phase12_startup_metadata(
+630: state_dir=args.state_dir,
+653: cash_ledger.read_records()
+710: cash_ledger.path,
+741: cash_ledger.current_cash_pln(),
+751: if not args.run_cycle:
+771: .run_cycle(
+880: cash_ledger.read_records()
+891: cash_ledger.current_cash_pln(),
+899: store.load_positions()
+
+AUDIT_RESULT=PASS
+RUNTIME_SQLITE_WIRING_PERFORMED=NO
+HALT_CLEARED=NO
+TRADING_ACTIVATED=NO
+
+
+SQLITE REPOSITORY REGRESSION:
+------------------------------------------------------------
+...............................................                          [100%]
+47 passed in 1.21s
+
+TARGETED PERSISTENCE REGRESSION:
+------------------------------------------------------------
+........................................................................ [ 36%]
+........................................................................ [ 73%]
+...................................................                      [100%]
+195 passed in 1.83s
+
+FULL OFFLINE REGRESSION:
+------------------------------------------------------------
+........................................................................ [  7%]
+........................................................................ [ 14%]
+........................................................................ [ 22%]
+........................................................................ [ 29%]
+........................................................................ [ 36%]
+........................................................................ [ 44%]
+........................................................................ [ 51%]
+........................................................................ [ 58%]
+........................................................................ [ 66%]
+........................................................................ [ 73%]
+........................................................................ [ 81%]
+........................................................................ [ 88%]
+........................................................................ [ 95%]
+.........................................                                [100%]
+977 passed in 80.16s (0:01:20)
+
+BTC LEGACY_V1 GOLDEN:
+------------------------------------------------------------
+=== BACKTEST BENCHMARK ===
+Symbol:           BTCUSDT
+Interval:         1m
+îwiece:           5000
+Kapita│ pocz╣tk.: 1000.0
+Kapita│ ko˝cowy:  1014.8392976799995
+Transakcje:       13
+Wygrane:          7
+Przegrane:        6
+Win rate:         53.84615384615385
+Total profit:     14.839297679999504
+Max drawdown:     18.485012400000187
+Profit factor:    1.692128777090018
+Average win:      5.182768514285695
+Average loss:     3.573346986666712
+Largest win:     13.000798400000047
+Largest loss:     9.580003080000042
+Expectancy:       1.1414844369230388
+
+A.10 SAFETY:
+------------------------------------------------------------
+- design/audit only
+- data/live/trading.db unchanged
+- database remains HALTED
+- HALT clear not performed
+- runtime SQLite wiring not performed
+- trading not activated
+- no orders created
+- no executions created
+- no positions created
+- no trades created
+- legacy persistence not deleted
+- protected user change preserved
+
+CONCLUSION:
+PHASE 13 A.10 PASS
+
+NEXT:
+A.11 SQLITE RUNTIME PERSISTENCE ADAPTER
+TEMP DATABASES ONLY
+
+REAL RUNTIME CUTOVER:
+NOT AUTHORIZED
+
+HALT CLEAR:
+NOT AUTHORIZED
