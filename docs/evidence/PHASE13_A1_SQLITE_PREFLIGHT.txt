@@ -1,0 +1,116 @@
+﻿PHASE 13 A.1 - SQLITE LEDGER DESIGN PREFLIGHT
+============================================================
+
+UTC: 2026-09-18T16:03:58.7178124Z
+BASE HEAD: 37302f2
+BRANCH: phase-13-sqlite-ledger-preflight
+
+SQLITE3 AVAILABLE: YES
+SQLITE VERSION: 3.50.4
+DATABASE CREATED: NO
+LIVE DATA MIGRATED: NO
+
+PERSISTENCE SOURCE FILES:
+------------------------------------------------------------
+src\accounting\__init__.py
+src\accounting\cash_ledger.py
+src\accounting\cash_runtime.py
+src\accounting\journal_entry_recovery.py
+src\accounting\mtm_kernel.py
+src\accounting\pln_kernel.py
+src\accounting\portfolio_snapshot.py
+src\accounting\production_fx_scheduler.py
+src\accounting\production_resolvers.py
+src\accounting\production_startup.py
+src\accounting\realized_persistence.py
+src\accounting\runtime_bridge.py
+src\accounting\runtime_integration.py
+src\accounting\startup_metadata_store.py
+src\agent\agent_engine.py
+src\agent\agent_loop.py
+src\agent\agent_state.py
+src\agent\ai_manager.py
+src\agent\live_state_store.py
+src\agent\multi_asset_runner.py
+src\backtest\backtest_engine.py
+src\backtest\backtest_runner.py
+src\backtest\strategy_optimizer.py
+src\backtest\test_runner.py
+src\backtest\validation_runner.py
+src\config_fingerprint.py
+src\data\assets.py
+src\data\data_provider.py
+src\execution\capital_admission.py
+src\execution\capital_exposure.py
+src\execution\capital_runtime.py
+src\execution\capital_startup.py
+src\execution\capital_startup_store.py
+src\execution\execution_journal.py
+src\execution\execution_policy.py
+src\execution\live_preflight.py
+src\execution\paper_broker.py
+src\execution\runtime.py
+src\execution\state_store.py
+src\fx\converter.py
+src\fx\freshness.py
+src\fx\models.py
+src\fx\providers.py
+src\fx\realized_booking.py
+src\fx\realized_selection.py
+src\market\__init__.py
+src\market\market_session.py
+src\trading\paper_trading.py
+
+SQLITE REFERENCES:
+------------------------------------------------------------
+C:\Users\ddare\Desktop\Al_Trading_Al\src\accounting\mtm_kernel.py:148: update cash/equity/exposure, persist a ledger, or introduce SQLite.
+C:\Users\ddare\Desktop\Al_Trading_Al\src\accounting\__pycache__\mtm_kernel.cpython-314.pyc:78: update cash/equity/exposure, persist a ledger, or introduce SQLite.
+
+TARGETED PERSISTENCE TESTS:
+------------------------------------------------------------
+........................................................................ [ 48%]
+........................................................................ [ 97%]
+....                                                                     [100%]
+148 passed in 0.90s
+
+FULL OFFLINE REGRESSION:
+------------------------------------------------------------
+........................................................................ [  7%]
+........................................................................ [ 15%]
+........................................................................ [ 23%]
+........................................................................ [ 30%]
+........................................................................ [ 38%]
+........................................................................ [ 46%]
+........................................................................ [ 54%]
+........................................................................ [ 61%]
+........................................................................ [ 69%]
+........................................................................ [ 77%]
+........................................................................ [ 85%]
+........................................................................ [ 92%]
+..................................................................       [100%]
+930 passed in 79.97s (0:01:19)
+
+BTC LEGACY GOLDEN:
+------------------------------------------------------------
+=== BACKTEST BENCHMARK ===
+Symbol:           BTCUSDT
+Interval:         1m
+îwiece:           5000
+Kapita│ pocz╣tk.: 1000.0
+Kapita│ ko˝cowy:  1014.8392976799995
+Transakcje:       13
+Wygrane:          7
+Przegrane:        6
+Win rate:         53.84615384615385
+Total profit:     14.839297679999504
+Max drawdown:     18.485012400000187
+Profit factor:    1.692128777090018
+Average win:      5.182768514285695
+Average loss:     3.573346986666712
+Largest win:     13.000798400000047
+Largest loss:     9.580003080000042
+Expectancy:       1.1414844369230388
+
+CONCLUSION:
+READY FOR SQLITE SCHEMA DESIGN
+NOT AUTHORIZED FOR LIVE DATA MIGRATION
