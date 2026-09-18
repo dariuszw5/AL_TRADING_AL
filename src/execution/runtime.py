@@ -29,6 +29,7 @@ class RuntimeAssetStatus(
     HOLD = "HOLD"
     FILLED = "FILLED"
     REJECTED = "REJECTED"
+    CAPITAL_REJECTED = "CAPITAL_REJECTED"
     EXIT_PENDING = "EXIT_PENDING"
 
     DATA_ERROR = "DATA_ERROR"
@@ -82,6 +83,7 @@ class RuntimeAssetResult:
 
     market_snapshot: object | None = None
     market_session: object | None = None
+    capital_admission: object | None = None
 
 
 @dataclass(frozen=True)
@@ -132,6 +134,7 @@ class RealisticPaperRuntime:
             PaperMode.REALISTIC_PAPER
         ),
         state_store=None,
+        admission_provider=None,
     ):
         self.market_data_service = (
             market_data_service
@@ -153,6 +156,16 @@ class RealisticPaperRuntime:
 
         self.paper_mode = paper_mode
         self.state_store = state_store
+
+        if (
+            admission_provider is not None
+            and not callable(admission_provider)
+        ):
+            raise TypeError(
+                "admission_provider must be callable"
+            )
+
+        self.admission_provider = admission_provider
 
         if (
             getattr(
@@ -515,6 +528,69 @@ class RealisticPaperRuntime:
                 ),
             )
 
+        capital_admission = None
+
+        if (
+            decision.intent is OrderIntent.ENTRY
+            and decision.side is OrderSide.BUY
+            and self.admission_provider is not None
+        ):
+            try:
+                capital_admission = self.admission_provider(
+                    asset_id=asset_id,
+                    snapshot=snapshot,
+                    position=current_position,
+                    decision=decision,
+                )
+            except Exception as exc:
+                return RuntimeAssetResult(
+                    asset_id=asset_id,
+                    status=RuntimeAssetStatus.CAPITAL_REJECTED,
+                    error=(
+                        "CAPITAL_ADMISSION_PROVIDER_ERROR: "
+                        f"{type(exc).__name__}: {exc}"
+                    ),
+                    market_snapshot=snapshot,
+                    market_session=market_session,
+                )
+
+            allowed = getattr(
+                capital_admission,
+                "allowed",
+                None,
+            )
+
+            if not isinstance(allowed, bool):
+                return RuntimeAssetResult(
+                    asset_id=asset_id,
+                    status=RuntimeAssetStatus.CAPITAL_REJECTED,
+                    error="CAPITAL_ADMISSION_INVALID_RESULT",
+                    market_snapshot=snapshot,
+                    market_session=market_session,
+                    capital_admission=capital_admission,
+                )
+
+            if not allowed:
+                reason = str(
+                    getattr(
+                        capital_admission,
+                        "reason",
+                        "UNKNOWN",
+                    )
+                )
+
+                return RuntimeAssetResult(
+                    asset_id=asset_id,
+                    status=RuntimeAssetStatus.CAPITAL_REJECTED,
+                    error=(
+                        "CAPITAL_ADMISSION_REJECTED:"
+                        + reason
+                    ),
+                    market_snapshot=snapshot,
+                    market_session=market_session,
+                    capital_admission=capital_admission,
+                )
+
         order = self._make_order(
             asset_id=asset_id,
             snapshot=snapshot,
@@ -565,6 +641,9 @@ class RealisticPaperRuntime:
             market_snapshot=snapshot,
             market_session=(
                 market_session
+            ),
+            capital_admission=(
+                capital_admission
             ),
         )
 
