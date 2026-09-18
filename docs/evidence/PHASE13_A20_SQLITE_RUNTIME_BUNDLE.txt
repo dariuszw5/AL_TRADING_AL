@@ -1,0 +1,125 @@
+﻿PHASE 13 A.20 - COMPLETE TEMP SQLITE-ONLY RUNTIME BUNDLE
+============================================================
+
+UTC:
+2026-09-18T18:34:17.6376746Z
+
+BASE HEAD:
+a33300d
+
+CONTROLLED RED:
+CONFIRMED
+
+A.20 TESTS:
+------------------------------------------------------------
+....                                                                     [100%]
+4 passed in 0.31s
+
+SQLITE PHASE 13 REGRESSION:
+------------------------------------------------------------
+........................................................................ [ 66%]
+....................................                                     [100%]
+108 passed in 3.06s
+
+TARGETED ACCOUNTING + PERSISTENCE REGRESSION:
+------------------------------------------------------------
+........................................................................ [ 18%]
+........................................................................ [ 37%]
+........................................................................ [ 56%]
+........................................................................ [ 75%]
+........................................................................ [ 94%]
+......................                                                   [100%]
+382 passed in 3.83s
+
+FULL OFFLINE REGRESSION:
+------------------------------------------------------------
+........................................................................ [  6%]
+........................................................................ [ 13%]
+........................................................................ [ 20%]
+........................................................................ [ 27%]
+........................................................................ [ 34%]
+........................................................................ [ 41%]
+........................................................................ [ 48%]
+........................................................................ [ 55%]
+........................................................................ [ 62%]
+........................................................................ [ 69%]
+........................................................................ [ 76%]
+........................................................................ [ 83%]
+........................................................................ [ 90%]
+........................................................................ [ 97%]
+..............................                                           [100%]
+1038 passed in 74.67s (0:01:14)
+
+BTC LEGACY_V1 GOLDEN:
+------------------------------------------------------------
+=== BACKTEST BENCHMARK ===
+Symbol:           BTCUSDT
+Interval:         1m
+îwiece:           5000
+Kapita│ pocz╣tk.: 1000.0
+Kapita│ ko˝cowy:  1014.8392976799995
+Transakcje:       13
+Wygrane:          7
+Przegrane:        6
+Win rate:         53.84615384615385
+Total profit:     14.839297679999504
+Max drawdown:     18.485012400000187
+Profit factor:    1.692128777090018
+Average win:      5.182768514285695
+Average loss:     3.573346986666712
+Largest win:     13.000798400000047
+Largest loss:     9.580003080000042
+Expectancy:       1.1414844369230388
+
+LIVE DATABASE SHA256 BEFORE:
+F51C2DB77B6346372340AC772DD58099CF4E842144A7F196567A2E0D4591212D
+
+LIVE DATABASE SHA256 AFTER:
+F51C2DB77B6346372340AC772DD58099CF4E842144A7F196567A2E0D4591212D
+
+LIVE DATABASE MODIFIED:
+NO
+
+A.9 BACKUP SHA256 BEFORE:
+ACBDA104422BFB48C2235CE9BEC38278D69AE3EE2536A3D90A62F5F9EA7BA5A4
+
+A.9 BACKUP SHA256 AFTER:
+ACBDA104422BFB48C2235CE9BEC38278D69AE3EE2536A3D90A62F5F9EA7BA5A4
+
+VERIFIED:
+- one SQLite writer shared by accounting and injected durability
+- externally injected repository ownership is explicit
+- live database path rejected before bundle open
+- startup cash reconciliation enforced
+- OPEN position restored from SQLite
+- actual RealisticPaperRuntime used after restart
+- actual PaperBroker used with execution_journal=None
+- persistent HALT preserved
+- HALT permits EXIT for existing OPEN position
+- actual paper EXIT execution generated
+- existing accounting recovers exact SQLite ENTRY evidence
+- realized native PnL = 19.58 USD
+- realized PLN = 78.320 PLN
+- atomic SQLite close/realized/cash settlement
+- cash 1000 -> 1078.320 PLN
+- cash and realized PnL reconciliation match
+- second restart restores no OPEN position
+- HALT blocks new ENTRY before decision provider
+- no JSON/JSONL durable files created
+- default execution/accounting sources unchanged
+- live DB unchanged
+- real HALT not cleared
+- no real orders
+- trading not activated
+- protected user change preserved
+
+CONCLUSION:
+PHASE 13 A.20 PASS
+
+NEXT:
+A.21 LIVE SQLITE CUTOVER PREFLIGHT
+DESIGN/AUDIT ONLY
+REAL data/live/trading.db REMAINS HALTED
+
+HARD STOP:
+REQUIRED BEFORE REAL LIVE DATABASE WIRING OR HALT CLEAR

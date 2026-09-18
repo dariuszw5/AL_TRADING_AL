@@ -80,6 +80,7 @@ class SQLiteInjectedRuntime:
         runtime,
         database_path,
         live_database_path,
+        repository=None,
         cycle_mapper,
         snapshot_provider,
         restore_snapshot,
@@ -129,11 +130,31 @@ class SQLiteInjectedRuntime:
         self.snapshot_provider = snapshot_provider
         self.restore_snapshot = restore_snapshot
 
-        self.repository = (
-            SQLiteLedgerRepository.open_writer(
-                database_path
+        if repository is None:
+            self.repository = (
+                SQLiteLedgerRepository.open_writer(
+                    database_path
+                )
             )
-        )
+            self._owns_repository = True
+        else:
+            if not isinstance(
+                repository,
+                SQLiteLedgerRepository,
+            ):
+                raise TypeError(
+                    "repository must be SQLiteLedgerRepository"
+                )
+
+            policy = repository.connection_policy()
+
+            if int(policy["query_only"]) != 0:
+                raise SQLiteInjectedRuntimeError(
+                    "injected repository must be writable"
+                )
+
+            self.repository = repository
+            self._owns_repository = False
 
         self.runtime_adapter = (
             SQLiteRuntimePersistenceAdapter(
@@ -148,7 +169,8 @@ class SQLiteInjectedRuntime:
         )
 
     def close(self):
-        self.repository.close()
+        if self._owns_repository:
+            self.repository.close()
 
     def _open_assets(self):
         rows = self.repository.connection.execute(
