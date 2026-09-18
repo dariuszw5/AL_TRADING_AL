@@ -1,0 +1,130 @@
+﻿PHASE 13 A.19 - SQLITE ACCOUNTING BRIDGE + CASH AUTHORITY
+============================================================
+
+UTC:
+2026-09-18T18:27:34.4250629Z
+
+BASE HEAD:
+6b12394
+
+CONTROLLED RED:
+CONFIRMED
+
+FIRST GREEN ATTEMPT:
+SAFETY STOP
+
+ROOT CAUSE:
+SQLiteLedgerRepository.reconcile_cash correctly raises
+ReconciliationMismatchError on mismatch before returning a reconciliation
+object.
+
+FIX:
+SQLiteCashAuthority translates repository ReconciliationMismatchError
+into SQLiteAccountingAuthorityError without weakening reconciliation.
+
+A.19 TESTS:
+------------------------------------------------------------
+.....                                                                    [100%]
+5 passed in 0.29s
+
+SQLITE PHASE 13 REGRESSION:
+------------------------------------------------------------
+........................................................................ [ 69%]
+................................                                         [100%]
+104 passed in 2.85s
+
+TARGETED ACCOUNTING + PERSISTENCE REGRESSION:
+------------------------------------------------------------
+........................................................................ [ 20%]
+........................................................................ [ 41%]
+........................................................................ [ 62%]
+........................................................................ [ 83%]
+........................................................                 [100%]
+344 passed in 3.55s
+
+FULL OFFLINE REGRESSION:
+------------------------------------------------------------
+........................................................................ [  6%]
+........................................................................ [ 13%]
+........................................................................ [ 20%]
+........................................................................ [ 27%]
+........................................................................ [ 34%]
+........................................................................ [ 41%]
+........................................................................ [ 48%]
+........................................................................ [ 55%]
+........................................................................ [ 62%]
+........................................................................ [ 69%]
+........................................................................ [ 76%]
+........................................................................ [ 83%]
+........................................................................ [ 90%]
+........................................................................ [ 97%]
+..........................                                               [100%]
+1034 passed in 74.24s (0:01:14)
+
+BTC LEGACY_V1 GOLDEN:
+------------------------------------------------------------
+=== BACKTEST BENCHMARK ===
+Symbol:           BTCUSDT
+Interval:         1m
+îwiece:           5000
+Kapita│ pocz╣tk.: 1000.0
+Kapita│ ko˝cowy:  1014.8392976799995
+Transakcje:       13
+Wygrane:          7
+Przegrane:        6
+Win rate:         53.84615384615385
+Total profit:     14.839297679999504
+Max drawdown:     18.485012400000187
+Profit factor:    1.692128777090018
+Average win:      5.182768514285695
+Average loss:     3.573346986666712
+Largest win:     13.000798400000047
+Largest loss:     9.580003080000042
+Expectancy:       1.1414844369230388
+
+LIVE DATABASE SHA256 BEFORE:
+F51C2DB77B6346372340AC772DD58099CF4E842144A7F196567A2E0D4591212D
+
+LIVE DATABASE SHA256 AFTER:
+F51C2DB77B6346372340AC772DD58099CF4E842144A7F196567A2E0D4591212D
+
+LIVE DATABASE MODIFIED:
+NO
+
+A.9 BACKUP SHA256 BEFORE:
+ACBDA104422BFB48C2235CE9BEC38278D69AE3EE2536A3D90A62F5F9EA7BA5A4
+
+A.9 BACKUP SHA256 AFTER:
+ACBDA104422BFB48C2235CE9BEC38278D69AE3EE2536A3D90A62F5F9EA7BA5A4
+
+VERIFIED:
+- existing Phase 09 accounting implementation reused
+- ENTRY execution recovered from SQLite after restart
+- net realized native PnL computed by existing bridge
+- net realized PLN computed by existing bridge
+- accounting calculation does not mutate cash early
+- SQLite is settled-cash authority
+- repository reconciliation mismatch remains fail-closed
+- authority exposes accounting-layer mismatch error
+- realized result maps through A.17
+- EXIT settles through A.14 atomic cycle
+- cash 1000 -> 1078.320 PLN
+- exact replay does not double-book cash
+- no legacy cash ledger JSONL required
+- no realized accounting JSONL required
+- existing accounting/runtime sources unchanged
+- live DB unchanged
+- real HALT not cleared
+- trading not activated
+- protected user change preserved
+
+CONCLUSION:
+PHASE 13 A.19 PASS
+
+NEXT:
+A.20 COMPLETE TEMP SQLITE-ONLY RUNTIME BUNDLE
+ACTUAL PAPER EXIT AFTER RESTART
+TEMP/TEST SQLITE PATHS ONLY
+
+REAL LIVE CUTOVER:
+NOT AUTHORIZED
