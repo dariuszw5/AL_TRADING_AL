@@ -296,6 +296,14 @@ class SQLiteInjectedRuntime:
             self._persist_write(
                 write
             )
+
+            persisted = (
+                _required_text(
+                    write.intent,
+                    "write.intent",
+                ).upper()
+                != "NOOP"
+            )
         except Exception:
             self.restore_snapshot(
                 snapshot
@@ -304,7 +312,7 @@ class SQLiteInjectedRuntime:
 
         return SQLiteInjectedRunResult(
             runtime_result=runtime_result,
-            persisted=True,
+            persisted=persisted,
             blocked_by_halt=False,
             asset_id=asset_id,
         )
