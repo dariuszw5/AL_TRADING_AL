@@ -1,0 +1,144 @@
+﻿PHASE 13 A.21 - FINAL LIVE SQLITE CUTOVER PREFLIGHT
+============================================================
+
+UTC:
+2026-09-18T18:44:53.4208621Z
+
+BASE HEAD:
+4ddbdb9
+
+LIVE SQLITE READ-ONLY AUDIT:
+------------------------------------------------------------
+LIVE_SQLITE_AUDIT
+QUERY_ONLY=1
+JOURNAL_MODE=wal
+FOREIGN_KEYS=1
+SCHEMA_VERSION=1
+SCHEMA_MIGRATION=phase13_trading_schema_v1
+HALTED=1
+HALT_REASON=FRESH_BOOTSTRAP_REQUIRES_EXPLICIT_ACTIVATION
+CASH_BALANCE_PLN=1000
+LAST_PROCESSED_TIMESTAMP=None
+ORDERS=0
+EXECUTIONS=0
+POSITIONS=0
+TRADES=0
+PORTFOLIO_TRANSACTIONS=1
+CASH_RECONCILIATION=True
+CASH_LEDGER_PLN=1000
+CASH_STATE_PLN=1000
+REALIZED_RECONCILIATION=True
+TRADE_REALIZED_PNL_PLN=0
+LEDGER_REALIZED_PNL_PLN=0
+INTEGRITY_CHECK=ok
+FOREIGN_KEY_VIOLATIONS=0
+ONLY_TRANSACTION_TYPE=INITIAL_CASH
+ONLY_TRANSACTION_AMOUNT_PLN=1000
+LIVE_SQLITE_PREFLIGHT=PASS
+RUNTIME_SQLITE_WIRING=NO
+REAL_HALT_CLEARED=NO
+TRADING_ACTIVATED=NO
+
+
+PRODUCTION WIRING REFERENCES:
+------------------------------------------------------------
+src/persistence/sqlite_runtime_bundle.py:40:class SQLiteOnlyRuntimeBundle:
+src/persistence/sqlite_runtime_bundle.py:79:def build_sqlite_only_runtime_bundle(
+src/persistence/sqlite_runtime_bundle.py:223:        return SQLiteOnlyRuntimeBundle(
+tests/test_phase13_sqlite_runtime_bundle.py:64:from src.persistence.sqlite_runtime_bundle import (
+tests/test_phase13_sqlite_runtime_bundle.py:65:    build_sqlite_only_runtime_bundle,
+tests/test_phase13_sqlite_runtime_bundle.py:485:    return build_sqlite_only_runtime_bundle(
+tests/test_phase13_sqlite_runtime_bundle.py:756:        build_sqlite_only_runtime_bundle(
+
+SQLITE PHASE 13 REGRESSION:
+------------------------------------------------------------
+........................................................................ [ 66%]
+....................................                                     [100%]
+108 passed in 3.03s
+
+FULL OFFLINE REGRESSION:
+------------------------------------------------------------
+........................................................................ [  6%]
+........................................................................ [ 13%]
+........................................................................ [ 20%]
+........................................................................ [ 27%]
+........................................................................ [ 34%]
+........................................................................ [ 41%]
+........................................................................ [ 48%]
+........................................................................ [ 55%]
+........................................................................ [ 62%]
+........................................................................ [ 69%]
+........................................................................ [ 76%]
+........................................................................ [ 83%]
+........................................................................ [ 90%]
+........................................................................ [ 97%]
+..............................                                           [100%]
+1038 passed in 74.69s (0:01:14)
+
+BTC LEGACY_V1 GOLDEN:
+------------------------------------------------------------
+=== BACKTEST BENCHMARK ===
+Symbol:           BTCUSDT
+Interval:         1m
+îwiece:           5000
+Kapita│ pocz╣tk.: 1000.0
+Kapita│ ko˝cowy:  1014.8392976799995
+Transakcje:       13
+Wygrane:          7
+Przegrane:        6
+Win rate:         53.84615384615385
+Total profit:     14.839297679999504
+Max drawdown:     18.485012400000187
+Profit factor:    1.692128777090018
+Average win:      5.182768514285695
+Average loss:     3.573346986666712
+Largest win:     13.000798400000047
+Largest loss:     9.580003080000042
+Expectancy:       1.1414844369230388
+
+LIVE DATABASE SHA256 BEFORE:
+F51C2DB77B6346372340AC772DD58099CF4E842144A7F196567A2E0D4591212D
+
+LIVE DATABASE SHA256 AFTER:
+F51C2DB77B6346372340AC772DD58099CF4E842144A7F196567A2E0D4591212D
+
+LIVE DATABASE MODIFIED:
+NO
+
+A.9 BACKUP SHA256 BEFORE:
+ACBDA104422BFB48C2235CE9BEC38278D69AE3EE2536A3D90A62F5F9EA7BA5A4
+
+A.9 BACKUP SHA256 AFTER:
+ACBDA104422BFB48C2235CE9BEC38278D69AE3EE2536A3D90A62F5F9EA7BA5A4
+
+A.9 BACKUP MODIFIED:
+NO
+
+VERIFIED:
+- live SQLite opened read-only
+- schema version 1
+- phase13_trading_schema_v1
+- real HALT remains active
+- halt reason remains FRESH_BOOTSTRAP_REQUIRES_EXPLICIT_ACTIVATION
+- live cash remains 1000 PLN
+- no processed runtime timestamp
+- orders/executions/positions/trades remain zero
+- exactly one INITIAL_CASH transaction remains
+- cash reconciliation matches
+- realized reconciliation matches zero
+- integrity check ok
+- no foreign key violations
+- no production runtime SQLite bundle wiring
+- live DB byte-identical
+- backup byte-identical
+- protected user change preserved
+- trading not activated
+
+PHASE 13 STATUS:
+COMPLETE
+
+NEXT:
+PHASE 14
+
+HARD STOP:
+REQUIRED BEFORE REAL LIVE DATABASE WIRING OR REAL HALT CLEAR
