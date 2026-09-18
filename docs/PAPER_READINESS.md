@@ -332,3 +332,30 @@ No formal `PAPER_READINESS` upgrade is claimed.
 
 See `docs/PHASE10_REPORT.md`.
 <!-- PHASE10_CLOSURE_END -->
+<!-- PHASE11_CLOSURE_START -->
+## Phase 11 closure — authoritative settled cash PLN
+
+Phase 11 verified a controlled BTCUSDT REALISTIC_V2 settled-cash PLN path with:
+
+- append-only authoritative cash persistence,
+- restart-safe initial cash,
+- exact settlement by persisted `net_realized_pnl_pln`,
+- post-settlement portfolio cash refresh,
+- startup reconciliation of the realized-booking / cash-settlement crash gap.
+
+No formal `PAPER_READINESS` upgrade is claimed.
+
+| Asset | Phase 11 readiness | Note |
+| --- | --- | --- |
+| BTCUSDT | NOT_READY | Controlled persistent settled cash verified; buying power/capital reservation/all-asset orchestration unresolved |
+| ETHUSDT | NOT_READY | Phase 11 persistent cash path not live-verified |
+| SOLUSDT | NOT_READY | Phase 11 persistent cash path not live-verified |
+| BNBUSDT | NOT_READY | Phase 11 persistent cash path not live-verified |
+| XRPUSDT | NOT_READY | Phase 11 persistent cash path not live-verified |
+| EURUSD | NOT_READY | Phase 11 persistent cash path not live-verified |
+| AAPL | NOT_READY | Phase 11 persistent cash path not live-verified |
+| GOLD_FUT_CONT | NOT_READY | Accounting remains blocked; rollover/multiplier unresolved |
+| WTI_FUT_CONT | NOT_READY | Accounting remains blocked; rollover/multiplier unresolved |
+
+See `docs/PHASE11_REPORT.md`.
+<!-- PHASE11_CLOSURE_END -->

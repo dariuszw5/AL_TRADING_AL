@@ -51,3 +51,26 @@
 - [ ] Do not silently replace the existing public/preflight entrypoint with
       the controlled Phase 10 smoke entrypoint.
 <!-- PHASE10_CLOSURE_END -->
+<!-- PHASE11_CLOSURE_START -->
+## After Phase 11 closure
+
+- [ ] Define and approve buying-power semantics.
+- [ ] Define and approve capital-reservation semantics.
+- [ ] Define margin/collateral/leverage semantics before implementation.
+- [ ] Define short-financing semantics before implementation.
+- [ ] Decide whether unrealized MTM snapshots require persistence.
+- [ ] Decide whether the Phase 11 cash ledger needs multi-process locking or a
+      strict single-writer process contract.
+- [ ] Refine the generic `ACCOUNTING_PERSISTENCE_NOT_IMPLEMENTED` limitation
+      taxonomy without weakening protected contracts.
+- [ ] Formally approve permanent production FX/runtime policy values.
+- [ ] Measure persisted cash/accounting timing for the all-asset set before
+      enabling an all-asset cash runner.
+- [ ] Keep `ENTRY_FEE_SETTLED_AT_REALIZATION` explicit until a different cash
+      timing policy receives a dedicated HARD STOP.
+- [ ] Keep Yahoo FX unofficial / degraded by design.
+- [ ] Keep FX conversion-cost modelling as explicit debt.
+- [ ] Keep GOLD_FUT_CONT and WTI_FUT_CONT blocked until multiplier/rollover
+      semantics receive a separate HARD STOP.
+- [ ] Do not start SQLite migration without its dedicated HARD STOP.
+<!-- PHASE11_CLOSURE_END -->

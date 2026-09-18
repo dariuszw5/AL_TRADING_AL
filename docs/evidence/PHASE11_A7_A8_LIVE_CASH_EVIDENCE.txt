@@ -1,0 +1,93 @@
+PHASE 11 A.7 + A.8 LIVE CASH EVIDENCE — VERIFIED SUMMARY
+
+HEAD DURING LIVE SMOKES:
+bfe928f
+
+A.7 NORMAL CASH ROUNDTRIP
+
+OFFLINE PRECHECK:
+34 passed
+
+OPEN:
+Execution runtime status: FILLED
+Accounting error: None
+MTM available: True
+Realized available: False
+Portfolio cash PLN: 1000
+Cash ledger record count: 1
+Settled cash PLN: 1000
+Open cash mutation: none
+Separate entry-fee cash deduction: none
+Wall seconds: 3.1896969
+
+RESTART CLOSE:
+Execution runtime status: FILLED
+Accounting error: None
+Realized available: True
+Realized accounting persistence: PASS
+Cash settlement persistence: PASS
+Cash delta PLN:
+-0.02466552915011231497149716816
+Final settled cash PLN:
+999.9753344708498876850285028
+Cash ledger records: 2
+Realized records: 1
+Startup metadata records: 2
+Final positions: 0
+Final unresolved execution journal records: 0
+Cross-journal linkage: PASS
+Real exchange orders: 0
+Wall seconds: 3.2430303
+
+A.8 CASH CRASH-GAP RECOVERY
+
+OFFLINE PRECHECK:
+42 passed
+
+OPEN:
+Initial settled cash PLN: 1000
+Paper OPEN: PASS
+Wall seconds: 5.3163488
+
+INTENTIONAL GAP CREATION:
+Phase 10 CLOSE persisted realized accounting without the Phase 11 cash wrapper.
+Paper position closed successfully.
+Realized records: 1
+Cash records: 1
+Settled cash still: 1000 PLN
+Persisted realized PnL PLN:
+-0.01088051268808911495720737501
+Booking key:
+f2372b82a18cbe9d23185b9cbbed439e1e6cddf9ead1634128f34d0dfe3551ff
+Realized record hash:
+9e398fca2fc56010a457015ea1184ee463f34ee45fd9bcfe7eca2fc61fa57d32
+Wall seconds: 3.1841992
+
+STARTUP RECONCILIATION:
+No paper cycle.
+No network accounting prefetch.
+Cash records before wiring: 1
+Cash records after startup reconciliation: 2
+Realized bookings inspected: 1
+Missing cash settlements appended: 1
+Cash delta PLN:
+-0.01088051268808911495720737501
+Final settled cash PLN:
+999.9891194873119108850427926
+Cash record hash:
+277caffdf6831549cc89355f4d4afa1690c1808271822fba0158b11cfbbc7dcf
+Startup reconciliation: PASS
+Crash-gap recovery: PASS
+Wall seconds: 0.2912694
+
+FINAL:
+Cash ledger records: 2
+Realized records: 1
+Startup metadata records: 3
+Final positions: 0
+Final unresolved execution journal records: 0
+Real exchange orders: 0
+Temporary state removed
+Repository HEAD unchanged
+Index clean
+User tests/test_agent_config.py unchanged
