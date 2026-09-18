@@ -1,0 +1,124 @@
+﻿PHASE 12 A.9 - CAPITAL SEMANTICS CLOSURE AUDIT
+============================================================
+
+UTC: 2026-09-18T15:58:16.9577392Z
+BRANCH: phase-12-capital-semantics-preflight
+BASE HEAD: 2a97a8b
+
+RUNTIME BOUNDARY TEST FILE:
+C:\Users\ddare\Desktop\Al_Trading_Al\tests\test_phase12_capital_runtime.py
+
+REQUIRED BOUNDARY TESTS:
+test_runtime_default_none_preserves_existing_execution_path
+test_oversized_long_is_blocked_before_broker
+test_long_within_limit_reaches_broker
+test_zero_cash_blocks_new_long_before_broker
+test_exit_bypasses_capital_admission_provider
+test_admission_provider_exception_fails_closed_before_broker
+test_invalid_admission_provider_result_fails_closed
+test_provider_fails_closed_when_fx_quotes_missing
+test_wire_phase12_requires_enabled_flag_before_phase11_wiring
+test_wire_phase12_installs_provider_and_preserves_phase11_runtime
+
+PAPERBROKER:
+C:\Users\ddare\Desktop\Al_Trading_Al\src\execution\paper_broker.py
+
+PROTECTED USER FILE:
+tests/test_agent_config.py
+
+PROTECTED USER FILE SHA256:
+CCC692B7EB3115DA41495007AFE240D0BE50ADEABBB97DAA06096AE6CBDBA06B
+
+TARGETED PHASE 12 TEST RESULT:
+------------------------------------------------------------
+........................................................................ [ 75%]
+.......................                                                  [100%]
+95 passed in 0.38s
+
+IDEMPOTENCY REGRESSION:
+------------------------------------------------------------
+........................................................................ [ 74%]
+.........................                                                [100%]
+97 passed in 0.55s
+
+FULL OFFLINE REGRESSION:
+------------------------------------------------------------
+........................................................................ [  7%]
+........................................................................ [ 15%]
+........................................................................ [ 23%]
+........................................................................ [ 30%]
+........................................................................ [ 38%]
+........................................................................ [ 46%]
+........................................................................ [ 54%]
+........................................................................ [ 61%]
+........................................................................ [ 69%]
+........................................................................ [ 77%]
+........................................................................ [ 85%]
+........................................................................ [ 92%]
+..................................................................       [100%]
+930 passed in 73.52s (0:01:13)
+
+BTC LEGACY_V1 GOLDEN:
+------------------------------------------------------------
+=== BACKTEST BENCHMARK ===
+Symbol:           BTCUSDT
+Interval:         1m
+îwiece:           5000
+Kapita│ pocz╣tk.: 1000.0
+Kapita│ ko˝cowy:  1014.8392976799995
+Transakcje:       13
+Wygrane:          7
+Przegrane:        6
+Win rate:         53.84615384615385
+Total profit:     14.839297679999504
+Max drawdown:     18.485012400000187
+Profit factor:    1.692128777090018
+Average win:      5.182768514285695
+Average loss:     3.573346986666712
+Largest win:     13.000798400000047
+Largest loss:     9.580003080000042
+Expectancy:       1.1414844369230388
+
+GIT STATUS BEFORE CLOSURE COMMIT:
+------------------------------------------------------------
+ M tests/test_agent_config.py
+?? PHASE04_CONTRACT_RESULTS.txt
+?? PHASE04_CORE_REGRESSION.txt
+?? PHASE04_PREFLIGHT_CONTEXT.txt
+?? PHASE05_BTC_LEGACY_RESULTS.txt
+?? PHASE08_B2_CONTRACT_AUDIT.txt
+?? PHASE08_B2_INTEGRATION_AUDIT.txt
+?? PHASE08_B5_ENTRYPOINT_CONTRACT.txt
+?? PHASE08_B6A_ALL_ASSET_LIVE_PREFLIGHT.txt
+?? PHASE08_B6B_ALL_ASSET_PARALLEL_LIVE.txt
+?? PHASE08_B6F_SMOKE_CLOSE_LIVE.txt
+?? PHASE09_A1_PREFLIGHT_AUDIT.txt
+?? PHASE09_A2_FX_CONTRACT_CONTEXT.txt
+?? app/frontend/al_trading_dashboard/theme_backup/
+
+RECENT GIT LOG:
+------------------------------------------------------------
+2a97a8b Phase 12: add controlled capital accounting entrypoint
+efe156b Phase 12: persist capital startup metadata
+451f9cf Phase 12: wire controlled capital admission runtime
+6797736 Phase 12: fingerprint capital admission startup
+dee4676 Phase 12: add BTCUSDT proposed exposure calculator
+c5559fd Phase 12: add cash-backed capital admission core
+af9021d Phase 11: close authoritative cash accounting phase
+bfe928f Phase 11: add controlled cash accounting entrypoint
+
+PROTECTED CORE FILES:
+------------------------------------------------------------
+C:\Users\ddare\Desktop\Al_Trading_Al\src\execution\paper_broker.py = C08003B81EF7A3D2802B2E3FD3B6D9126CE1024CB25EA5B38FD57D62EBF29ED9
+src/accounting/cash_ledger.py = 78975DEF816433BE126007F25EA207D12CD5D2E2E623DA0892C672C104EAD2CD
+src/accounting/cash_runtime.py = E98BC9A3BB31FBFF0D865E3A511B22500B409EFAE58A9A92873F84882E25FAA0
+src/execution/capital_runtime.py = A1CE1D8736E658803A5F3B76A01914C80B1D0A814E2F0F75FA6E56F575102A9F
+src/execution/capital_admission.py = D824798773D6D434E09B0A80F9224C7432C7D174635E66C8370220C9A3B51FC7
+src/execution/capital_startup.py = 610370F8B4DADEC52452A6A27C382421CDA338CCBD6C38CE70DFBFC3213A32EB
+src/execution/capital_startup_store.py = 65BB3E4B91968B1C5E403F417964A0D478D3F2719372F843820615B64114E062
+
+CONCLUSION:
+PHASE 12 CAPITAL SEMANTICS OFFLINE CONTRACT: VERIFIED
+NO RUNTIME EXECUTION SEMANTICS CHANGED
+NO SQLITE MIGRATION PERFORMED
+NO REAL EXCHANGE ORDER SENT
