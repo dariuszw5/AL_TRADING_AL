@@ -1,0 +1,146 @@
+﻿PHASE 13 A.9 - REAL SQLITE DATABASE CREATION
+============================================================
+
+UTC:
+2026-09-18T17:12:25.7919548Z
+
+BASE HEAD:
+8177d58
+
+BRANCH:
+phase-13-sqlite-ledger-preflight
+
+EXPLICIT AUTHORIZATION:
+ACCEPTED
+
+EXPLICIT INITIAL CASH PLN:
+1000
+
+LIVE SQLITE DATABASE:
+data/live/trading.db
+
+LIVE SQLITE DATABASE SHA256:
+F51C2DB77B6346372340AC772DD58099CF4E842144A7F196567A2E0D4591212D
+
+BOOTSTRAP BACKUP:
+C:\Users\ddare\Desktop\Al_Trading_Al\data\live\backups\trading_bootstrap_20260918T171044130709Z.db
+
+BOOTSTRAP BACKUP SHA256:
+ACBDA104422BFB48C2235CE9BEC38278D69AE3EE2536A3D90A62F5F9EA7BA5A4
+
+BOOTSTRAP RESULT:
+------------------------------------------------------------
+{
+  "backup_foreign_keys": true,
+  "backup_integrity": true,
+  "backup_path": "data\\live\\backups\\trading_bootstrap_20260918T171044130709Z.db",
+  "bootstrap_id": "phase13-a9-live-20260918T171044130709Z",
+  "cash_reconciliation": true,
+  "created_at_utc": "2026-09-18T17:10:44.130709Z",
+  "executions": 0,
+  "halt_reason": "FRESH_BOOTSTRAP_REQUIRES_EXPLICIT_ACTIVATION",
+  "halted": true,
+  "initial_cash_pln": "1000",
+  "last_processed_timestamp_utc": null,
+  "live_database_foreign_keys": true,
+  "live_database_integrity": true,
+  "live_db": "data\\live\\trading.db",
+  "orders": 0,
+  "portfolio_transactions": 1,
+  "positions": 0,
+  "runtime_sqlite_wiring": false,
+  "status": "PASS",
+  "trades": 0,
+  "trading_activated": false
+}
+
+DATABASE HALTED:
+YES
+
+TRADING ACTIVATED:
+NO
+
+RUNTIME SQLITE WIRING:
+NO
+
+LEGACY/SMOKE FINANCIAL DATA MIGRATED:
+NO
+
+SQLITE REPOSITORY REGRESSION:
+------------------------------------------------------------
+...............................................                          [100%]
+47 passed in 1.32s
+
+TARGETED PERSISTENCE REGRESSION:
+------------------------------------------------------------
+........................................................................ [ 36%]
+........................................................................ [ 73%]
+...................................................                      [100%]
+195 passed in 2.03s
+
+FULL OFFLINE REGRESSION:
+------------------------------------------------------------
+........................................................................ [  7%]
+........................................................................ [ 14%]
+........................................................................ [ 22%]
+........................................................................ [ 29%]
+........................................................................ [ 36%]
+........................................................................ [ 44%]
+........................................................................ [ 51%]
+........................................................................ [ 58%]
+........................................................................ [ 66%]
+........................................................................ [ 73%]
+........................................................................ [ 81%]
+........................................................................ [ 88%]
+........................................................................ [ 95%]
+.........................................                                [100%]
+977 passed in 83.04s (0:01:23)
+
+BTC LEGACY_V1 GOLDEN:
+------------------------------------------------------------
+=== BACKTEST BENCHMARK ===
+Symbol:           BTCUSDT
+Interval:         1m
+îwiece:           5000
+Kapita│ pocz╣tk.: 1000.0
+Kapita│ ko˝cowy:  1014.8392976799995
+Transakcje:       13
+Wygrane:          7
+Przegrane:        6
+Win rate:         53.84615384615385
+Total profit:     14.839297679999504
+Max drawdown:     18.485012400000187
+Profit factor:    1.692128777090018
+Average win:      5.182768514285695
+Average loss:     3.573346986666712
+Largest win:     13.000798400000047
+Largest loss:     9.580003080000042
+Expectancy:       1.1414844369230388
+
+VERIFIED:
+------------------------------------------------------------
+- real data/live/trading.db created
+- explicit initial cash only
+- exactly one INITIAL_CASH transaction
+- cash reconciliation PASS
+- database starts HALTED
+- processed timestamp NULL
+- no inherited orders
+- no inherited executions
+- no inherited positions
+- no inherited trades
+- live DB integrity PASS
+- backup integrity PASS
+- backup restore PASS
+- protected user change preserved
+- runtime SQLite wiring NOT performed
+- trading NOT activated
+
+CONCLUSION:
+PHASE 13 A.9 PASS
+
+NEXT:
+SEPARATE RUNTIME SQLITE CUTOVER DESIGN
+
+HALT CLEAR:
+NOT AUTHORIZED BY A.9
