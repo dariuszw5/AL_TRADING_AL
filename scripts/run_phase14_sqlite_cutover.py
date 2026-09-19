@@ -7,6 +7,10 @@ from src.persistence.sqlite_application_binding import (
     Phase14ApplicationBindingError,
     build_phase14_application_context,
 )
+from src.persistence.sqlite_production_application_provider import (
+    Phase14ProductionApplicationProviderError,
+    build_phase14_production_application_inputs,
+)
 from src.persistence.sqlite_cutover_dependencies import (
     make_phase14_sqlite_bundle_kwargs_provider,
 )
@@ -26,6 +30,7 @@ EXIT_PREFLIGHT_FAILED = 5
 EXIT_DEPENDENCIES_REQUIRED = 6
 EXIT_CONSTRUCTION_FAILED = 7
 EXIT_APPLICATION_BINDING_FAILED = 8
+EXIT_PRODUCTION_BINDING_FAILED = 9
 
 
 def _parser():
@@ -127,6 +132,7 @@ def main(
     sqlite_bundle_kwargs_provider=None,
     paper_dependency_context=None,
     application_binding_inputs=None,
+    production_binding_inputs=None,
 ):
     args = _parser().parse_args(
         argv
@@ -215,6 +221,39 @@ def main(
     live = Path(
         args.live_db
     ).resolve()
+
+    if (
+        sqlite_bundle_kwargs_provider is None
+        and paper_dependency_context is None
+        and application_binding_inputs is None
+        and production_binding_inputs is not None
+    ):
+        try:
+            application_binding_inputs = (
+                build_phase14_production_application_inputs(
+                    production_binding_inputs
+                )
+            )
+        except (
+            Phase14ProductionApplicationProviderError,
+            TypeError,
+            ValueError,
+        ) as exc:
+            print(
+                "PRODUCTION BINDING FAILED: "
+                + str(exc)
+            )
+
+            _print_safe_footer(
+                constructed=False,
+                closed=False,
+            )
+
+            return EXIT_PRODUCTION_BINDING_FAILED
+
+        print(
+            "PRODUCTION BINDING: PASS"
+        )
 
     if (
         sqlite_bundle_kwargs_provider is None

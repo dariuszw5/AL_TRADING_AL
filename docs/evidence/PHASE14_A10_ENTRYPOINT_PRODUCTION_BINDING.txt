@@ -1,0 +1,112 @@
+﻿PHASE 14 A.10 - ENTRYPOINT PRODUCTION BINDING INTEGRATION
+============================================================
+
+BASE HEAD:
+d2813bc
+
+CONTROLLED RED:
+CONFIRMED
+
+A.10 TESTS:
+------------------------------------------------------------
+........                                                                 [100%]
+8 passed in 0.40s
+
+TARGETED PHASE 10-14 REGRESSION:
+------------------------------------------------------------
+........................................................................ [ 14%]
+........................................................................ [ 29%]
+........................................................................ [ 43%]
+........................................................................ [ 58%]
+........................................................................ [ 72%]
+........................................................................ [ 87%]
+................................................................         [100%]
+496 passed in 4.64s
+
+FULL OFFLINE REGRESSION:
+------------------------------------------------------------
+........................................................................ [  6%]
+........................................................................ [ 12%]
+........................................................................ [ 19%]
+........................................................................ [ 25%]
+........................................................................ [ 32%]
+........................................................................ [ 38%]
+........................................................................ [ 45%]
+........................................................................ [ 51%]
+........................................................................ [ 58%]
+........................................................................ [ 64%]
+........................................................................ [ 71%]
+........................................................................ [ 77%]
+........................................................................ [ 84%]
+........................................................................ [ 90%]
+........................................................................ [ 97%]
+.................................                                        [100%]
+1113 passed in 80.16s (0:01:20)
+
+BTC LEGACY_V1 GOLDEN:
+------------------------------------------------------------
+=== BACKTEST BENCHMARK ===
+Symbol:           BTCUSDT
+Interval:         1m
+Świece:           5000
+Kapitał początk.: 1000.0
+Kapitał końcowy:  1014.8392976799995
+Transakcje:       13
+Wygrane:          7
+Przegrane:        6
+Win rate:         53.84615384615385
+Total profit:     14.839297679999504
+Max drawdown:     18.485012400000187
+Profit factor:    1.692128777090018
+Average win:      5.182768514285695
+Average loss:     3.573346986666712
+Largest win:     13.000798400000047
+Largest loss:     9.580003080000042
+Expectancy:       1.1414844369230388
+
+DEPENDENCY RESOLUTION PRECEDENCE:
+1. sqlite_bundle_kwargs_provider
+2. paper_dependency_context
+3. application_binding_inputs
+4. production_binding_inputs
+5. fail closed
+
+VERIFIED:
+- default legacy path ignores production binding
+- explicit provider has highest priority
+- paper dependency context has second priority
+- application binding has third priority
+- production binding is resolved only when higher sources are absent
+- path guard runs before production binding
+- invalid production binding blocks construction
+- A.9 -> A.7 -> A.5 -> A.3 -> Phase13 constructs on TEMP SQLite
+- production resolver methods are not invoked during construction
+- bundle immediately closes
+- run_cycle absent
+- clear_halt absent
+- TEMP database remains HALTED
+- no JSON/JSONL durable writers
+- A.9 provider source unchanged
+- production resolver source unchanged
+- live DB unchanged
+- bootstrap backup unchanged
+- protected user change preserved
+- HALT not cleared
+- trading not activated
+
+LIVE DATABASE SHA256 BEFORE:
+F51C2DB77B6346372340AC772DD58099CF4E842144A7F196567A2E0D4591212D
+
+LIVE DATABASE SHA256 AFTER:
+F51C2DB77B6346372340AC772DD58099CF4E842144A7F196567A2E0D4591212D
+
+LIVE DATABASE MODIFIED:
+NO
+
+PHASE 14 A.10:
+PASS
+
+NEXT:
+PHASE 14 A.11 - FINAL CONSTRUCTION READINESS / ACTIVATION BOUNDARY AUDIT
+
+HARD STOP BEFORE REAL LIVE DB WRITER WIRING, LIVE RUN_CYCLE OR HALT CLEAR
