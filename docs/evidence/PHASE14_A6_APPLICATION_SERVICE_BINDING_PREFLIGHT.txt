@@ -1,0 +1,1155 @@
+﻿PHASE 14 A.6 - APPLICATION SERVICE BINDING PREFLIGHT
+============================================================
+
+BASE HEAD:
+3225267
+
+APPLICATION SERVICE INVENTORY:
+------------------------------------------------------------
+PHASE14_A6_APPLICATION_SERVICE_BINDING_INVENTORY
+TRACKED_PYTHON_FILES=462
+
+=== MARKET_DATA ===
+MARKET_DATA_DEFINITION_COUNT=14
+MARKET_DATA_REFERENCE_COUNT=328
+-- DEFINITIONS --
+scripts/audit_paper_live_restart_equivalence.py:41:FunctionDef:run_snapshot
+scripts/run_realistic_v2_execution_benchmark.py:61:FunctionDef:_snapshot
+scripts/run_realistic_v2_execution_benchmark.py:86:ClassDef:FixtureMarketData
+src/accounting/portfolio_snapshot.py:13:ClassDef:PlnPortfolioSnapshotError
+src/accounting/portfolio_snapshot.py:107:ClassDef:PlnPortfolioSnapshot
+src/accounting/portfolio_snapshot.py:128:ClassDef:PlnPortfolioSnapshotKernel
+src/accounting/runtime_integration.py:47:ClassDef:SnapshotCaptureDecisionProvider
+src/data/market_data.py:133:ClassDef:MarketSnapshot
+src/data/market_data_service.py:21:ClassDef:MarketDataCycleResult
+src/data/market_data_service.py:28:ClassDef:MarketDataService
+src/data/parallel_market_data_service.py:18:ClassDef:ParallelMarketDataService
+src/fx/realized_booking.py:87:ClassDef:RealizedFxLegSnapshot
+src/market/market_session.py:35:ClassDef:MarketSessionSnapshot
+src/persistence/sqlite_runtime_adapter.py:58:ClassDef:SQLiteRuntimeStartupSnapshot
+-- REFERENCES --
+app/backend/main.py:19:SNAPSHOTS_FILE = LIVE_STATE_DIR / "paper_live_snapshots.csv"
+app/backend/main.py:534:"snapshots": SNAPSHOTS_FILE.exists(),
+scripts/analyze_entry_quality.py:22:self.entry_snapshots = []
+scripts/analyze_entry_quality.py:48:self.entry_snapshots.append({
+scripts/analyze_entry_quality.py:95:return candles, agent.entry_snapshots, trades
+scripts/analyze_entry_quality.py:106:def print_trades(name, snapshots, trades):
+scripts/analyze_entry_quality.py:129:for index, snapshot in enumerate(snapshots, 1):
+scripts/analyze_entry_quality.py:132:snapshot["timestamp"]
+scripts/analyze_entry_quality.py:138:rsi = snapshot["rsi"]
+scripts/analyze_entry_quality.py:139:difference = snapshot["difference"]
+scripts/analyze_entry_quality.py:141:if snapshot["signal"] == "BUY":
+scripts/analyze_entry_quality.py:147:"side": snapshot["signal"],
+scripts/analyze_entry_quality.py:157:f"{snapshot['signal']:>6} "
+scripts/analyze_entry_quality.py:325:candles, snapshots, trades = run_dataset(path)
+scripts/analyze_entry_quality.py:329:snapshots,
+scripts/analyze_trade_quality.py:37:self.entry_snapshots = []
+scripts/analyze_trade_quality.py:39:def _build_snapshot(
+scripts/analyze_trade_quality.py:111:snapshot = self._build_snapshot(
+scripts/analyze_trade_quality.py:117:if snapshot is not None:
+scripts/analyze_trade_quality.py:118:snapshot["entry_timestamp"] = (
+scripts/analyze_trade_quality.py:122:self.entry_snapshots.append(snapshot)
+scripts/audit_live_open_position_failure.py:36:snapshots = [
+scripts/audit_live_open_position_failure.py:59:snapshot = snapshots[current["index"]]
+scripts/audit_live_open_position_failure.py:61:if snapshot is None:
+scripts/audit_live_open_position_failure.py:64:return snapshot
+scripts/audit_live_recovery.py:24:snapshots = [
+scripts/audit_live_recovery.py:54:snapshot = snapshots[current["index"]]
+scripts/audit_live_recovery.py:56:if snapshot is None:
+scripts/audit_live_recovery.py:59:return snapshot
+scripts/audit_live_resilience.py:64:snapshots = [
+scripts/audit_live_resilience.py:72:return snapshots[current["value"]]
+scripts/audit_live_resilience.py:94:snapshots = [
+scripts/audit_live_resilience.py:115:return snapshots[current["value"]]
+scripts/audit_live_resilience.py:121:for index in range(len(snapshots)):
+scripts/audit_paper_live_restart_equivalence.py:41:def run_snapshot(loop, candles, index, calls):
+scripts/audit_paper_live_restart_equivalence.py:62:run_snapshot(
+scripts/audit_paper_live_restart_equivalence.py:97:run_snapshot(
+scripts/audit_paper_live_restart_equivalence.py:137:run_snapshot(
+scripts/inspect_backtest_result.py:81:"market_data",
+scripts/run_phase11_cash_accounting_smoke.py:401:result.portfolio_snapshot
+scripts/run_phase11_cash_accounting_smoke.py:405:"Portfolio snapshot available:",
+scripts/run_realistic_smoke_fill.py:9:from src.data.parallel_market_data_service import (
+scripts/run_realistic_smoke_fill.py:10:ParallelMarketDataService,
+scripts/run_realistic_smoke_fill.py:71:snapshot,
+scripts/run_realistic_smoke_fill.py:92:snapshot.ask
+scripts/run_realistic_smoke_fill.py:93:or snapshot.last
+scripts/run_realistic_smoke_fill.py:147:market_data = (
+scripts/run_realistic_smoke_fill.py:148:ParallelMarketDataService(
+scripts/run_realistic_smoke_fill.py:187:market_data_service=(
+scripts/run_realistic_smoke_fill.py:188:market_data
+scripts/run_realistic_v2_execution_benchmark.py:23:from src.data.market_data import (
+scripts/run_realistic_v2_execution_benchmark.py:61:def _snapshot(
+scripts/run_realistic_v2_execution_benchmark.py:86:class FixtureMarketData:
+scripts/run_realistic_v2_execution_benchmark.py:88:self._snapshots = [
+scripts/run_realistic_v2_execution_benchmark.py:89:_snapshot(
+scripts/run_realistic_v2_execution_benchmark.py:94:_snapshot(
+scripts/run_realistic_v2_execution_benchmark.py:112:if not self._snapshots:
+scripts/run_realistic_v2_execution_benchmark.py:117:snapshot = (
+scripts/run_realistic_v2_execution_benchmark.py:118:self._snapshots.pop(0)
+scripts/run_realistic_v2_execution_benchmark.py:122:snapshots=MappingProxyType(
+scripts/run_realistic_v2_execution_benchmark.py:124:"BTCUSDT": snapshot,
+scripts/run_realistic_v2_execution_benchmark.py:166:snapshot,
+scripts/run_realistic_v2_execution_benchmark.py:262:market_data_service=(
+scripts/run_realistic_v2_execution_benchmark.py:263:FixtureMarketData()
+scripts/test_profit_protection.py:18:self.entry_snapshots = []
+scripts/test_profit_protection.py:33:self.entry_snapshots.append({
+scripts/validate_live_loop_oos.py:78:# Same API snapshot again must not process the same closed candle twice.
+src/accounting/cash_runtime.py:89:5. portfolio snapshot rebuilt from authoritative cash ledger.
+src/accounting/cash_runtime.py:101:portfolio_snapshot_builder,
+src/accounting/cash_runtime.py:137:portfolio_snapshot_builder
+src/accounting/cash_runtime.py:140:"portfolio_snapshot_builder must be callable"
+src/accounting/cash_runtime.py:150:self.portfolio_snapshot_builder = (
+src/accounting/cash_runtime.py:151:portfolio_snapshot_builder
+src/accounting/cash_runtime.py:226:snapshot = (
+src/accounting/cash_runtime.py:227:self.portfolio_snapshot_builder(
+src/accounting/cash_runtime.py:239:snapshot,
+src/accounting/cash_runtime.py:294:portfolio_snapshot,
+src/accounting/cash_runtime.py:324:portfolio_snapshot=(
+src/accounting/cash_runtime.py:325:portfolio_snapshot
+src/accounting/cash_runtime.py:450:portfolio_snapshot_builder=(
+src/accounting/cash_runtime.py:454:.portfolio_snapshot
+src/accounting/production_resolvers.py:540:market_snapshot,
+src/accounting/production_resolvers.py:602:market_snapshot,
+src/accounting/production_resolvers.py:612:snapshot_asset = str(
+src/accounting/production_resolvers.py:614:market_snapshot,
+src/accounting/production_resolvers.py:626:or snapshot_asset != asset_id
+src/accounting/production_resolvers.py:642:market_snapshot,
+src/accounting/production_resolvers.py:648:market_snapshot,
+src/accounting/production_resolvers.py:756:snapshot_capture: SnapshotCaptureDecisionProvider
+src/accounting/production_resolvers.py:885:snapshot_capture = (
+src/accounting/production_resolvers.py:892:snapshot_capture
+src/accounting/production_resolvers.py:902:snapshot_capture=(
+src/accounting/production_resolvers.py:903:snapshot_capture
+src/accounting/production_resolvers.py:946:snapshot_capture=(
+src/accounting/production_resolvers.py:947:snapshot_capture
+src/accounting/production_startup.py:708:snapshot_capture = (
+src/accounting/production_startup.py:715:snapshot_capture
+src/accounting/production_startup.py:739:snapshot_capture=(
+src/accounting/production_startup.py:740:snapshot_capture
+src/accounting/production_startup.py:787:snapshot_capture=(
+src/accounting/production_startup.py:788:snapshot_capture
+src/accounting/runtime_bridge.py:15:from src.accounting.portfolio_snapshot import (
+src/accounting/runtime_bridge.py:438:market_snapshot,
+src/accounting/runtime_bridge.py:455:snapshot_asset = (
+src/accounting/runtime_bridge.py:458:market_snapshot,
+src/accounting/runtime_bridge.py:461:"market_snapshot.asset_id",
+src/accounting/runtime_bridge.py:466:if snapshot_asset != asset_id:
+src/accounting/runtime_bridge.py:472:market_snapshot,
+src/accounting/runtime_bridge.py:477:market_snapshot,
+src/accounting/runtime_bridge.py:860:def portfolio_snapshot(
+src/accounting/runtime_integration.py:51:It captures only the snapshot that the existing REALISTIC_V2
+src/accounting/runtime_integration.py:61:self._snapshots = {}
+src/accounting/runtime_integration.py:64:self._snapshots.clear()
+src/accounting/runtime_integration.py:66:def snapshot_for(self, asset_id):
+src/accounting/runtime_integration.py:67:return self._snapshots.get(
+src/accounting/runtime_integration.py:75:snapshot,
+src/accounting/runtime_integration.py:78:self._snapshots[
+src/accounting/runtime_integration.py:80:] = snapshot
+src/accounting/runtime_integration.py:84:snapshot=snapshot,
+src/accounting/runtime_integration.py:102:portfolio_snapshot: object | None
+src/accounting/runtime_integration.py:124:snapshot_capture,
+src/accounting/runtime_integration.py:145:snapshot_capture,
+src/accounting/runtime_integration.py:149:"snapshot_capture must be "
+src/accounting/runtime_integration.py:156:snapshot_capture,
+src/accounting/runtime_integration.py:161:is not snapshot_capture
+src/accounting/runtime_integration.py:172:self.snapshot_capture = (
+src/accounting/runtime_integration.py:173:snapshot_capture
+src/accounting/runtime_integration.py:414:snapshot = (
+src/accounting/runtime_integration.py:415:self.snapshot_capture
+src/accounting/runtime_integration.py:416:.snapshot_for(
+src/accounting/runtime_integration.py:421:if snapshot is None:
+src/accounting/runtime_integration.py:430:market_snapshot=snapshot,
+src/accounting/runtime_integration.py:438:market_snapshot=snapshot,
+src/accounting/runtime_integration.py:446:market_snapshot=snapshot,
+src/accounting/runtime_integration.py:503:.portfolio_snapshot(
+src/accounting/runtime_integration.py:521:self.snapshot_capture.clear()
+src/accounting/runtime_integration.py:668:portfolio_snapshot, portfolio_limits = (
+src/accounting/runtime_integration.py:711:portfolio_snapshot=(
+src/accounting/runtime_integration.py:712:portfolio_snapshot
+src/data/data_provider.py:12:from src.data.market_data import (
+src/data/data_provider.py:566:def get_market_snapshot(
+src/data/data_provider.py:579:snapshot = (
+src/data/data_provider.py:580:self._get_binance_snapshot(
+src/data/data_provider.py:592:snapshot = (
+src/data/data_provider.py:593:self._get_yahoo_snapshot(
+src/data/data_provider.py:616:return snapshot
+src/data/data_provider.py:648:def _get_binance_snapshot(
+src/data/data_provider.py:767:def _get_yahoo_snapshot(
+src/data/market_data_service.py:9:from src.data.market_data import (
+src/data/market_data_service.py:21:class MarketDataCycleResult:
+src/data/market_data_service.py:22:snapshots: object
+src/data/market_data_service.py:28:class MarketDataService:
+src/data/market_data_service.py:66:) -> MarketDataCycleResult:
+src/data/market_data_service.py:81:snapshots = {}
+src/data/market_data_service.py:107:snapshot = (
+src/data/market_data_service.py:109:.get_market_snapshot(
+src/data/market_data_service.py:121:snapshot,
+src/data/market_data_service.py:148:snapshots[
+src/data/market_data_service.py:150:] = snapshot
+src/data/market_data_service.py:166:return MarketDataCycleResult(
+
+=== MARKET_SESSION ===
+MARKET_SESSION_DEFINITION_COUNT=3
+MARKET_SESSION_REFERENCE_COUNT=90
+-- DEFINITIONS --
+scripts/run_realistic_v2_execution_benchmark.py:135:ClassDef:FixtureSessionService
+src/market/market_session.py:35:ClassDef:MarketSessionSnapshot
+src/market/market_session.py:74:ClassDef:MarketSessionService
+-- REFERENCES --
+scripts/run_realistic_smoke_fill.py:36:from src.market.market_session import (
+scripts/run_realistic_smoke_fill.py:37:MarketSessionService,
+scripts/run_realistic_smoke_fill.py:190:market_session_service=(
+scripts/run_realistic_smoke_fill.py:191:MarketSessionService()
+scripts/run_realistic_v2_execution_benchmark.py:44:from src.market.market_session import (
+scripts/run_realistic_v2_execution_benchmark.py:45:MarketSessionSnapshot,
+scripts/run_realistic_v2_execution_benchmark.py:135:class FixtureSessionService:
+scripts/run_realistic_v2_execution_benchmark.py:136:def get_session(
+scripts/run_realistic_v2_execution_benchmark.py:141:return MarketSessionSnapshot(
+scripts/run_realistic_v2_execution_benchmark.py:265:market_session_service=(
+scripts/run_realistic_v2_execution_benchmark.py:266:FixtureSessionService()
+src/execution/broker_interface.py:20:market_session,
+src/execution/execution_journal.py:28:"src.market.market_session",
+src/execution/execution_policy.py:54:market_session,
+src/execution/execution_policy.py:81:market_session.session_quality
+src/execution/execution_policy.py:92:market_session.state
+src/execution/execution_policy.py:193:market_session,
+src/execution/execution_policy.py:198:market_session=market_session,
+src/execution/live_preflight.py:13:from src.market.market_session import (
+src/execution/live_preflight.py:14:MarketSessionService,
+src/execution/live_preflight.py:93:market_session_service,
+src/execution/live_preflight.py:104:self.market_session_service = (
+src/execution/live_preflight.py:105:market_session_service
+src/execution/live_preflight.py:192:market_session = (
+src/execution/live_preflight.py:193:self.market_session_service
+src/execution/live_preflight.py:194:.get_session(
+src/execution/live_preflight.py:252:market_session=(
+src/execution/live_preflight.py:253:market_session
+src/execution/live_preflight.py:301:market_session.state
+src/execution/live_preflight.py:306:market_session
+src/execution/live_preflight.py:378:market_session_service = (
+src/execution/live_preflight.py:379:MarketSessionService()
+src/execution/live_preflight.py:386:market_session_service=(
+src/execution/live_preflight.py:387:market_session_service
+src/execution/paper_broker.py:545:market_session,
+src/execution/paper_broker.py:622:or market_session.asset_id
+src/execution/paper_broker.py:729:market_session=market_session,
+src/execution/paper_broker.py:883:market_session.session_quality
+src/execution/runtime.py:85:market_session: object | None = None
+src/execution/runtime.py:129:market_session_service,
+src/execution/runtime.py:143:self.market_session_service = (
+src/execution/runtime.py:144:market_session_service
+src/execution/runtime.py:409:market_session = (
+src/execution/runtime.py:410:self.market_session_service
+src/execution/runtime.py:411:.get_session(
+src/execution/runtime.py:458:market_session=(
+src/execution/runtime.py:459:market_session
+src/execution/runtime.py:470:market_session=(
+src/execution/runtime.py:471:market_session
+src/execution/runtime.py:490:market_session=(
+src/execution/runtime.py:491:market_session
+src/execution/runtime.py:508:market_session=(
+src/execution/runtime.py:509:market_session
+src/execution/runtime.py:526:market_session=(
+src/execution/runtime.py:527:market_session
+src/execution/runtime.py:554:market_session=market_session,
+src/execution/runtime.py:569:market_session=market_session,
+src/execution/runtime.py:590:market_session=market_session,
+src/execution/runtime.py:604:market_session=(
+src/execution/runtime.py:605:market_session
+src/execution/runtime.py:642:market_session=(
+src/execution/runtime.py:643:market_session
+src/market/__init__.py:1:from .market_session import (
+src/market/__init__.py:2:MarketSessionService,
+src/market/__init__.py:3:MarketSessionSnapshot,
+src/market/__init__.py:9:"MarketSessionService",
+src/market/__init__.py:10:"MarketSessionSnapshot",
+src/market/market_session.py:35:class MarketSessionSnapshot:
+src/market/market_session.py:74:class MarketSessionService:
+src/market/market_session.py:304:def get_session(
+src/market/market_session.py:358:return MarketSessionSnapshot(
+src/market/market_session.py:380:return MarketSessionSnapshot(
+src/market/market_session.py:421:return MarketSessionSnapshot(
+src/market/market_session.py:442:return MarketSessionSnapshot(
+src/market/market_session.py:459:return MarketSessionSnapshot(
+src/market/market_session.py:548:return MarketSessionSnapshot(
+src/market/market_session.py:584:return MarketSessionSnapshot(
+src/market/market_session.py:660:return MarketSessionSnapshot(
+src/market/market_session.py:701:return MarketSessionSnapshot(
+src/market/market_session.py:725:return MarketSessionSnapshot(
+src/market/market_session.py:794:return MarketSessionSnapshot(
+src/persistence/sqlite_cutover_dependencies.py:39:market_session_service: object
+src/persistence/sqlite_cutover_dependencies.py:113:context.market_session_service,
+src/persistence/sqlite_cutover_dependencies.py:114:"get_session",
+src/persistence/sqlite_cutover_dependencies.py:115:"market_session_service",
+src/persistence/sqlite_cutover_dependencies.py:241:"market_session_service": (
+src/persistence/sqlite_cutover_dependencies.py:242:context.market_session_service
+src/persistence/sqlite_cutover_factory.py:23:"market_session_service",
+src/persistence/sqlite_runtime_bundle.py:84:market_session_service,
+src/persistence/sqlite_runtime_bundle.py:164:market_session_service=market_session_service,
+
+=== DECISION ===
+DECISION_DEFINITION_COUNT=5
+DECISION_REFERENCE_COUNT=74
+-- DEFINITIONS --
+scripts/run_realistic_v2_execution_benchmark.py:158:ClassDef:FixtureDecisionProvider
+src/accounting/runtime_integration.py:47:ClassDef:SnapshotCaptureDecisionProvider
+src/agent/ai_manager.py:158:ClassDef:AIPaperManager
+src/execution/runtime.py:47:ClassDef:ExecutionDecision
+src/strategy/strategy_engine.py:7:ClassDef:StrategyEngine
+-- REFERENCES --
+scripts/compare_buy_rsi_cross_dataset.py:67:signal = self.decision_engine.decide(analysis)
+scripts/compare_buy_rsi_fine.py:76:signal = self.decision_engine.decide(analysis)
+scripts/inspect_rsi_dynamics.py:77:signal = self.decision_engine.decide(analysis)
+scripts/inspect_signal_quality.py:76:signal = self.decision_engine.decide(analysis)
+scripts/run_paper_live.py:5:from src.agent.ai_manager import AIPaperManager
+scripts/run_paper_live.py:9:ai_manager = AIPaperManager('data/live_state/ai_paper.json')
+scripts/run_realistic_smoke_fill.py:27:ExecutionDecision,
+scripts/run_realistic_smoke_fill.py:78:return ExecutionDecision(
+scripts/run_realistic_smoke_fill.py:117:return ExecutionDecision(
+scripts/run_realistic_smoke_fill.py:194:decision_provider=(
+scripts/run_realistic_v2_execution_benchmark.py:38:ExecutionDecision,
+scripts/run_realistic_v2_execution_benchmark.py:158:class FixtureDecisionProvider:
+scripts/run_realistic_v2_execution_benchmark.py:172:return ExecutionDecision(
+scripts/run_realistic_v2_execution_benchmark.py:191:return ExecutionDecision(
+scripts/run_realistic_v2_execution_benchmark.py:269:decision_provider=(
+scripts/run_realistic_v2_execution_benchmark.py:270:FixtureDecisionProvider()
+scripts/test_rsi_fine_scan.py:70:signal = self.decision_engine.decide(analysis)
+scripts/test_rsi_isolation.py:74:signal = self.decision_engine.decide(
+scripts/test_rsi_testset.py:63:signal = self.decision_engine.decide(
+scripts/test_rsi_thresholds.py:70:signal = self.decision_engine.decide(
+scripts/test_rsi_wide_testset.py:65:signal = self.decision_engine.decide(analysis)
+src/accounting/production_resolvers.py:16:SnapshotCaptureDecisionProvider,
+src/accounting/production_resolvers.py:756:snapshot_capture: SnapshotCaptureDecisionProvider
+src/accounting/production_resolvers.py:803:"decision_provider",
+src/accounting/production_resolvers.py:816:SnapshotCaptureDecisionProvider,
+src/accounting/production_resolvers.py:886:SnapshotCaptureDecisionProvider(
+src/accounting/production_resolvers.py:891:runtime.decision_provider = (
+src/accounting/production_resolvers.py:922:runtime.decision_provider = (
+src/accounting/production_startup.py:27:SnapshotCaptureDecisionProvider,
+src/accounting/production_startup.py:611:"decision_provider",
+src/accounting/production_startup.py:624:SnapshotCaptureDecisionProvider,
+src/accounting/production_startup.py:709:SnapshotCaptureDecisionProvider(
+src/accounting/production_startup.py:714:runtime.decision_provider = (
+src/accounting/production_startup.py:762:runtime.decision_provider = (
+src/accounting/runtime_integration.py:47:class SnapshotCaptureDecisionProvider:
+src/accounting/runtime_integration.py:146:SnapshotCaptureDecisionProvider,
+src/accounting/runtime_integration.py:150:"SnapshotCaptureDecisionProvider"
+src/accounting/runtime_integration.py:153:runtime_decision_provider = getattr(
+src/accounting/runtime_integration.py:155:"decision_provider",
+src/accounting/runtime_integration.py:160:runtime_decision_provider
+src/agent/agent_engine.py:4:from src.strategy.strategy_engine import StrategyEngine
+src/agent/agent_engine.py:6:from src.agent.decision_engine import DecisionEngine
+src/agent/agent_engine.py:32:self.strategy_engine = StrategyEngine(
+src/agent/agent_engine.py:42:self.decision_engine = DecisionEngine(
+src/agent/agent_engine.py:96:signal = self.decision_engine.decide(
+src/agent/ai_manager.py:158:class AIPaperManager:
+src/agent/decision_engine.py:1:from src.strategy.strategy_engine import StrategyEngine
+src/agent/decision_engine.py:12:self.strategy_engine = StrategyEngine(
+src/execution/__init__.py:17:ExecutionDecision,
+src/execution/__init__.py:42:"ExecutionDecision",
+src/execution/runtime.py:47:class ExecutionDecision:
+src/execution/runtime.py:105:DecisionProvider = Callable[
+src/execution/runtime.py:107:ExecutionDecision | None,
+src/execution/runtime.py:131:decision_provider: DecisionProvider,
+src/execution/runtime.py:148:self.decision_provider = (
+src/execution/runtime.py:149:decision_provider
+src/execution/runtime.py:255:decision: ExecutionDecision,
+src/execution/runtime.py:439:self.decision_provider(
+src/execution/runtime.py:477:ExecutionDecision,
+src/execution/runtime.py:486:"decision_provider returned "
+src/execution/runtime.py:487:"non-ExecutionDecision"
+src/persistence/sqlite_cutover_dependencies.py:40:decision_provider: object
+src/persistence/sqlite_cutover_dependencies.py:125:"decision_provider",
+src/persistence/sqlite_cutover_dependencies.py:245:"decision_provider": (
+src/persistence/sqlite_cutover_dependencies.py:246:context.decision_provider
+src/persistence/sqlite_cutover_factory.py:25:"decision_provider",
+src/persistence/sqlite_runtime_bundle.py:7:SnapshotCaptureDecisionProvider,
+src/persistence/sqlite_runtime_bundle.py:86:decision_provider,
+src/persistence/sqlite_runtime_bundle.py:157:SnapshotCaptureDecisionProvider(
+src/persistence/sqlite_runtime_bundle.py:158:decision_provider
+src/persistence/sqlite_runtime_bundle.py:166:decision_provider=snapshot_capture,
+src/strategy/strategy_engine.py:7:class StrategyEngine:
+src/trading/trading_engine.py:1:from src.strategy.strategy_engine import StrategyEngine
+src/trading/trading_engine.py:11:else StrategyEngine()
+
+=== FX ===
+FX_DEFINITION_COUNT=27
+FX_REFERENCE_COUNT=650
+-- DEFINITIONS --
+scripts/probe_phase07_sessions_fx.py:61:FunctionDef:probe_nbp
+scripts/probe_phase07_sessions_fx.py:69:FunctionDef:probe_yahoo
+scripts/probe_phase07_sessions_fx.py:137:FunctionDef:probe_coinbase_usdt_usd
+scripts/probe_phase07_sessions_fx.py:144:FunctionDef:nbp_summary
+scripts/probe_phase07_sessions_fx.py:168:FunctionDef:coinbase_summary
+scripts/probe_provider_capability.py:474:FunctionDef:probe_yahoo
+src/accounting/production_fx_scheduler.py:24:ClassDef:ProductionFxSchedulerError
+src/accounting/production_fx_scheduler.py:30:ClassDef:ParallelProductionFxResolver
+src/accounting/production_resolvers.py:124:ClassDef:ProductionFxResolver
+src/fx/feature_flags.py:51:ClassDef:FxFeatureFlags
+src/fx/freshness.py:60:ClassDef:FxFreshnessPolicy
+src/fx/freshness.py:244:FunctionDef:production_fx_freshness_policy
+src/fx/models.py:12:ClassDef:FxSourceQuality
+src/fx/models.py:18:ClassDef:FxFreshness
+src/fx/models.py:59:ClassDef:FxPath
+src/fx/models.py:88:ClassDef:FxQuote
+src/fx/models.py:244:ClassDef:FxFreshnessResult
+src/fx/models.py:252:ClassDef:FxConversionResult
+src/fx/providers.py:24:ClassDef:FxProviderError
+src/fx/providers.py:141:ClassDef:NbpTableAProvider
+src/fx/providers.py:320:ClassDef:YahooPlnProvider
+src/fx/providers.py:513:ClassDef:CoinbaseUsdtUsdProvider
+src/fx/realized_booking.py:33:ClassDef:RealizedFxBookingError
+src/fx/realized_booking.py:87:ClassDef:RealizedFxLegSnapshot
+src/fx/realized_booking.py:139:ClassDef:RealizedFxBooker
+src/fx/realized_selection.py:11:ClassDef:RealizedFxSelectionError
+src/fx/realized_selection.py:49:ClassDef:RealizedFxSelectionPolicy
+-- REFERENCES --
+scripts/probe_phase07_sessions_fx.py:279:print("NBP REFERENCE RATES")
+scripts/probe_phase07_sessions_fx.py:335:f"NBP:{code}"
+scripts/probe_provider_capability.py:503:"Yahoo chart request failed"
+scripts/probe_provider_capability.py:519:"Yahoo Finance v8 chart endpoint"
+scripts/probe_provider_capability.py:550:"Yahoo chart returned no result"
+scripts/probe_provider_capability.py:566:"Yahoo Finance v8 chart endpoint"
+scripts/probe_provider_capability.py:723:"Yahoo Finance v8 chart endpoint; "
+scripts/probe_provider_capability.py:921:"### Yahoo",
+scripts/probe_provider_capability.py:944:"- Yahoo rate limits are UNKNOWN because the chart endpoint "
+scripts/run_fx_provider_probe.py:2:CoinbaseUsdtUsdProvider,
+scripts/run_fx_provider_probe.py:3:NbpTableAProvider,
+scripts/run_fx_provider_probe.py:4:YahooPlnProvider,
+scripts/run_fx_provider_probe.py:76:nbp = NbpTableAProvider()
+scripts/run_fx_provider_probe.py:77:yahoo = YahooPlnProvider()
+scripts/run_fx_provider_probe.py:78:coinbase = CoinbaseUsdtUsdProvider()
+scripts/run_fx_provider_probe.py:81:"NBP USD/PLN",
+scripts/run_fx_provider_probe.py:88:"NBP EUR/PLN",
+scripts/run_fx_provider_probe.py:95:"Yahoo USD/PLN",
+scripts/run_fx_provider_probe.py:102:"Yahoo EUR/PLN",
+scripts/run_fx_provider_probe.py:109:"Coinbase USDT/USD",
+scripts/run_phase10_accounting_smoke.py:365:fx_prefetch_timeout_seconds=(
+scripts/run_phase10_accounting_smoke.py:367:.fx_prefetch_timeout_seconds
+scripts/run_phase10_accounting_smoke.py:369:fx_prefetch_max_workers=(
+scripts/run_phase10_accounting_smoke.py:371:.fx_prefetch_max_workers
+scripts/run_phase10_accounting_smoke.py:498:.fx_resolver
+scripts/run_phase10_accounting_smoke.py:508:.fx_resolver
+scripts/run_phase10_accounting_smoke.py:517:.fx_resolver
+scripts/run_phase10_accounting_smoke.py:525:.fx_resolver
+scripts/run_phase10_persisted_accounting_smoke.py:422:fx_prefetch_timeout_seconds=(
+scripts/run_phase10_persisted_accounting_smoke.py:424:.fx_prefetch_timeout_seconds
+scripts/run_phase10_persisted_accounting_smoke.py:426:fx_prefetch_max_workers=(
+scripts/run_phase10_persisted_accounting_smoke.py:428:.fx_prefetch_max_workers
+scripts/run_phase11_cash_accounting_smoke.py:544:fx_prefetch_timeout_seconds=(
+scripts/run_phase11_cash_accounting_smoke.py:546:.fx_prefetch_timeout_seconds
+scripts/run_phase11_cash_accounting_smoke.py:548:fx_prefetch_max_workers=(
+scripts/run_phase11_cash_accounting_smoke.py:550:.fx_prefetch_max_workers
+scripts/run_phase12_capital_accounting_smoke.py:310:exposure.fx_path,
+scripts/run_phase12_capital_accounting_smoke.py:316:if exposure.fx_freshness
+scripts/run_phase12_capital_accounting_smoke.py:318:else exposure.fx_freshness.value
+scripts/run_phase12_capital_accounting_smoke.py:470:fx_prefetch_timeout_seconds=(
+scripts/run_phase12_capital_accounting_smoke.py:472:.fx_prefetch_timeout_seconds
+scripts/run_phase12_capital_accounting_smoke.py:474:fx_prefetch_max_workers=(
+scripts/run_phase12_capital_accounting_smoke.py:476:.fx_prefetch_max_workers
+scripts/run_realistic_v2_execution_benchmark.py:21:from src.fx.feature_flags import FxFeatureFlags
+scripts/run_realistic_v2_execution_benchmark.py:225:fx_flags = FxFeatureFlags(enabled=False)
+scripts/run_realistic_v2_execution_benchmark.py:237:fx_enabled=fx_flags.enabled,
+src/accounting/instrument_contracts.py:231:instrument_type="fx_spot_reference",
+src/accounting/instrument_contracts.py:252:# - these app instruments are continuous Yahoo futures proxies;
+src/accounting/mtm_kernel.py:6:from src.fx.models import FxFreshness
+src/accounting/mtm_kernel.py:72:if isinstance(value, FxFreshness):
+src/accounting/mtm_kernel.py:76:return FxFreshness(str(value))
+src/accounting/mtm_kernel.py:79:"invalid fx_freshness"
+src/accounting/mtm_kernel.py:105:fx_freshness: FxFreshness
+src/accounting/mtm_kernel.py:106:fx_quote_age_seconds: Decimal | None
+src/accounting/mtm_kernel.py:107:fx_rate: Decimal | None
+src/accounting/mtm_kernel.py:108:fx_path: str
+src/accounting/mtm_kernel.py:165:fx_freshness,
+src/accounting/mtm_kernel.py:166:fx_rate,
+src/accounting/mtm_kernel.py:167:fx_path,
+src/accounting/mtm_kernel.py:168:fx_quote_age_seconds=None,
+src/accounting/mtm_kernel.py:169:fx_unavailable_reason=None,
+src/accounting/mtm_kernel.py:263:freshness = FxFreshness.FX_FRESH
+src/accounting/mtm_kernel.py:283:fx_freshness
+src/accounting/mtm_kernel.py:287:fx_path,
+src/accounting/mtm_kernel.py:288:"fx_path",
+src/accounting/mtm_kernel.py:291:if fx_quote_age_seconds is None:
+src/accounting/mtm_kernel.py:295:fx_quote_age_seconds,
+src/accounting/mtm_kernel.py:296:"fx_quote_age_seconds",
+src/accounting/mtm_kernel.py:301:is FxFreshness.FX_STALE
+src/accounting/mtm_kernel.py:310:is FxFreshness.FX_UNAVAILABLE
+src/accounting/mtm_kernel.py:312:if fx_rate is not None:
+src/accounting/mtm_kernel.py:319:if fx_unavailable_reason is None
+src/accounting/mtm_kernel.py:321:fx_unavailable_reason
+src/accounting/mtm_kernel.py:338:fx_rate,
+src/accounting/mtm_kernel.py:339:"fx_rate",
+src/accounting/mtm_kernel.py:383:fx_freshness=freshness,
+src/accounting/mtm_kernel.py:384:fx_quote_age_seconds=age,
+src/accounting/mtm_kernel.py:385:fx_rate=rate,
+src/accounting/mtm_kernel.py:386:fx_path=path,
+src/accounting/pln_kernel.py:128:fx_rate: Decimal
+src/accounting/pln_kernel.py:129:fx_path: str
+src/accounting/pln_kernel.py:230:fx_rate,
+src/accounting/pln_kernel.py:231:fx_path,
+src/accounting/pln_kernel.py:253:fx_path = _required_text(
+src/accounting/pln_kernel.py:254:fx_path,
+src/accounting/pln_kernel.py:255:"fx_path",
+src/accounting/pln_kernel.py:281:fx_rate = _positive_decimal(
+src/accounting/pln_kernel.py:282:fx_rate,
+src/accounting/pln_kernel.py:283:"fx_rate",
+src/accounting/pln_kernel.py:472:* fx_rate
+src/accounting/pln_kernel.py:477:* fx_rate
+src/accounting/pln_kernel.py:482:* fx_rate
+src/accounting/pln_kernel.py:487:* fx_rate
+src/accounting/pln_kernel.py:492:* fx_rate
+src/accounting/pln_kernel.py:554:fx_rate=fx_rate,
+src/accounting/pln_kernel.py:555:fx_path=fx_path,
+src/accounting/portfolio_snapshot.py:10:from src.fx.models import FxFreshness
+src/accounting/portfolio_snapshot.py:89:FxFreshness,
+src/accounting/portfolio_snapshot.py:94:return FxFreshness(
+src/accounting/portfolio_snapshot.py:102:"invalid fx_freshness"
+src/accounting/portfolio_snapshot.py:120:fx_freshness: FxFreshness
+src/accounting/portfolio_snapshot.py:121:max_fx_quote_age_seconds: Decimal | None
+src/accounting/portfolio_snapshot.py:161:* fx_rate
+src/accounting/portfolio_snapshot.py:192:"fx_freshness",
+src/accounting/portfolio_snapshot.py:193:"fx_quote_age_seconds",
+src/accounting/portfolio_snapshot.py:194:"fx_rate",
+src/accounting/portfolio_snapshot.py:245:fx_freshness=FxFreshness.FX_FRESH,
+src/accounting/portfolio_snapshot.py:246:max_fx_quote_age_seconds=(
+src/accounting/portfolio_snapshot.py:337:record.fx_freshness
+src/accounting/portfolio_snapshot.py:340:age = record.fx_quote_age_seconds
+src/accounting/portfolio_snapshot.py:345:"fx_quote_age_seconds",
+src/accounting/portfolio_snapshot.py:350:"fx_quote_age_seconds cannot be negative"
+src/accounting/portfolio_snapshot.py:357:if freshness is FxFreshness.FX_STALE:
+src/accounting/portfolio_snapshot.py:370:is FxFreshness.FX_UNAVAILABLE
+src/accounting/portfolio_snapshot.py:389:fx_rate = _required_decimal(
+src/accounting/portfolio_snapshot.py:390:record.fx_rate,
+src/accounting/portfolio_snapshot.py:391:"fx_rate",
+src/accounting/portfolio_snapshot.py:394:if fx_rate <= 0:
+src/accounting/portfolio_snapshot.py:396:"fx_rate must be positive"
+src/accounting/portfolio_snapshot.py:443:* fx_rate
+src/accounting/portfolio_snapshot.py:490:fx_freshness=FxFreshness.FX_UNAVAILABLE,
+src/accounting/portfolio_snapshot.py:491:max_fx_quote_age_seconds=max_age,
+src/accounting/portfolio_snapshot.py:510:FxFreshness.FX_STALE
+src/accounting/portfolio_snapshot.py:512:else FxFreshness.FX_FRESH
+src/accounting/portfolio_snapshot.py:543:fx_freshness=portfolio_freshness,
+src/accounting/portfolio_snapshot.py:544:max_fx_quote_age_seconds=max_age,
+src/accounting/production_fx_scheduler.py:14:ProductionFxResolver,
+src/accounting/production_fx_scheduler.py:24:class ProductionFxSchedulerError(
+src/accounting/production_fx_scheduler.py:30:class ParallelProductionFxResolver(
+src/accounting/production_fx_scheduler.py:31:ProductionFxResolver
+src/accounting/production_fx_scheduler.py:64:raise ProductionFxSchedulerError(
+src/accounting/production_fx_scheduler.py:74:raise ProductionFxSchedulerError(
+src/accounting/production_fx_scheduler.py:85:raise ProductionFxSchedulerError(
+src/accounting/production_resolvers.py:25:production_fx_freshness_policy,
+src/accounting/production_resolvers.py:28:CoinbaseUsdtUsdProvider,
+src/accounting/production_resolvers.py:29:NbpTableAProvider,
+src/accounting/production_resolvers.py:30:YahooPlnProvider,
+src/accounting/production_resolvers.py:33:RealizedFxBooker,
+src/accounting/production_resolvers.py:36:RealizedFxSelectionPolicy,
+src/accounting/production_resolvers.py:124:class ProductionFxResolver:
+src/accounting/production_resolvers.py:128:Quotes are prefetched before execution so a same-day NBP reference
+src/accounting/production_resolvers.py:153:or NbpTableAProvider(
+src/accounting/production_resolvers.py:160:or YahooPlnProvider(
+src/accounting/production_resolvers.py:167:or CoinbaseUsdtUsdProvider(
+src/accounting/production_resolvers.py:176:production_fx_freshness_policy()
+src/accounting/production_resolvers.py:690:fx_resolver,
+src/accounting/production_resolvers.py:698:fx_resolver,
+src/accounting/production_resolvers.py:699:ProductionFxResolver,
+src/accounting/production_resolvers.py:702:"fx_resolver must be ProductionFxResolver"
+src/accounting/production_resolvers.py:708:self.fx_resolver = (
+src/accounting/production_resolvers.py:709:fx_resolver
+src/accounting/production_resolvers.py:734:self.fx_resolver.begin_cycle(
+src/accounting/production_resolvers.py:739:self.fx_resolver.force_cycle_error(
+src/accounting/production_resolvers.py:757:fx_resolver: ProductionFxResolver
+src/accounting/production_resolvers.py:848:fx_resolver = (
+src/accounting/production_resolvers.py:849:ProductionFxResolver(
+src/accounting/production_resolvers.py:865:fx_enabled=True,
+src/accounting/production_resolvers.py:867:realized_fx_selection_policy=(
+src/accounting/production_resolvers.py:868:RealizedFxSelectionPolicy(
+src/accounting/production_resolvers.py:877:realized_fx_booker=(
+
+=== ASSET ===
+ASSET_DEFINITION_COUNT=3
+ASSET_REFERENCE_COUNT=57
+-- DEFINITIONS --
+src/config_fingerprint.py:83:FunctionDef:normalized_asset_registry
+src/config_fingerprint.py:109:FunctionDef:asset_registry_hash
+src/data/assets.py:666:FunctionDef:get_asset
+-- REFERENCES --
+app/backend/main.py:11:from src.data.assets import SUPPORTED_ASSETS, asset_payload, get_asset
+app/backend/main.py:45:return get_asset(symbol)
+scripts/run_phase10_accounting_smoke.py:134:metadata.asset_registry_hash,
+scripts/run_phase10_persisted_accounting_smoke.py:208:metadata.asset_registry_hash,
+scripts/run_phase11_cash_accounting_smoke.py:295:metadata.asset_registry_hash,
+scripts/run_phase12_capital_accounting_smoke.py:46:get_asset,
+scripts/run_phase12_capital_accounting_smoke.py:236:metadata.asset_registry_hash,
+scripts/run_phase12_capital_accounting_smoke.py:488:get_asset(
+scripts/run_realistic_paper.py:5:from src.data.assets import get_asset
+scripts/run_realistic_paper.py:58:asset = get_asset(
+scripts/run_realistic_smoke_fill.py:7:from src.data.assets import get_asset
+scripts/run_realistic_smoke_fill.py:168:asset_resolver=get_asset,
+scripts/run_realistic_v2_execution_benchmark.py:13:asset_registry_hash,
+scripts/run_realistic_v2_execution_benchmark.py:22:from src.data.assets import get_asset
+scripts/run_realistic_v2_execution_benchmark.py:211:asset_resolver=get_asset,
+scripts/run_realistic_v2_execution_benchmark.py:332:"asset_registry_hash": (
+scripts/run_realistic_v2_execution_benchmark.py:333:asset_registry_hash()
+scripts/run_realistic_v2_execution_benchmark.py:441:"asset_registry_hash"
+src/accounting/instrument_contracts.py:8:from src.data.assets import get_asset
+src/accounting/instrument_contracts.py:323:asset = get_asset(
+src/accounting/production_startup.py:30:asset_registry_hash,
+src/accounting/production_startup.py:349:asset_registry_hash: str
+src/accounting/production_startup.py:526:asset_registry_hash=(
+src/accounting/production_startup.py:527:asset_registry_hash(
+src/accounting/startup_metadata_store.py:257:"asset_registry_hash": (
+src/accounting/startup_metadata_store.py:261:"asset_registry_hash",
+src/accounting/startup_metadata_store.py:264:"metadata.asset_registry_hash",
+src/config_fingerprint.py:83:def normalized_asset_registry(
+src/config_fingerprint.py:109:def asset_registry_hash(
+src/config_fingerprint.py:114:"asset_registry": (
+src/config_fingerprint.py:115:normalized_asset_registry(assets)
+src/config_fingerprint.py:214:"asset_registry": normalized_asset_registry(assets),
+src/config_fingerprint.py:215:"asset_registry_hash": asset_registry_hash(assets),
+src/data/assets.py:666:def get_asset(
+src/data/data_provider.py:7:from src.data.assets import get_asset
+src/data/data_provider.py:214:asset = get_asset(symbol)
+src/data/data_provider.py:350:asset = get_asset(symbol)
+src/data/data_provider.py:560:asset = get_asset(symbol)
+src/data/data_provider.py:573:asset = get_asset(symbol)
+src/execution/capital_startup.py:257:asset_registry_hash: str
+src/execution/capital_startup.py:338:"asset_registry_hash",
+src/execution/capital_startup.py:341:"asset_registry_hash",
+src/execution/capital_startup.py:400:asset_registry_hash=asset_hash,
+src/execution/capital_startup_store.py:238:"asset_registry_hash": (
+src/execution/capital_startup_store.py:240:metadata.asset_registry_hash,
+src/execution/capital_startup_store.py:241:"metadata.asset_registry_hash",
+src/execution/paper_broker.py:8:from src.data.assets import get_asset
+src/execution/paper_broker.py:41:asset_resolver=None,
+src/execution/paper_broker.py:81:self.asset_resolver = (
+src/execution/paper_broker.py:82:asset_resolver
+src/execution/paper_broker.py:83:or get_asset
+src/execution/paper_broker.py:635:asset = self.asset_resolver(
+src/market/market_session.py:15:from src.data.assets import get_asset
+src/market/market_session.py:313:asset = get_asset(
+src/persistence/sqlite_cutover_dependencies.py:42:asset_resolver: object
+src/persistence/sqlite_cutover_dependencies.py:126:"asset_resolver",
+src/persistence/sqlite_cutover_dependencies.py:185:asset_resolver=context.asset_resolver,
+
+=== CLOCK ===
+CLOCK_DEFINITION_COUNT=3
+CLOCK_REFERENCE_COUNT=196
+-- DEFINITIONS --
+src/core/clock.py:16:ClassDef:Clock
+src/core/clock.py:25:ClassDef:SystemClock
+src/core/clock.py:35:ClassDef:FixedClock
+-- REFERENCES --
+scripts/run_phase10_persisted_accounting_smoke.py:127:clock,
+scripts/run_phase10_persisted_accounting_smoke.py:136:clock=clock,
+scripts/run_phase10_persisted_accounting_smoke.py:504:clock=runtime.clock,
+scripts/run_phase10_persisted_accounting_smoke.py:575:clock=runtime.clock,
+scripts/run_phase11_cash_accounting_smoke.py:156:clock,
+scripts/run_phase11_cash_accounting_smoke.py:187:clock=clock,
+scripts/run_phase11_cash_accounting_smoke.py:209:clock,
+scripts/run_phase11_cash_accounting_smoke.py:221:clock=clock,
+scripts/run_phase11_cash_accounting_smoke.py:604:clock=runtime.clock,
+scripts/run_phase11_cash_accounting_smoke.py:616:clock=runtime.clock,
+scripts/run_phase11_cash_accounting_smoke.py:669:clock=runtime.clock,
+scripts/run_phase12_capital_accounting_smoke.py:140:clock,
+scripts/run_phase12_capital_accounting_smoke.py:152:clock=clock,
+scripts/run_phase12_capital_accounting_smoke.py:540:clock=runtime.clock,
+scripts/run_phase12_capital_accounting_smoke.py:552:clock=runtime.clock,
+scripts/run_phase12_capital_accounting_smoke.py:620:clock=runtime.clock,
+scripts/run_phase12_capital_accounting_smoke.py:635:clock=runtime.clock,
+scripts/run_realistic_smoke_fill.py:6:from src.core.clock import SystemClock
+scripts/run_realistic_smoke_fill.py:136:clock = SystemClock()
+scripts/run_realistic_smoke_fill.py:143:clock=clock,
+scripts/run_realistic_smoke_fill.py:150:clock=clock,
+scripts/run_realistic_smoke_fill.py:162:clock=clock,
+scripts/run_realistic_smoke_fill.py:167:clock=clock,
+scripts/run_realistic_smoke_fill.py:182:clock=clock,
+scripts/run_realistic_smoke_fill.py:202:clock=clock,
+scripts/run_realistic_v2_execution_benchmark.py:17:from src.core.clock import FixedClock
+scripts/run_realistic_v2_execution_benchmark.py:210:clock=FixedClock(NOW),
+scripts/run_realistic_v2_execution_benchmark.py:272:clock=FixedClock(NOW),
+src/accounting/cash_ledger.py:15:from src.core.clock import SystemClock
+src/accounting/cash_ledger.py:175:clock=None,
+src/accounting/cash_ledger.py:178:self.clock = clock or SystemClock()
+src/accounting/cash_ledger.py:573:self.clock.now()
+src/accounting/cash_ledger.py:807:self.clock.now()
+src/accounting/cash_runtime.py:353:clock=None,
+src/accounting/cash_runtime.py:399:"clock": clock,
+src/accounting/production_resolvers.py:18:from src.core.clock import (
+src/accounting/production_resolvers.py:19:SystemClock,
+src/accounting/production_resolvers.py:140:clock=None,
+src/accounting/production_resolvers.py:146:self.clock = (
+src/accounting/production_resolvers.py:147:clock
+src/accounting/production_resolvers.py:148:or SystemClock()
+src/accounting/production_resolvers.py:154:clock=self.clock
+src/accounting/production_resolvers.py:161:clock=self.clock
+src/accounting/production_resolvers.py:168:clock=self.clock
+src/accounting/production_resolvers.py:178:clock=self.clock,
+src/accounting/production_resolvers.py:767:clock=None,
+src/accounting/production_resolvers.py:838:resolved_clock = (
+src/accounting/production_resolvers.py:839:clock
+src/accounting/production_resolvers.py:842:"clock",
+src/accounting/production_resolvers.py:845:or SystemClock()
+src/accounting/production_resolvers.py:850:clock=resolved_clock,
+src/accounting/production_resolvers.py:879:clock=resolved_clock
+src/accounting/production_startup.py:33:from src.core.clock import (
+src/accounting/production_startup.py:34:SystemClock,
+src/accounting/production_startup.py:562:clock=None,
+src/accounting/production_startup.py:630:resolved_clock = (
+src/accounting/production_startup.py:631:clock
+src/accounting/production_startup.py:634:"clock",
+src/accounting/production_startup.py:637:or SystemClock()
+src/accounting/production_startup.py:669:clock=resolved_clock,
+src/accounting/production_startup.py:702:clock=resolved_clock
+src/accounting/realized_persistence.py:13:from src.core.clock import SystemClock
+src/accounting/realized_persistence.py:219:def __init__(self, path, *, clock=None):
+src/accounting/realized_persistence.py:221:self.clock = clock or SystemClock()
+src/accounting/realized_persistence.py:424:now = self.clock.now()
+src/accounting/startup_metadata_store.py:10:from src.core.clock import SystemClock
+src/accounting/startup_metadata_store.py:375:clock=None,
+src/accounting/startup_metadata_store.py:381:self.clock = (
+src/accounting/startup_metadata_store.py:382:clock
+src/accounting/startup_metadata_store.py:383:or SystemClock()
+src/accounting/startup_metadata_store.py:390:now = self.clock.now()
+src/core/__init__.py:1:from src.core.clock import (
+src/core/__init__.py:3:FixedClock,
+src/core/__init__.py:4:SystemClock,
+src/core/__init__.py:10:"FixedClock",
+src/core/__init__.py:11:"SystemClock",
+src/core/clock.py:25:class SystemClock:
+src/core/clock.py:35:class FixedClock:
+src/data/data_provider.py:8:from src.core.clock import (
+src/data/data_provider.py:10:SystemClock,
+src/data/data_provider.py:27:clock: Clock | None = None,
+src/data/data_provider.py:36:self.clock = clock or SystemClock()
+src/data/data_provider.py:51:- self.clock.monotonic()
+src/data/data_provider.py:105:- self.clock.monotonic()
+src/data/data_provider.py:496:checked_at = self.clock.now()
+src/data/data_provider.py:501:self.clock.monotonic()
+src/data/data_provider.py:575:started = self.clock.monotonic()
+src/data/data_provider.py:711:received_at = self.clock.now()
+src/data/data_provider.py:883:received_at = self.clock.now()
+src/data/market_data.py:7:from src.core.clock import ensure_utc_aware
+src/data/market_data_service.py:5:from src.core.clock import (
+src/data/market_data_service.py:7:SystemClock,
+src/data/market_data_service.py:34:clock: Clock | None = None,
+src/data/market_data_service.py:51:self.clock = clock or SystemClock()
+src/data/market_data_service.py:75:started = self.clock.monotonic()
+src/data/market_data_service.py:92:self.clock.monotonic()
+src/data/market_data_service.py:130:self.clock.monotonic()
+src/data/market_data_service.py:162:self.clock.monotonic()
+src/data/parallel_market_data_service.py:10:from src.core.clock import Clock, SystemClock
+src/data/parallel_market_data_service.py:30:clock: Clock | None = None,
+src/data/parallel_market_data_service.py:58:self.clock = (
+src/data/parallel_market_data_service.py:59:clock
+src/data/parallel_market_data_service.py:60:or SystemClock()
+src/data/parallel_market_data_service.py:86:now = self.clock.monotonic()
+src/data/parallel_market_data_service.py:135:started = self.clock.monotonic()
+src/data/parallel_market_data_service.py:190:- self.clock.monotonic()
+src/data/parallel_market_data_service.py:243:self.clock.monotonic()
+src/execution/capital_runtime.py:131:clock=None,
+src/execution/capital_runtime.py:159:"clock": clock,
+src/execution/capital_startup_store.py:10:from src.core.clock import SystemClock
+src/execution/capital_startup_store.py:359:clock=None,
+src/execution/capital_startup_store.py:365:self.clock = (
+src/execution/capital_startup_store.py:366:clock
+src/execution/capital_startup_store.py:367:or SystemClock()
+src/execution/capital_startup_store.py:378:self.clock.now()
+src/execution/execution_journal.py:17:from src.core.clock import (
+src/execution/execution_journal.py:19:SystemClock,
+src/execution/execution_journal.py:328:clock: Clock | None = None,
+src/execution/execution_journal.py:334:self.clock = (
+src/execution/execution_journal.py:335:clock
+src/execution/execution_journal.py:336:or SystemClock()
+src/execution/execution_journal.py:583:self.clock.now()
+src/execution/execution_journal.py:653:self.clock.now()
+src/execution/live_preflight.py:8:from src.core.clock import Clock, SystemClock
+src/execution/live_preflight.py:94:clock: Clock | None = None,
+src/execution/live_preflight.py:108:self.clock = (
+src/execution/live_preflight.py:109:clock
+src/execution/live_preflight.py:110:or SystemClock()
+src/execution/live_preflight.py:135:created_at=self.clock.now(),
+src/execution/live_preflight.py:342:clock=None,
+src/execution/live_preflight.py:349:clock = (
+src/execution/live_preflight.py:350:clock
+src/execution/live_preflight.py:351:or SystemClock()
+src/execution/live_preflight.py:355:clock=clock,
+src/execution/live_preflight.py:364:clock=clock,
+src/execution/live_preflight.py:389:clock=clock,
+src/execution/paper_broker.py:7:from src.core.clock import SystemClock
+src/execution/paper_broker.py:40:clock=None,
+src/execution/paper_broker.py:76:self.clock = (
+src/execution/paper_broker.py:77:clock
+src/execution/paper_broker.py:78:or SystemClock()
+src/execution/paper_broker.py:263:now = self.clock.now()
+src/execution/paper_broker.py:834:self.clock.now()
+src/execution/runtime.py:10:from src.core.clock import Clock, SystemClock
+src/execution/runtime.py:132:clock: Clock | None = None,
+src/execution/runtime.py:152:self.clock = (
+src/execution/runtime.py:153:clock
+src/execution/runtime.py:154:or SystemClock()
+src/execution/runtime.py:331:created_at=self.clock.now(),
+src/execution/state_store.py:12:from src.core.clock import (
+src/execution/state_store.py:14:SystemClock,
+src/execution/state_store.py:297:clock: Clock | None = None,
+src/execution/state_store.py:303:self.clock = (
+src/execution/state_store.py:304:clock
+src/execution/state_store.py:305:or SystemClock()
+src/execution/state_store.py:448:self.clock.now()
+src/fx/converter.py:3:from src.core.clock import (
+src/fx/converter.py:5:SystemClock,
+src/fx/converter.py:40:clock: Clock | None = None,
+src/fx/converter.py:46:self.clock = (
+
+=== EVIDENCE ===
+EVIDENCE_DEFINITION_COUNT=0
+EVIDENCE_REFERENCE_COUNT=159
+-- DEFINITIONS --
+-- REFERENCES --
+scripts/run_phase12_capital_accounting_smoke.py:310:exposure.fx_path,
+src/accounting/mtm_kernel.py:107:fx_rate: Decimal | None
+src/accounting/mtm_kernel.py:108:fx_path: str
+src/accounting/mtm_kernel.py:111:estimated_exit_fee_pln: Decimal | None
+src/accounting/mtm_kernel.py:166:fx_rate,
+src/accounting/mtm_kernel.py:167:fx_path,
+src/accounting/mtm_kernel.py:272:estimated_exit_fee_pln = (
+src/accounting/mtm_kernel.py:287:fx_path,
+src/accounting/mtm_kernel.py:288:"fx_path",
+src/accounting/mtm_kernel.py:312:if fx_rate is not None:
+src/accounting/mtm_kernel.py:332:estimated_exit_fee_pln = None
+src/accounting/mtm_kernel.py:338:fx_rate,
+src/accounting/mtm_kernel.py:339:"fx_rate",
+src/accounting/mtm_kernel.py:349:estimated_exit_fee_pln = (
+src/accounting/mtm_kernel.py:385:fx_rate=rate,
+src/accounting/mtm_kernel.py:386:fx_path=path,
+src/accounting/mtm_kernel.py:390:estimated_exit_fee_pln=(
+src/accounting/mtm_kernel.py:391:estimated_exit_fee_pln
+src/accounting/pln_kernel.py:128:fx_rate: Decimal
+src/accounting/pln_kernel.py:129:fx_path: str
+src/accounting/pln_kernel.py:135:spread_cost_pln: Decimal
+src/accounting/pln_kernel.py:230:fx_rate,
+src/accounting/pln_kernel.py:231:fx_path,
+src/accounting/pln_kernel.py:253:fx_path = _required_text(
+src/accounting/pln_kernel.py:254:fx_path,
+src/accounting/pln_kernel.py:255:"fx_path",
+src/accounting/pln_kernel.py:281:fx_rate = _positive_decimal(
+src/accounting/pln_kernel.py:282:fx_rate,
+src/accounting/pln_kernel.py:283:"fx_rate",
+src/accounting/pln_kernel.py:472:* fx_rate
+src/accounting/pln_kernel.py:477:* fx_rate
+src/accounting/pln_kernel.py:482:* fx_rate
+src/accounting/pln_kernel.py:485:spread_cost_pln = (
+src/accounting/pln_kernel.py:487:* fx_rate
+src/accounting/pln_kernel.py:492:* fx_rate
+src/accounting/pln_kernel.py:554:fx_rate=fx_rate,
+src/accounting/pln_kernel.py:555:fx_path=fx_path,
+src/accounting/pln_kernel.py:563:spread_cost_pln=(
+src/accounting/pln_kernel.py:564:spread_cost_pln
+src/accounting/portfolio_snapshot.py:161:* fx_rate
+src/accounting/portfolio_snapshot.py:189:"estimated_exit_fee_pln",
+src/accounting/portfolio_snapshot.py:194:"fx_rate",
+src/accounting/portfolio_snapshot.py:389:fx_rate = _required_decimal(
+src/accounting/portfolio_snapshot.py:390:record.fx_rate,
+src/accounting/portfolio_snapshot.py:391:"fx_rate",
+src/accounting/portfolio_snapshot.py:394:if fx_rate <= 0:
+src/accounting/portfolio_snapshot.py:396:"fx_rate must be positive"
+src/accounting/portfolio_snapshot.py:405:record.estimated_exit_fee_pln,
+src/accounting/portfolio_snapshot.py:406:"estimated_exit_fee_pln",
+src/accounting/portfolio_snapshot.py:416:"estimated_exit_fee_pln cannot be negative"
+src/accounting/portfolio_snapshot.py:443:* fx_rate
+src/accounting/realized_persistence.py:352:fx_rate = getattr(accounting_record, "fx_rate", None)
+src/accounting/realized_persistence.py:353:fx_path = getattr(accounting_record, "fx_path", None)
+src/accounting/realized_persistence.py:363:if fx_rate is None:
+src/accounting/realized_persistence.py:364:raise RealizedAccountingStoreError("fx_rate is required")
+src/accounting/realized_persistence.py:365:if fx_path is None:
+src/accounting/realized_persistence.py:366:raise RealizedAccountingStoreError("fx_path is required")
+src/accounting/realized_persistence.py:387:"fx_rate": _jsonable(fx_rate),
+src/accounting/realized_persistence.py:388:"fx_path": _required_text(
+src/accounting/realized_persistence.py:389:fx_path,
+src/accounting/realized_persistence.py:390:"accounting_record.fx_path",
+src/accounting/runtime_bridge.py:279:"fx_rate": None,
+src/accounting/runtime_bridge.py:280:"fx_path": None,
+src/accounting/runtime_bridge.py:345:"fx_path",
+src/accounting/runtime_bridge.py:354:"fx_conversion.fx_path",
+src/accounting/runtime_bridge.py:426:"fx_rate": rate,
+src/accounting/runtime_bridge.py:427:"fx_path": path_text,
+src/accounting/runtime_bridge.py:759:fx_rate=Decimal("1"),
+src/accounting/runtime_bridge.py:760:fx_path=_canonical_path(
+src/accounting/runtime_bridge.py:816:fx_rate=(
+src/accounting/runtime_bridge.py:817:fx_booking.fx_rate
+src/accounting/runtime_bridge.py:819:fx_path=(
+src/accounting/runtime_bridge.py:820:fx_booking.fx_path
+src/execution/capital_exposure.py:67:fx_path: str | None
+src/execution/capital_exposure.py:166:fx_path=None,
+src/execution/capital_exposure.py:190:fx_path=fx_path,
+src/execution/capital_exposure.py:406:fx_path = getattr(
+src/execution/capital_exposure.py:409:"fx_path",
+src/execution/capital_exposure.py:440:if fx_path != "USDT→USD→PLN":
+src/execution/capital_exposure.py:459:fx_path=fx_path,
+src/execution/capital_exposure.py:497:fx_path=fx_path,
+src/execution/capital_exposure.py:536:fx_path=fx_path,
+src/execution/capital_exposure.py:590:fx_path=fx_path,
+src/execution/capital_exposure.py:626:fx_path=fx_path,
+src/execution/capital_startup.py:129:fx_path: str = PHASE12_FX_PATH
+src/execution/capital_startup.py:173:"fx_path": PHASE12_FX_PATH,
+src/execution/capital_startup.py:237:"fx_path": self.fx_path,
+src/fx/converter.py:158:fx_path=path,
+src/fx/converter.py:203:fx_path=path,
+src/fx/converter.py:327:fx_path=path,
+src/fx/models.py:257:fx_path: FxPath
+src/fx/realized_booking.py:122:fx_path: str
+src/fx/realized_booking.py:123:fx_rate: float
+src/fx/realized_booking.py:392:fx_path="PLN",
+src/fx/realized_booking.py:393:fx_rate=1.0,
+src/fx/realized_booking.py:431:fx_rate = 1.0
+src/fx/realized_booking.py:434:fx_rate *= float(
+src/fx/realized_booking.py:440:* fx_rate
+src/fx/realized_booking.py:516:fx_path=path.text,
+src/fx/realized_booking.py:517:fx_rate=fx_rate,
+src/persistence/sqlite_bootstrap.py:152:"fx_path": None,
+src/persistence/sqlite_bootstrap.py:153:"fx_rate": None,
+src/persistence/sqlite_cutover_dependencies.py:46:execution_evidence_resolver: object
+src/persistence/sqlite_cutover_dependencies.py:47:realized_evidence_resolver: object
+src/persistence/sqlite_cutover_dependencies.py:130:"execution_evidence_resolver",
+src/persistence/sqlite_cutover_dependencies.py:131:"realized_evidence_resolver",
+src/persistence/sqlite_cutover_dependencies.py:226:execution_evidence_resolver=(
+src/persistence/sqlite_cutover_dependencies.py:227:context.execution_evidence_resolver
+src/persistence/sqlite_cutover_dependencies.py:229:realized_evidence_resolver=(
+src/persistence/sqlite_cutover_dependencies.py:230:context.realized_evidence_resolver
+src/persistence/sqlite_realistic_v2_mapper.py:176:execution_evidence_resolver,
+src/persistence/sqlite_realistic_v2_mapper.py:177:realized_evidence_resolver,
+src/persistence/sqlite_realistic_v2_mapper.py:188:execution_evidence_resolver
+src/persistence/sqlite_realistic_v2_mapper.py:191:"execution_evidence_resolver must be callable"
+src/persistence/sqlite_realistic_v2_mapper.py:195:realized_evidence_resolver
+src/persistence/sqlite_realistic_v2_mapper.py:198:"realized_evidence_resolver must be callable"
+src/persistence/sqlite_realistic_v2_mapper.py:204:self.execution_evidence_resolver = (
+src/persistence/sqlite_realistic_v2_mapper.py:205:execution_evidence_resolver
+src/persistence/sqlite_realistic_v2_mapper.py:207:self.realized_evidence_resolver = (
+src/persistence/sqlite_realistic_v2_mapper.py:208:realized_evidence_resolver
+src/persistence/sqlite_realistic_v2_mapper.py:408:self.execution_evidence_resolver(
+src/persistence/sqlite_realistic_v2_mapper.py:415:fee_pln = _decimal_text(
+src/persistence/sqlite_realistic_v2_mapper.py:418:"fee_pln",
+src/persistence/sqlite_realistic_v2_mapper.py:420:"fee_pln",
+src/persistence/sqlite_realistic_v2_mapper.py:423:fx_path = _required_text(
+src/persistence/sqlite_realistic_v2_mapper.py:426:"fx_path",
+src/persistence/sqlite_realistic_v2_mapper.py:428:"fx_path",
+src/persistence/sqlite_realistic_v2_mapper.py:431:fx_rate = _decimal_text(
+src/persistence/sqlite_realistic_v2_mapper.py:434:"fx_rate",
+src/persistence/sqlite_realistic_v2_mapper.py:436:"fx_rate",
+src/persistence/sqlite_realistic_v2_mapper.py:560:"fee_pln": fee_pln,
+src/persistence/sqlite_realistic_v2_mapper.py:601:"fx_path": fx_path,
+src/persistence/sqlite_realistic_v2_mapper.py:602:"fx_rate": fx_rate,
+src/persistence/sqlite_realistic_v2_mapper.py:795:self.realized_evidence_resolver(
+src/persistence/sqlite_realistic_v2_mapper.py:810:spread_cost_pln = _decimal_text(
+src/persistence/sqlite_realistic_v2_mapper.py:813:"spread_cost_pln",
+src/persistence/sqlite_realistic_v2_mapper.py:815:"spread_cost_pln",
+src/persistence/sqlite_realistic_v2_mapper.py:817:slippage_pln = _decimal_text(
+src/persistence/sqlite_realistic_v2_mapper.py:820:"slippage_pln",
+src/persistence/sqlite_realistic_v2_mapper.py:822:"slippage_pln",
+src/persistence/sqlite_realistic_v2_mapper.py:942:fx_rate = _decimal_text(
+src/persistence/sqlite_realistic_v2_mapper.py:945:"fx_rate",
+src/persistence/sqlite_realistic_v2_mapper.py:948:"accounting_record.fx_rate",
+src/persistence/sqlite_realistic_v2_mapper.py:950:fx_path = _required_text(
+src/persistence/sqlite_realistic_v2_mapper.py:953:"fx_path",
+src/persistence/sqlite_realistic_v2_mapper.py:956:"accounting_record.fx_path",
+src/persistence/sqlite_realistic_v2_mapper.py:985:"spread_cost_pln": spread_cost_pln,
+src/persistence/sqlite_realistic_v2_mapper.py:986:"slippage_pln": slippage_pln,
+src/persistence/sqlite_realistic_v2_mapper.py:988:"realized_fx_path": fx_path,
+src/persistence/sqlite_realistic_v2_mapper.py:989:"realized_fx_rate": fx_rate,
+src/persistence/sqlite_realistic_v2_mapper.py:1018:"fx_path": fx_path,
+src/persistence/sqlite_realistic_v2_mapper.py:1019:"fx_rate": fx_rate,
+src/persistence/sqlite_repository.py:75:"fee_pln",
+src/persistence/sqlite_repository.py:76:"fx_rate",
+src/persistence/sqlite_repository.py:89:"fx_rate",
+src/persistence/sqlite_repository.py:96:"spread_cost_pln",
+src/persistence/sqlite_repository.py:97:"slippage_pln",
+src/persistence/sqlite_repository.py:98:"realized_fx_rate",
+src/persistence/sqlite_repository.py:115:"fx_rate",
+
+=== IMPORTANT APPLICATION FILES ===
+
+FILE: scripts/run_phase10_accounting_smoke.py
+ASSET:L134:metadata.asset_registry_hash,
+FX:L365:fx_prefetch_timeout_seconds=(
+FX:L367:.fx_prefetch_timeout_seconds
+FX:L369:fx_prefetch_max_workers=(
+FX:L371:.fx_prefetch_max_workers
+FX:L498:.fx_resolver
+FX:L508:.fx_resolver
+FX:L517:.fx_resolver
+FX:L525:.fx_resolver
+
+FILE: scripts/run_phase10_persisted_accounting_smoke.py
+CLOCK:L127:clock,
+CLOCK:L136:clock=clock,
+ASSET:L208:metadata.asset_registry_hash,
+FX:L422:fx_prefetch_timeout_seconds=(
+FX:L424:.fx_prefetch_timeout_seconds
+FX:L426:fx_prefetch_max_workers=(
+FX:L428:.fx_prefetch_max_workers
+CLOCK:L504:clock=runtime.clock,
+CLOCK:L575:clock=runtime.clock,
+
+FILE: scripts/run_phase11_cash_accounting_smoke.py
+CLOCK:L156:clock,
+CLOCK:L187:clock=clock,
+CLOCK:L209:clock,
+CLOCK:L221:clock=clock,
+ASSET:L295:metadata.asset_registry_hash,
+MARKET_DATA:L401:result.portfolio_snapshot
+MARKET_DATA:L405:"Portfolio snapshot available:",
+FX:L544:fx_prefetch_timeout_seconds=(
+FX:L546:.fx_prefetch_timeout_seconds
+FX:L548:fx_prefetch_max_workers=(
+FX:L550:.fx_prefetch_max_workers
+CLOCK:L604:clock=runtime.clock,
+CLOCK:L616:clock=runtime.clock,
+CLOCK:L669:clock=runtime.clock,
+
+FILE: scripts/run_phase12_capital_accounting_smoke.py
+ASSET:L46:get_asset,
+CLOCK:L140:clock,
+CLOCK:L152:clock=clock,
+ASSET:L236:metadata.asset_registry_hash,
+FX:L310:exposure.fx_path,
+EVIDENCE:L310:exposure.fx_path,
+FX:L316:if exposure.fx_freshness
+FX:L318:else exposure.fx_freshness.value
+FX:L470:fx_prefetch_timeout_seconds=(
+FX:L472:.fx_prefetch_timeout_seconds
+FX:L474:fx_prefetch_max_workers=(
+FX:L476:.fx_prefetch_max_workers
+ASSET:L488:get_asset(
+CLOCK:L540:clock=runtime.clock,
+CLOCK:L552:clock=runtime.clock,
+CLOCK:L620:clock=runtime.clock,
+CLOCK:L635:clock=runtime.clock,
+
+FILE: scripts/run_phase14_sqlite_cutover.py
+NO_BINDING_KEYWORD_HITS
+
+FILE: src/agent/ai_manager.py
+DECISION:L158:class AIPaperManager:
+
+FILE: src/agent/multi_asset_runner.py
+NO_BINDING_KEYWORD_HITS
+
+FILE: src/main.py
+NO_BINDING_KEYWORD_HITS
+
+=== CURRENT PHASE14 CONTEXT CONTRACT ===
+CONTEXT_FIELD_MARKET_DATA_SERVICE=PRESENT
+CONTEXT_FIELD_MARKET_SESSION_SERVICE=PRESENT
+CONTEXT_FIELD_DECISION_PROVIDER=PRESENT
+CONTEXT_FIELD_CLOCK=PRESENT
+CONTEXT_FIELD_ASSET_RESOLVER=PRESENT
+CONTEXT_FIELD_FX_CONVERSION_RESOLVER=PRESENT
+CONTEXT_FIELD_ESTIMATED_EXIT_FEE_RESOLVER=PRESENT
+CONTEXT_FIELD_REALIZED_QUOTES_RESOLVER=PRESENT
+CONTEXT_FIELD_EXECUTION_EVIDENCE_RESOLVER=PRESENT
+CONTEXT_FIELD_REALIZED_EVIDENCE_RESOLVER=PRESENT
+
+=== BINDING READINESS SUMMARY ===
+BINDING_MARKET_DATA_CANDIDATES=328
+BINDING_MARKET_SESSION_CANDIDATES=90
+BINDING_DECISION_CANDIDATES=74
+BINDING_FX_CANDIDATES=650
+BINDING_ASSET_CANDIDATES=57
+BINDING_CLOCK_CANDIDATES=196
+BINDING_EVIDENCE_CANDIDATES=159
+
+A6_INVENTORY=PASS
+SOURCE_MODIFIED_BY_AUDIT=NO
+LIVE_CYCLE_RUN=NO
+
+
+TARGETED PHASE 10-14 REGRESSION:
+------------------------------------------------------------
+........................................................................ [ 15%]
+........................................................................ [ 31%]
+........................................................................ [ 47%]
+........................................................................ [ 63%]
+........................................................................ [ 78%]
+........................................................................ [ 94%]
+........................                                                 [100%]
+456 passed in 5.35s
+
+FULL OFFLINE REGRESSION:
+------------------------------------------------------------
+........................................................................ [  6%]
+........................................................................ [ 13%]
+........................................................................ [ 20%]
+........................................................................ [ 26%]
+........................................................................ [ 33%]
+........................................................................ [ 40%]
+........................................................................ [ 46%]
+........................................................................ [ 53%]
+........................................................................ [ 60%]
+........................................................................ [ 67%]
+........................................................................ [ 73%]
+........................................................................ [ 80%]
+........................................................................ [ 87%]
+........................................................................ [ 93%]
+.................................................................        [100%]
+1073 passed in 81.93s (0:01:21)
+
+BTC LEGACY_V1 GOLDEN:
+------------------------------------------------------------
+=== BACKTEST BENCHMARK ===
+Symbol:           BTCUSDT
+Interval:         1m
+Świece:           5000
+Kapitał początk.: 1000.0
+Kapitał końcowy:  1014.8392976799995
+Transakcje:       13
+Wygrane:          7
+Przegrane:        6
+Win rate:         53.84615384615385
+Total profit:     14.839297679999504
+Max drawdown:     18.485012400000187
+Profit factor:    1.692128777090018
+Average win:      5.182768514285695
+Average loss:     3.573346986666712
+Largest win:     13.000798400000047
+Largest loss:     9.580003080000042
+Expectancy:       1.1414844369230388
+
+VERIFIED:
+- Phase14PaperDependencyContext contract inventoried
+- market-data candidates inventoried
+- market-session candidates inventoried
+- decision-provider candidates inventoried
+- FX candidates inventoried
+- asset resolver/registry candidates inventoried
+- clock candidates inventoried
+- evidence candidates inventoried
+- Phase 14 entrypoint contains no run_cycle
+- Phase 14 entrypoint contains no clear_halt
+- source/runtime code unchanged
+- live DB unchanged
+- bootstrap backup unchanged
+- protected user change preserved
+- HALT not cleared
+- trading not activated
+
+LIVE DATABASE SHA256 BEFORE:
+F51C2DB77B6346372340AC772DD58099CF4E842144A7F196567A2E0D4591212D
+
+LIVE DATABASE SHA256 AFTER:
+F51C2DB77B6346372340AC772DD58099CF4E842144A7F196567A2E0D4591212D
+
+LIVE DATABASE MODIFIED:
+NO
+
+SOURCE/RUNTIME MODIFIED:
+NO
+
+PHASE 14 A.6:
+PASS
+
+NEXT:
+PHASE 14 A.7 - APPLICATION BINDING ADAPTER
+BASED ONLY ON A.6 INVENTORY
+NO LIVE CYCLE
+
+HARD STOP BEFORE REAL LIVE DB WRITER WIRING OR HALT CLEAR
