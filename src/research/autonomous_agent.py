@@ -27,7 +27,7 @@ class AutonomousResearchAgent:
         self.macro = MacroEventCollector(self.data_dir)
         self.scanner = OpportunityScanner(self.data_dir)
         self.ai = AIPaperManager(self.data_dir / "ai_paper.json", assets=[])
-        self.scan_interval = max(60, int(os.getenv("AL_TRADING_SCAN_SECONDS", "300")))
+        self.scan_interval = max(60, int(os.getenv("AL_TRADING_SCAN_SECONDS", "600")))
         self.macro_interval = max(60, int(os.getenv("AL_TRADING_MACRO_SECONDS", "600")))
         self.paper_interval = max(30, int(os.getenv("AL_TRADING_PAPER_SECONDS", "60")))
         self._next_scan = 0.0
@@ -54,6 +54,7 @@ class AutonomousResearchAgent:
 
     def _persist_state(self, ai_state: dict | None = None) -> dict:
         now = datetime.now(timezone.utc)
+        scan = self._last_scan or {}
         state = {
             "version": 1,
             "mode": "AUTONOMOUS_RESEARCH_PAPER",
@@ -63,8 +64,13 @@ class AutonomousResearchAgent:
             "updated_at_unix": now.timestamp(),
             "top_n": len(self._opportunities),
             "opportunities": self._opportunities,
-            "universe_count": (self._last_scan or {}).get("universe_count", 0),
-            "preselected_count": (self._last_scan or {}).get("preselected_count", 0),
+            "universe_count": scan.get("universe_count", 0),
+            "crypto_universe_count": scan.get("crypto_universe_count", 0),
+            "connected_non_crypto_count": scan.get("connected_non_crypto_count", 0),
+            "preselected_count": scan.get("preselected_count", 0),
+            "available_by_class": scan.get("available_by_class", {}),
+            "selected_by_class": scan.get("selected_by_class", {}),
+            "selection_policy": scan.get("selection_policy", {}),
             "macro_events": self.macro.recent(limit=30),
             "ai": ai_state or self.ai.state,
             "errors": {
@@ -107,6 +113,7 @@ class AutonomousResearchAgent:
                     "event_type": "OPPORTUNITY_SCAN",
                     "universe_count": self._last_scan.get("universe_count", 0),
                     "selected": [row.get("symbol") for row in self._opportunities],
+                    "selected_by_class": self._last_scan.get("selected_by_class", {}),
                 })
             except Exception as exc:
                 self._last_scan_error = f"{type(exc).__name__}: {exc}"

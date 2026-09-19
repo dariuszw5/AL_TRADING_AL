@@ -25,7 +25,7 @@ SUPPORTED_ASSETS = (
     AssetSpec(
         "GOLD_FUT_CONT",
         "Złoto (futures proxy)",
-        "gold",
+        "commodity",
         "yahoo",
         "GC=F",
         "USD",
@@ -37,7 +37,7 @@ SUPPORTED_ASSETS = (
     AssetSpec(
         "WTI_FUT_CONT",
         "Ropa WTI (futures proxy)",
-        "oil",
+        "commodity",
         "yahoo",
         "CL=F",
         "USD",
@@ -59,7 +59,7 @@ SUPPORTED_ASSETS = (
     AssetSpec(
         "AAPL",
         "Apple",
-        "stock",
+        "equity",
         "yahoo",
         "AAPL",
         "USD",
@@ -68,10 +68,51 @@ SUPPORTED_ASSETS = (
     ),
 )
 
+
+RESEARCH_ASSETS = (
+    *[asset for asset in SUPPORTED_ASSETS if asset.symbol == "AAPL"],
+    AssetSpec("MSFT", "Microsoft", "equity", "yahoo", "MSFT", "USD", 0.05, "equity"),
+    AssetSpec("NVDA", "NVIDIA", "equity", "yahoo", "NVDA", "USD", 0.05, "equity"),
+    AssetSpec("AMZN", "Amazon", "equity", "yahoo", "AMZN", "USD", 0.05, "equity"),
+    AssetSpec("META", "Meta", "equity", "yahoo", "META", "USD", 0.05, "equity"),
+    AssetSpec("GOOGL", "Alphabet", "equity", "yahoo", "GOOGL", "USD", 0.05, "equity"),
+    AssetSpec("TSLA", "Tesla", "equity", "yahoo", "TSLA", "USD", 0.05, "equity"),
+    AssetSpec("JPM", "JPMorgan", "equity", "yahoo", "JPM", "USD", 0.05, "equity"),
+    AssetSpec("XOM", "Exxon Mobil", "equity", "yahoo", "XOM", "USD", 0.05, "equity"),
+
+    AssetSpec("SPY", "S&P 500 ETF", "etf", "yahoo", "SPY", "USD", 0.05, "etf"),
+    AssetSpec("QQQ", "Nasdaq 100 ETF", "etf", "yahoo", "QQQ", "USD", 0.05, "etf"),
+    AssetSpec("IWM", "Russell 2000 ETF", "etf", "yahoo", "IWM", "USD", 0.05, "etf"),
+    AssetSpec("DIA", "Dow 30 ETF", "etf", "yahoo", "DIA", "USD", 0.05, "etf"),
+    AssetSpec("XLK", "Technology Select ETF", "etf", "yahoo", "XLK", "USD", 0.05, "etf"),
+    AssetSpec("XLF", "Financial Select ETF", "etf", "yahoo", "XLF", "USD", 0.05, "etf"),
+
+    *[asset for asset in SUPPORTED_ASSETS if asset.symbol == "EURUSD"],
+    AssetSpec("GBPUSD", "Funt / dolar", "forex", "yahoo", "GBPUSD=X", "USD", 0.0001, "fx_spot_reference"),
+    AssetSpec("USDJPY", "Dolar / jen", "forex", "yahoo", "JPY=X", "JPY", 0.01, "fx_spot_reference"),
+    AssetSpec("AUDUSD", "Dolar australijski / dolar", "forex", "yahoo", "AUDUSD=X", "USD", 0.0001, "fx_spot_reference"),
+    AssetSpec("USDCAD", "Dolar / dolar kanadyjski", "forex", "yahoo", "CAD=X", "CAD", 0.0001, "fx_spot_reference"),
+    AssetSpec("USDCHF", "Dolar / frank", "forex", "yahoo", "CHF=X", "CHF", 0.0001, "fx_spot_reference"),
+    AssetSpec("NZDUSD", "Dolar nowozelandzki / dolar", "forex", "yahoo", "NZDUSD=X", "USD", 0.0001, "fx_spot_reference"),
+
+    AssetSpec("SP500_INDEX", "S&P 500 Index", "index", "yahoo", "^GSPC", "USD", 0.1, "index_reference"),
+    AssetSpec("NASDAQ100_INDEX", "Nasdaq 100 Index", "index", "yahoo", "^NDX", "USD", 0.1, "index_reference"),
+    AssetSpec("DOW30_INDEX", "Dow Jones Index", "index", "yahoo", "^DJI", "USD", 0.1, "index_reference"),
+    AssetSpec("RUSSELL2000_INDEX", "Russell 2000 Index", "index", "yahoo", "^RUT", "USD", 0.1, "index_reference"),
+    AssetSpec("VIX_INDEX", "VIX Index", "index", "yahoo", "^VIX", "USD", 0.01, "index_reference"),
+
+    *[asset for asset in SUPPORTED_ASSETS if asset.symbol in {"GOLD_FUT_CONT", "WTI_FUT_CONT"}],
+    AssetSpec("SILVER_FUT_CONT", "Srebro (futures proxy)", "commodity", "yahoo", "SI=F", "USD", 0.01, "continuous_future_proxy"),
+    AssetSpec("COPPER_FUT_CONT", "Miedź (futures proxy)", "commodity", "yahoo", "HG=F", "USD", 0.001, "continuous_future_proxy"),
+    AssetSpec("NATGAS_FUT_CONT", "Gaz ziemny (futures proxy)", "commodity", "yahoo", "NG=F", "USD", 0.001, "continuous_future_proxy"),
+    AssetSpec("BRENT_FUT_CONT", "Brent (futures proxy)", "commodity", "yahoo", "BZ=F", "USD", 0.01, "continuous_future_proxy"),
+)
+
 ASSET_BY_SYMBOL = {asset.symbol: asset for asset in SUPPORTED_ASSETS}
+RESEARCH_ASSET_BY_SYMBOL = {asset.symbol: asset for asset in RESEARCH_ASSETS}
 ASSET_ALIASES = {
     alias.upper(): asset.symbol
-    for asset in SUPPORTED_ASSETS
+    for asset in (*SUPPORTED_ASSETS, *RESEARCH_ASSETS)
     for alias in asset.aliases
 }
 _BINANCE_USDT_RE = re.compile(r"^[A-Z0-9]{2,20}USDT$")
@@ -98,7 +139,7 @@ def dynamic_binance_asset(symbol: str) -> AssetSpec:
 def get_asset(symbol: str, *, allow_dynamic_binance: bool = False) -> AssetSpec:
     normalized = symbol.upper().strip()
     canonical = ASSET_ALIASES.get(normalized, normalized)
-    asset = ASSET_BY_SYMBOL.get(canonical)
+    asset = ASSET_BY_SYMBOL.get(canonical) or RESEARCH_ASSET_BY_SYMBOL.get(canonical)
     if asset is not None:
         return asset
     if allow_dynamic_binance:

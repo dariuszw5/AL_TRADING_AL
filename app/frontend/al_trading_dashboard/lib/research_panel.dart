@@ -16,6 +16,25 @@ class ResearchPanel extends StatelessWidget {
     return value.toDouble().toStringAsFixed(4);
   }
 
+  String classLabel(dynamic value) {
+    switch (value?.toString()) {
+      case 'crypto':
+        return 'CRYPTO';
+      case 'equity':
+        return 'AKCJE';
+      case 'etf':
+        return 'ETF';
+      case 'forex':
+        return 'FOREX';
+      case 'index':
+        return 'INDEKS';
+      case 'commodity':
+        return 'SUROWCE';
+      default:
+        return value?.toString().toUpperCase() ?? '—';
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final available = data?['available'] == true;
@@ -25,6 +44,12 @@ class ResearchPanel extends StatelessWidget {
     final universe = data?['universe_count'] ?? 0;
     final updated = data?['updated_at']?.toString();
     final errors = data?['errors'] as Map? ?? const {};
+    final selectedByClass = data?['selected_by_class'] as Map? ?? const {};
+    final availableByClass = data?['available_by_class'] as Map? ?? const {};
+
+    final composition = selectedByClass.entries
+        .map((entry) => '${classLabel(entry.key)} ${entry.value}')
+        .join(' · ');
 
     return Card(
       child: Padding(
@@ -49,10 +74,15 @@ class ResearchPanel extends StatelessWidget {
               ],
             ),
             const SizedBox(height: 6),
-            Text(
+            const Text(
               'Prawdziwe dane rynkowe i makro · pieniądze wyłącznie wirtualne · '
               'realne zlecenia: 0',
-              style: const TextStyle(color: Colors.white60),
+              style: TextStyle(color: Colors.white60),
+            ),
+            const SizedBox(height: 4),
+            const Text(
+              'Ranking wielorynkowy: CRYPTO · AKCJE · ETF · FOREX · INDEKSY · SUROWCE',
+              style: TextStyle(color: Colors.white54, fontSize: 12),
             ),
             if (error != null) ...[
               const SizedBox(height: 8),
@@ -67,12 +97,28 @@ class ResearchPanel extends StatelessWidget {
                 spacing: 18,
                 runSpacing: 8,
                 children: [
-                  Text('Skanowany universu: $universe'),
+                  Text('Skanowany universe: $universe'),
                   Text('Wybrane: ${opportunities.length}/10'),
+                  Text('Aktywne klasy: ${availableByClass.length}'),
                   Text(stale ? 'Status: STALE' : 'Status: LIVE'),
                   if (updated != null) Text('Aktualizacja: $updated'),
                 ],
               ),
+              if (composition.isNotEmpty) ...[
+                const SizedBox(height: 8),
+                Text(
+                  'Skład TOP 10: $composition',
+                  style: const TextStyle(
+                    color: Colors.lightBlueAccent,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const Text(
+                  'Standardowo maks. 3 pozycje z jednej klasy. Limit może zostać '
+                  'przekroczony tylko wtedy, gdy inne klasy są zamknięte lub mają stare dane.',
+                  style: TextStyle(color: Colors.white54, fontSize: 12),
+                ),
+              ],
               const SizedBox(height: 14),
               if (opportunities.isNotEmpty)
                 SingleChildScrollView(
@@ -80,9 +126,10 @@ class ResearchPanel extends StatelessWidget {
                   child: DataTable(
                     columns: const [
                       DataColumn(label: Text('#')),
+                      DataColumn(label: Text('Klasa')),
                       DataColumn(label: Text('Aktywo')),
                       DataColumn(label: Text('Strategia')),
-                      DataColumn(label: Text('Ocena')),
+                      DataColumn(label: Text('Cross score')),
                       DataColumn(label: Text('Prognoza netto')),
                       DataColumn(label: Text('Walidacja')),
                       DataColumn(label: Text('Pamięć')),
@@ -93,9 +140,10 @@ class ResearchPanel extends StatelessWidget {
                       return DataRow(
                         cells: [
                           DataCell(Text('${entry.key + 1}')),
+                          DataCell(Text(classLabel(row['asset_class']))),
                           DataCell(Text(row['symbol']?.toString() ?? '—')),
                           DataCell(Text(row['strategy']?.toString() ?? '—')),
-                          DataCell(Text(score(row['combined_score']))),
+                          DataCell(Text(score(row['cross_market_score']))),
                           DataCell(Text(pct(row['expected_net_return']))),
                           DataCell(Text('${row['validation_trades'] ?? 0}')),
                           DataCell(Text('${memory['samples'] ?? 0} próbek')),
@@ -138,9 +186,10 @@ class ResearchPanel extends StatelessWidget {
               ],
               const SizedBox(height: 10),
               const Text(
-                'Ranking to model badawczy, nie gwarancja zysku. Model korzysta z '
-                'historycznych świec, walidacji czasowej, kosztów, płynności oraz '
-                'ograniczonej pamięci podobnych sytuacji z wcześniejszych logów.',
+                'Ranking jest normalizowany wewnątrz klasy aktywów, dzięki czemu '
+                'surowa zmienność kryptowalut nie daje automatycznej przewagi nad '
+                'akcjami, ETF, FX, indeksami i surowcami. To model badawczy, nie '
+                'gwarancja zysku.',
                 style: TextStyle(color: Colors.white54, fontSize: 12),
               ),
             ],

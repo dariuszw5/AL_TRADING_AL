@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from src.data.assets import dynamic_binance_asset, get_asset
+from src.data.assets import RESEARCH_ASSETS, dynamic_binance_asset, get_asset
 from src.research.experience import ExperienceMemory
 from src.research.market_scanner import OpportunityScanner
 from src.research.autonomous_agent import AutonomousResearchAgent
@@ -12,6 +12,65 @@ def test_dynamic_binance_assets_are_transient_and_valid():
     assert asset.provider == "binance"
     assert asset.quote == "USDT"
     assert get_asset("ADAUSDT", allow_dynamic_binance=True).symbol == "ADAUSDT"
+
+
+def test_research_universe_spans_multiple_market_classes():
+    classes = {asset.asset_type for asset in RESEARCH_ASSETS}
+    assert {"equity", "etf", "forex", "index", "commodity"} <= classes
+    assert get_asset("MSFT").provider == "yahoo"
+    assert get_asset("GBPUSD").provider_symbol == "GBPUSD=X"
+    assert get_asset("SILVER_FUT_CONT").provider_symbol == "SI=F"
+
+
+def test_balanced_top_prevents_one_class_from_dominating(tmp_path):
+    scanner = OpportunityScanner(tmp_path)
+    scanner.top_n = 10
+    scanner.class_cap = 3
+
+    rows = []
+    for index in range(12):
+        rows.append({
+            "symbol": f"C{index}USDT",
+            "asset_class": "crypto",
+            "combined_score": 1.0 - index * 0.01,
+            "validation_trades": 20,
+            "eligible": True,
+        })
+    for asset_class in ("equity", "etf", "forex", "index", "commodity"):
+        for index in range(3):
+            rows.append({
+                "symbol": f"{asset_class}_{index}",
+                "asset_class": asset_class,
+                "combined_score": 0.2 - index * 0.01,
+                "validation_trades": 10,
+                "eligible": True,
+            })
+
+    top = scanner._balanced_top(rows)
+    classes = [row["asset_class"] for row in top]
+
+    assert len(top) == 10
+    assert classes.count("crypto") <= 3
+    assert {"crypto", "equity", "etf", "forex", "index", "commodity"} <= set(classes)
+
+
+def test_balanced_top_can_fallback_when_only_one_class_is_live(tmp_path):
+    scanner = OpportunityScanner(tmp_path)
+    scanner.top_n = 10
+    scanner.class_cap = 3
+    rows = [
+        {
+            "symbol": f"C{index}USDT",
+            "asset_class": "crypto",
+            "combined_score": 1.0 - index * 0.01,
+            "validation_trades": 20,
+            "eligible": True,
+        }
+        for index in range(12)
+    ]
+    top = scanner._balanced_top(rows)
+    assert len(top) == 10
+    assert all(row["asset_class"] == "crypto" for row in top)
 
 
 def test_experience_memory_learns_only_after_horizon(tmp_path):
@@ -116,6 +175,7 @@ def test_autonomous_agent_keeps_real_orders_disabled(tmp_path, monkeypatch):
         lambda tags: {
             "universe_count": 100,
             "preselected_count": 30,
+            "selected_by_class": {"crypto": 2, "equity": 2},
             "opportunities": [
                 {
                     "symbol": "BTCUSDT",
@@ -134,5 +194,6 @@ def test_autonomous_agent_keeps_real_orders_disabled(tmp_path, monkeypatch):
     assert state["paper_only"] is True
     assert state["real_orders"] is False
     assert state["universe_count"] == 100
+    assert state["selected_by_class"] == {"crypto": 2, "equity": 2}
     assert state["opportunities"][0]["symbol"] == "BTCUSDT"
     assert (Path(tmp_path) / "research_state.json").exists()
