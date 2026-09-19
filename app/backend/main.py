@@ -16,11 +16,17 @@ from src.data.fx_provider import FxRateProvider, PlnRate
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
-LIVE_STATE_DIR = Path(\n    os.getenv("AL_TRADING_DATA_DIR", str(PROJECT_ROOT / "data" / "live_state"))\n)
+LIVE_STATE_DIR = Path(
+    os.getenv(
+        "AL_TRADING_DATA_DIR",
+        str(PROJECT_ROOT / "data" / "live_state"),
+    )
+)
 TRADE_HISTORY_FILE = LIVE_STATE_DIR / "paper_live_history.csv"
 SNAPSHOTS_FILE = LIVE_STATE_DIR / "paper_live_snapshots.csv"
 DAILY_FILE = LIVE_STATE_DIR / "paper_live_daily.csv"
 USER_PORTFOLIO_FILE = LIVE_STATE_DIR / "user_portfolio.json"
+RESEARCH_STATE_FILE = LIVE_STATE_DIR / "research_state.json"
 
 FX_PROVIDER = FxRateProvider(ttl_seconds=60.0)
 MARKET_CACHE: dict[str, dict[str, Any]] = {}
