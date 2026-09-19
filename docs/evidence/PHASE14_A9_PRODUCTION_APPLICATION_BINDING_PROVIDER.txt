@@ -1,0 +1,114 @@
+﻿PHASE 14 A.9 - PRODUCTION APPLICATION BINDING PROVIDER
+============================================================
+
+BASE HEAD:
+5bfd7cc
+
+CONTROLLED RED:
+CONFIRMED
+
+A.9 TESTS:
+------------------------------------------------------------
+............                                                             [100%]
+12 passed in 0.26s
+
+TARGETED PHASE 10-14 REGRESSION:
+------------------------------------------------------------
+........................................................................ [ 14%]
+........................................................................ [ 29%]
+........................................................................ [ 44%]
+........................................................................ [ 59%]
+........................................................................ [ 73%]
+........................................................................ [ 88%]
+........................................................                 [100%]
+488 passed in 4.48s
+
+FULL OFFLINE REGRESSION:
+------------------------------------------------------------
+........................................................................ [  6%]
+........................................................................ [ 13%]
+........................................................................ [ 19%]
+........................................................................ [ 26%]
+........................................................................ [ 32%]
+........................................................................ [ 39%]
+........................................................................ [ 45%]
+........................................................................ [ 52%]
+........................................................................ [ 58%]
+........................................................................ [ 65%]
+........................................................................ [ 71%]
+........................................................................ [ 78%]
+........................................................................ [ 84%]
+........................................................................ [ 91%]
+........................................................................ [ 97%]
+.........................                                                [100%]
+1105 passed in 81.32s (0:01:21)
+
+BTC LEGACY_V1 GOLDEN:
+------------------------------------------------------------
+=== BACKTEST BENCHMARK ===
+Symbol:           BTCUSDT
+Interval:         1m
+Świece:           5000
+Kapitał początk.: 1000.0
+Kapitał końcowy:  1014.8392976799995
+Transakcje:       13
+Wygrane:          7
+Przegrane:        6
+Win rate:         53.84615384615385
+Total profit:     14.839297679999504
+Max drawdown:     18.485012400000187
+Profit factor:    1.692128777090018
+Average win:      5.182768514285695
+Average loss:     3.573346986666712
+Largest win:     13.000798400000047
+Largest loss:     9.580003080000042
+Expectancy:       1.1414844369230388
+
+PRODUCTION BINDINGS:
+- ProductionFxResolver.conversion_for
+- ProductionFxResolver.resolve_realized_quotes
+- BrokerExitFeeEstimator callable
+
+EXPLICIT / FAIL-CLOSED:
+- market_data_service
+- decision_provider
+- execution_evidence_resolver
+- realized_evidence_resolver
+
+VERIFIED:
+- only real ProductionFxResolver accepted
+- only real BrokerExitFeeEstimator accepted
+- production resolver methods are bound but not invoked
+- market/decision/evidence remain explicit
+- A.9 output builds A.7 application context
+- A.9 output constructs real Phase 13 bundle on TEMP SQLite
+- bundle immediately closes
+- run_cycle absent
+- clear_halt absent
+- TEMP database remains HALTED
+- no JSON/JSONL durable writers
+- existing production resolver source unchanged
+- Phase 14 entrypoint unchanged
+- live DB unchanged
+- bootstrap backup unchanged
+- protected user change preserved
+- HALT not cleared
+- trading not activated
+
+LIVE DATABASE SHA256 BEFORE:
+F51C2DB77B6346372340AC772DD58099CF4E842144A7F196567A2E0D4591212D
+
+LIVE DATABASE SHA256 AFTER:
+F51C2DB77B6346372340AC772DD58099CF4E842144A7F196567A2E0D4591212D
+
+LIVE DATABASE MODIFIED:
+NO
+
+PHASE 14 A.9:
+PASS
+
+NEXT:
+PHASE 14 A.10 - ENTRYPOINT PRODUCTION BINDING INTEGRATION
+CONSTRUCTION ONLY / NO LIVE CYCLE
+
+HARD STOP BEFORE REAL LIVE DB WRITER WIRING OR HALT CLEAR
