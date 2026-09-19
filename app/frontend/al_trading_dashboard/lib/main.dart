@@ -17,7 +17,7 @@ const List<Map<String, String>> fallbackAssets = [
   {'symbol': 'XRPUSDT', 'name': 'XRP', 'asset_type': 'crypto'},
   {
     'symbol': 'GOLD_FUT_CONT',
-    'name': 'ZĹ‚oto (futures proxy)',
+    'name': 'Złoto (futures proxy)',
     'asset_type': 'gold',
   },
   {
@@ -242,7 +242,7 @@ class _DashboardPageState extends State<DashboardPage> {
       'provider_symbol': selectedSymbol,
       'stale': false,
       'age_seconds': 0.0,
-      'pln': {'available': true, 'path': 'TESTâ†’PLN'},
+      'pln': {'available': true, 'path': 'TEST→PLN'},
     };
 
     loading = false;
@@ -294,7 +294,7 @@ class _DashboardPageState extends State<DashboardPage> {
       context: context,
       builder: (context) => AlertDialog(
         title: Text(
-          deposit ? 'WpĹ‚ata do mojego portfela' : 'WypĹ‚ata z mojego portfela',
+          deposit ? 'Wpłata do mojego portfela' : 'Wypłata z mojego portfela',
         ),
         content: TextField(
           controller: controller,
@@ -341,8 +341,8 @@ class _DashboardPageState extends State<DashboardPage> {
     if (portfolio == null) {
       return const Card(
         child: ListTile(
-          title: Text('MĂ“J PORTFEL'),
-          subtitle: Text('Ĺadowanie...'),
+          title: Text('MÓJ PORTFEL'),
+          subtitle: Text('Ładowanie...'),
         ),
       );
     }
@@ -358,7 +358,7 @@ class _DashboardPageState extends State<DashboardPage> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const Text(
-              'MĂ“J PORTFEL',
+              'MÓJ PORTFEL',
               style: TextStyle(fontSize: 19, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 8),
@@ -367,15 +367,15 @@ class _DashboardPageState extends State<DashboardPage> {
               style: const TextStyle(fontSize: 20),
             ),
             Text(
-              'WpĹ‚aty: ${deposited.toStringAsFixed(2)} PLN â€˘ '
-              'WypĹ‚aty: ${withdrawn.toStringAsFixed(2)} PLN',
+              'Wpłaty: ${deposited.toStringAsFixed(2)} PLN • '
+              'Wypłaty: ${withdrawn.toStringAsFixed(2)} PLN',
             ),
             Text(
               'Wynik: ${result >= 0 ? '+' : ''}${result.toStringAsFixed(2)} PLN',
             ),
             const SizedBox(height: 6),
             const Text(
-              'Portfel uĹĽytkownika jest oddzielny od wirtualnego kapitaĹ‚u AI.',
+              'Portfel użytkownika jest oddzielny od wirtualnego kapitału AI.',
               style: TextStyle(color: Colors.white60, fontSize: 12),
             ),
           ],
@@ -599,7 +599,7 @@ class _DashboardPageState extends State<DashboardPage> {
                 ),
                 Text(
                   stale
-                      ? 'Dane nieaktualne / bĹ‚Ä…d poĹ‚Ä…czenia'
+                      ? 'Dane nieaktualne / błąd połączenia'
                       : plnAvailable && pnlPln != null
                       ? '${pnlPln >= 0 ? '+' : ''}${money(pnlPln)} PLN'
                       : '${pnl >= 0 ? '+' : ''}${money(pnl)} $quote',
@@ -622,9 +622,9 @@ class _DashboardPageState extends State<DashboardPage> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        sectionTitle('WSZYSTKIE RYNKI Â· PAPER LIVE'),
+        sectionTitle('WSZYSTKIE RYNKI · PAPER LIVE'),
         Text(
-          'Ostatni odbiĂłr: ${overviewReceived?.toLocal().toString().substring(11, 19) ?? 'oczekiwanie'} â€˘ sprawdzanie co 5 s',
+          'Ostatni odbiór: ${overviewReceived?.toLocal().toString().substring(11, 19) ?? 'oczekiwanie'} • sprawdzanie co 5 s',
         ),
         LayoutBuilder(
           builder: (context, constraints) => GridView.count(
@@ -675,7 +675,7 @@ class _DashboardPageState extends State<DashboardPage> {
 
       if (loadedStrategy['symbol'] != requestSymbol) {
         throw Exception(
-          'API zwrĂłciĹ‚o ${loadedStrategy['symbol'] ?? 'inne aktywo'} '
+          'API zwróciło ${loadedStrategy['symbol'] ?? 'inne aktywo'} '
           'zamiast $requestSymbol',
         );
       }
@@ -824,7 +824,7 @@ class _DashboardPageState extends State<DashboardPage> {
             const SizedBox(width: 12),
             const Expanded(
               child: Text(
-                'Paper trading â€” bez prawdziwych zleceĹ„',
+                'Paper trading — bez prawdziwych zleceń',
                 textAlign: TextAlign.right,
                 style: TextStyle(color: Colors.white38, fontSize: 12),
               ),
@@ -906,18 +906,18 @@ class _DashboardPageState extends State<DashboardPage> {
                 spacing: 50,
                 runSpacing: 20,
                 children: [
-                  infoItem('WejĹ›cie', money(position['entry_price'])),
+                  infoItem('Wejście', money(position['entry_price'])),
                   infoItem(
                     'Rynek',
                     marketPricePln == null
                         ? '${money(account['market_price'])} $quote'
-                        : '${money(account['market_price'])} $quote Â· ${money(marketPricePln)} PLN',
+                        : '${money(account['market_price'])} $quote · ${money(marketPricePln)} PLN',
                   ),
-                  infoItem('IloĹ›Ä‡', position['quantity'].toString()),
+                  infoItem('Ilość', position['quantity'].toString()),
                   infoItem('Stop Loss', money(position['stop_loss'])),
                   infoItem('Take Profit', money(position['take_profit'])),
                   infoItem(
-                    'Ĺšwiece pozycji',
+                    'Świece pozycji',
                     account['position_candles'].toString(),
                   ),
                   infoItem(
@@ -949,7 +949,7 @@ class _DashboardPageState extends State<DashboardPage> {
                 selectedSymbol,
                 marketPricePln == null
                     ? '${money(account['market_price'])} $quote'
-                    : '${money(account['market_price'])} $quote Â· ${money(marketPricePln)} PLN',
+                    : '${money(account['market_price'])} $quote · ${money(marketPricePln)} PLN',
               ),
             ],
           ],
@@ -967,7 +967,7 @@ class _DashboardPageState extends State<DashboardPage> {
     final pln = info['pln'] as Map?;
     final plnAvailable = pln?['available'] == true;
     final plnPath = pln?['path']?.toString() ?? 'realne przeliczenie';
-    final provider = info['provider']?.toString() ?? 'â€”';
+    final provider = info['provider']?.toString() ?? '—';
     final providerSymbol =
         info['provider_symbol']?.toString() ?? selectedSymbol;
 
@@ -979,17 +979,17 @@ class _DashboardPageState extends State<DashboardPage> {
           spacing: 24,
           runSpacing: 8,
           children: [
-            Text('ĹąrĂłdĹ‚o: $provider Â· $providerSymbol'),
+            Text('Źródło: $provider · $providerSymbol'),
             Text(
               stale
                   ? 'Dane: NIEAKTUALNE'
-                  : 'Dane: aktualne${age == null ? '' : ' Â· ${age.toStringAsFixed(0)} s'}',
+                  : 'Dane: aktualne${age == null ? '' : ' · ${age.toStringAsFixed(0)} s'}',
               style: TextStyle(
                 color: stale ? Colors.orangeAccent : Colors.greenAccent,
               ),
             ),
             Text(
-              plnAvailable ? 'PLN: $plnPath' : 'PLN: chwilowo niedostÄ™pny',
+              plnAvailable ? 'PLN: $plnPath' : 'PLN: chwilowo niedostępny',
               style: TextStyle(
                 color: plnAvailable ? Colors.white70 : Colors.orangeAccent,
               ),
@@ -1081,7 +1081,7 @@ class _DashboardPageState extends State<DashboardPage> {
       return const Card(
         child: SizedBox(
           height: 300,
-          child: Center(child: Text('Brak danych krzywej kapitaĹ‚u')),
+          child: Center(child: Text('Brak danych krzywej kapitału')),
         ),
       );
     }
@@ -1184,7 +1184,7 @@ class _DashboardPageState extends State<DashboardPage> {
         elevation: 0,
         child: Padding(
           padding: EdgeInsets.all(20),
-          child: Text('Brak zamkniÄ™tych transakcji.'),
+          child: Text('Brak zamkniętych transakcji.'),
         ),
       );
     }
@@ -1197,9 +1197,9 @@ class _DashboardPageState extends State<DashboardPage> {
           columns: const [
             DataColumn(label: Text('#')),
             DataColumn(label: Text('Kierunek')),
-            DataColumn(label: Text('WejĹ›cie')),
-            DataColumn(label: Text('WyjĹ›cie')),
-            DataColumn(label: Text('PowĂłd')),
+            DataColumn(label: Text('Wejście')),
+            DataColumn(label: Text('Wyjście')),
+            DataColumn(label: Text('Powód')),
             DataColumn(label: Text('Wynik netto')),
             DataColumn(label: Text('Prowizja')),
           ],
@@ -1315,7 +1315,7 @@ class _DashboardPageState extends State<DashboardPage> {
                 child: Padding(
                   padding: const EdgeInsets.all(14),
                   child: Text(
-                    'BĹÄ„D API: $error',
+                    'BŁĄD API: $error',
                     style: const TextStyle(color: Colors.redAccent),
                   ),
                 ),
@@ -1336,8 +1336,8 @@ class _DashboardPageState extends State<DashboardPage> {
                         ? '${money(portfolioBalance)} $quote'
                         : '${money(portfolioBalancePln)} PLN',
                     subtitle: initialBalancePln == null
-                        ? 'Wirtualne saldo Â· start ${money(initialBalance)} $quote'
-                        : 'Wirtualne saldo Â· start ${money(initialBalancePln)} PLN',
+                        ? 'Wirtualne saldo · start ${money(initialBalance)} $quote'
+                        : 'Wirtualne saldo · start ${money(initialBalancePln)} PLN',
                   ),
                   metricCard(
                     title: 'WYNIK',
@@ -1345,14 +1345,14 @@ class _DashboardPageState extends State<DashboardPage> {
                         ? '${isEarnedPositive ? '+' : ''}${money(earned)} $quote'
                         : '${isEarnedPositive ? '+' : ''}${money(earnedPln)} PLN',
                     subtitle: earnedPln == null
-                        ? 'PLN chwilowo niedostÄ™pny'
-                        : '${money(earned)} $quote Â· realne przeliczenie raportowe',
+                        ? 'PLN chwilowo niedostępny'
+                        : '${money(earned)} $quote · realne przeliczenie raportowe',
                     valueColor: isEarnedPositive
                         ? Colors.greenAccent
                         : Colors.redAccent,
                   ),
                   metricCard(
-                    title: 'MAKS. OBSUNIÄCIE',
+                    title: 'MAKS. OBSUNIĘCIE',
                     value: drawdownPln == null
                         ? '${money(account['max_drawdown'])} $quote'
                         : '${money(drawdownPln)} PLN',
@@ -1363,7 +1363,7 @@ class _DashboardPageState extends State<DashboardPage> {
                     value: money(account['market_price']),
                     subtitle: marketPricePln == null
                         ? 'Cena w $quote'
-                        : '${money(marketPricePln)} PLN Â· cena przeliczona',
+                        : '${money(marketPricePln)} PLN · cena przeliczona',
                   ),
                 ];
 
@@ -1400,17 +1400,17 @@ class _DashboardPageState extends State<DashboardPage> {
                     value: performance['losses'].toString(),
                   ),
                   metricCard(
-                    title: 'SKUTECZNOĹšÄ†',
+                    title: 'SKUTECZNOŚĆ',
                     value: pct(performance['win_rate']),
                   ),
                   metricCard(
-                    title: 'WSPĂ“ĹCZYNNIK ZYSKU',
+                    title: 'WSPÓŁCZYNNIK ZYSKU',
                     value: performance['profit_factor'] == null
                         ? 'N/A'
                         : money4(performance['profit_factor']),
                   ),
                   metricCard(
-                    title: 'OCZEKIWANA WARTOĹšÄ†',
+                    title: 'OCZEKIWANA WARTOŚĆ',
                     value: performance['expectancy_pln'] == null
                         ? '${money4(performance['expectancy'])} $quote'
                         : '${money(performance['expectancy_pln'])} PLN',
@@ -1429,7 +1429,7 @@ class _DashboardPageState extends State<DashboardPage> {
               },
             ),
 
-            sectionTitle('STRATEGIA PAPER Â· ${strategy['symbol']}'),
+            sectionTitle('STRATEGIA PAPER · ${strategy['symbol']}'),
 
             Card(
               elevation: 0,
@@ -1441,10 +1441,10 @@ class _DashboardPageState extends State<DashboardPage> {
                   children: [
                     if (strategy['execution_model'] ==
                         'INDEPENDENT_AI_PAPER') ...[
-                      infoItem('MODEL', 'AI k-NN Â· osobny portfel'),
+                      infoItem('MODEL', 'AI k-NN · osobny portfel'),
                       infoItem('POZYCJA', '5% testowa / 20% standardowa'),
                       infoItem('STOP / TAKE', '1% / 2%'),
-                      infoItem('MAKS. CZAS', '10 Ĺ›wiec'),
+                      infoItem('MAKS. CZAS', '10 świec'),
                     ] else ...[
                       infoItem('BUY RSI', strategy['buy_rsi'].toString()),
                       infoItem('SELL RSI', strategy['sell_rsi'].toString()),
@@ -1453,7 +1453,7 @@ class _DashboardPageState extends State<DashboardPage> {
                         strategy['max_position_candles'].toString(),
                       ),
                       infoItem(
-                        'MIN. RĂ“Ĺ»NICA',
+                        'MIN. RÓŻNICA',
                         strategy['min_difference'].toString(),
                       ),
                       infoItem('RSI', strategy['rsi_method'].toString()),
@@ -1465,7 +1465,7 @@ class _DashboardPageState extends State<DashboardPage> {
             ),
 
             sectionTitle(
-              'RYNEK ${strategy['symbol']} Â· ${strategy['interval']}',
+              'RYNEK ${strategy['symbol']} · ${strategy['interval']}',
             ),
             buildMarketQuality(),
             buildMarketChart(),
@@ -1474,7 +1474,7 @@ class _DashboardPageState extends State<DashboardPage> {
             const SizedBox(height: 16),
             buildResearchPanel(),
 
-            sectionTitle('KRZYWA KAPITAĹU Â· PLN JEĹšLI DOSTÄPNE'),
+            sectionTitle('KRZYWA KAPITAŁU · PLN JEŚLI DOSTĘPNE'),
             buildEquityChart(),
 
             sectionTitle('HISTORIA TRANSAKCJI'),
@@ -1485,8 +1485,8 @@ class _DashboardPageState extends State<DashboardPage> {
             Center(
               child: Text(
                 lastUpdate == null
-                    ? 'Automatyczne odĹ›wieĹĽanie: 5 s'
-                    : 'Automatyczne odĹ›wieĹĽanie: 5 s  â€˘  '
+                    ? 'Automatyczne odświeżanie: 5 s'
+                    : 'Automatyczne odświeżanie: 5 s  •  '
                           'Aktualizacja ${lastUpdate!.hour.toString().padLeft(2, '0')}:'
                           '${lastUpdate!.minute.toString().padLeft(2, '0')}:'
                           '${lastUpdate!.second.toString().padLeft(2, '0')}',
