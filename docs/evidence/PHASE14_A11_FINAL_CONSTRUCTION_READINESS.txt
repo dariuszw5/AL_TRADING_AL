@@ -1,0 +1,168 @@
+﻿PHASE 14 A.11 - FINAL CONSTRUCTION READINESS / ACTIVATION BOUNDARY AUDIT
+============================================================
+
+BASE HEAD:
+0279b44
+
+READ-ONLY LIVE SQLITE AUDIT:
+------------------------------------------------------------
+QUERY_ONLY=1
+JOURNAL_MODE=wal
+FOREIGN_KEYS=1
+INTEGRITY_CHECK=ok
+FOREIGN_KEY_VIOLATIONS=0
+HALTED=1
+HALT_REASON=FRESH_BOOTSTRAP_REQUIRES_EXPLICIT_ACTIVATION
+LAST_PROCESSED_TIMESTAMP=None
+ORDERS=0
+EXECUTIONS=0
+POSITIONS=0
+TRADES=0
+PORTFOLIO_TRANSACTIONS=1
+CASH_RECONCILIATION=True
+REALIZED_RECONCILIATION=True
+LIVE_SQLITE_READ_ONLY_AUDIT=PASS
+LIVE_WRITER_OPENED=NO
+HALT_CLEARED=NO
+TRADING_ACTIVATED=NO
+
+
+CONSTRUCTION CHAIN AUDIT:
+------------------------------------------------------------
+ENTRYPOINT_MAIN_PARAMETERS=argv,sqlite_bundle_kwargs_provider,paper_dependency_context,application_binding_inputs,production_binding_inputs
+EXPLICIT_ACTIVATION_DEPENDENCIES=market_data_service,decision_provider,execution_evidence_resolver,realized_evidence_resolver
+PRODUCTION_FX_BINDING=READY
+PRODUCTION_EXIT_FEE_BINDING=READY
+MARKET_DATA_BINDING=EXPLICIT_REQUIRED
+DECISION_BINDING=EXPLICIT_REQUIRED
+EXECUTION_EVIDENCE_BINDING=EXPLICIT_REQUIRED
+REALIZED_EVIDENCE_BINDING=EXPLICIT_REQUIRED
+ENTRYPOINT_RUN_CYCLE=ABSENT
+ENTRYPOINT_CLEAR_HALT=ABSENT
+CONSTRUCTION_CHAIN_AUDIT=PASS
+
+
+LIVE PATH REJECTION:
+------------------------------------------------------------
+LIVE_PATH_REJECTION_MESSAGE=real live database is forbidden in Phase 14 A.2
+LIVE_PATH_REJECTION=PASS
+LIVE_BUILDER_CALLED=NO
+
+
+PHASE 14 A.2-A.10 REGRESSION:
+------------------------------------------------------------
+........................................................................ [ 96%]
+...                                                                      [100%]
+75 passed in 0.90s
+
+TARGETED PHASE 10-14 REGRESSION:
+------------------------------------------------------------
+........................................................................ [ 14%]
+........................................................................ [ 29%]
+........................................................................ [ 43%]
+........................................................................ [ 58%]
+........................................................................ [ 72%]
+........................................................................ [ 87%]
+................................................................         [100%]
+496 passed in 4.85s
+
+FULL OFFLINE REGRESSION:
+------------------------------------------------------------
+........................................................................ [  6%]
+........................................................................ [ 12%]
+........................................................................ [ 19%]
+........................................................................ [ 25%]
+........................................................................ [ 32%]
+........................................................................ [ 38%]
+........................................................................ [ 45%]
+........................................................................ [ 51%]
+........................................................................ [ 58%]
+........................................................................ [ 64%]
+........................................................................ [ 71%]
+........................................................................ [ 77%]
+........................................................................ [ 84%]
+........................................................................ [ 90%]
+........................................................................ [ 97%]
+.................................                                        [100%]
+1113 passed in 80.10s (0:01:20)
+
+BTC LEGACY_V1 GOLDEN:
+------------------------------------------------------------
+=== BACKTEST BENCHMARK ===
+Symbol:           BTCUSDT
+Interval:         1m
+Świece:           5000
+Kapitał początk.: 1000.0
+Kapitał końcowy:  1014.8392976799995
+Transakcje:       13
+Wygrane:          7
+Przegrane:        6
+Win rate:         53.84615384615385
+Total profit:     14.839297679999504
+Max drawdown:     18.485012400000187
+Profit factor:    1.692128777090018
+Average win:      5.182768514285695
+Average loss:     3.573346986666712
+Largest win:     13.000798400000047
+Largest loss:     9.580003080000042
+Expectancy:       1.1414844369230388
+
+PRODUCTION BINDINGS READY:
+- ProductionFxResolver.conversion_for
+- ProductionFxResolver.resolve_realized_quotes
+- BrokerExitFeeEstimator
+
+EXPLICIT ACTIVATION DEPENDENCIES:
+- market_data_service
+- decision_provider
+- execution_evidence_resolver
+- realized_evidence_resolver
+
+ACTIVATION BOUNDARY:
+- real live DB writer wiring: NOT AUTHORIZED
+- live Phase 14 run_cycle: NOT AUTHORIZED
+- clear persistent HALT: NOT AUTHORIZED
+- enable live new-entry trading: NOT AUTHORIZED
+- final production market/decision/evidence selection: NOT AUTHORIZED
+
+VERIFIED:
+- live SQLite reader is query-only
+- live database remains HALTED
+- live halt reason unchanged
+- live transactional tables empty
+- live reconciliation matches
+- live DB byte-identical
+- bootstrap backup byte-identical
+- Phase 14 entrypoint contains no run_cycle
+- Phase 14 entrypoint contains no clear_halt
+- live path remains rejected before construction
+- source/runtime code unchanged
+- protected user change preserved
+- BTC LEGACY_V1 golden unchanged
+- HALT not cleared
+- trading not activated
+
+LIVE DATABASE SHA256 BEFORE:
+F51C2DB77B6346372340AC772DD58099CF4E842144A7F196567A2E0D4591212D
+
+LIVE DATABASE SHA256 AFTER:
+F51C2DB77B6346372340AC772DD58099CF4E842144A7F196567A2E0D4591212D
+
+LIVE DATABASE MODIFIED:
+NO
+
+SOURCE/RUNTIME MODIFIED:
+NO
+
+PHASE 14 A.11:
+PASS
+
+PHASE 14:
+COMPLETE
+
+NEXT:
+HARD STOP - EXPLICIT AUTHORIZATION REQUIRED BEFORE LIVE SQLITE ACTIVATION
+
+NO REAL LIVE WRITER WIRING
+NO LIVE RUN_CYCLE
+NO HALT CLEAR
