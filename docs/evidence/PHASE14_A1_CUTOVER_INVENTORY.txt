@@ -1,0 +1,379 @@
+﻿PHASE 14 A.1 - LIVE SQLITE CUTOVER INVENTORY
+============================================================
+
+SOURCE HEAD:
+cd5b186
+
+BRANCH:
+phase-14-live-sqlite-cutover-preflight
+
+LIVE READ-ONLY GUARD:
+------------------------------------------------------------
+QUERY_ONLY=1
+SCHEMA_VERSION=1
+SCHEMA_MIGRATION=phase13_trading_schema_v1
+HALTED=1
+HALT_REASON=FRESH_BOOTSTRAP_REQUIRES_EXPLICIT_ACTIVATION
+CASH_PLN=1000
+LAST_PROCESSED=None
+ORDERS=0
+EXECUTIONS=0
+POSITIONS=0
+TRADES=0
+PORTFOLIO_TRANSACTIONS=1
+CASH_RECONCILIATION=True
+REALIZED_RECONCILIATION=True
+LIVE_READ_ONLY_GUARD=PASS
+LIVE_WRITER_OPENED=NO
+HALT_CLEARED=NO
+TRADING_ACTIVATED=NO
+
+CUTOVER INVENTORY:
+------------------------------------------------------------
+PHASE14_A1_CUTOVER_INVENTORY
+PRODUCTION_CANDIDATE_FILES=15
+EXISTING_SQLITE_PRODUCTION_REFS=0
+LEGACY_DURABLE_WRITER_REFERENCE_COUNT=44
+SCRIPT_ENTRYPOINT_COUNT=123
+
+=== PRODUCTION CANDIDATES ===
+
+FILE: scripts/audit_history_risk_restart_gap.py
+  L8:     "data/live_state/test_history_risk_restart.json"
+
+FILE: scripts/audit_live_process_restart_open_position.py
+  L9:         "data/live_state/test_restart_open_position.json"
+
+FILE: scripts/audit_live_restart_position_continuation.py
+  L8:     "data/live_state/test_restart_position_continuation.json"
+
+FILE: scripts/audit_live_state_crash_safety.py
+  L8:     "data/live_state/test_crash_safety.json"
+
+FILE: scripts/audit_paper_live_restart_equivalence.py
+  L13: STATE_DIR = Path("data/live_state")
+
+FILE: scripts/audit_persistence_crash_consistency.py
+  L51: state_path = Path("data/live_state/audit_history_runtime.json")
+  L88: crash_path = Path("data/live_state/audit_crash_consistency.json")
+
+FILE: scripts/run_paper_live.py
+  L9: ai_manager = AIPaperManager('data/live_state/ai_paper.json')
+
+FILE: scripts/run_phase10_accounting_smoke.py
+  L12:     wire_phase10_production_runtime,
+  L27:             "PaperBroker only; never sends a real exchange order."
+  L62:             "Run one controlled PaperBroker cycle. "
+  L415:             wire_phase10_production_runtime(
+
+FILE: scripts/run_phase10_persisted_accounting_smoke.py
+  L12:     wire_phase10_production_runtime,
+  L15:     StartupMetadataJournal,
+  L19:     PersistingAccountingRuntime,
+  L44:             "accounting entrypoint. PaperBroker only."
+  L134:         StartupMetadataJournal(
+  L472:             wire_phase10_production_runtime(
+  L568:         PersistingAccountingRuntime(
+
+FILE: scripts/run_phase11_cash_accounting_smoke.py
+  L12:     Phase11CashLedger,
+  L25:     StartupMetadataJournal,
+  L61:             "PaperBroker only."
+  L185:         Phase11CashLedger(
+  L219:         StartupMetadataJournal(
+
+FILE: scripts/run_phase12_capital_accounting_smoke.py
+  L35:     Phase12CapitalAdmissionPolicy,
+  L36:     Phase12StartupPolicyError,
+  L39:     Phase12StartupMetadataJournal,
+  L40:     Phase12StartupMetadataStoreError,
+  L63:             "PaperBroker only."
+  L150:         Phase12StartupMetadataJournal(
+  L172:         raise Phase12StartupMetadataStoreError(
+  L184:         raise Phase12StartupMetadataStoreError(
+  L194:         raise Phase12StartupMetadataStoreError(
+  L204:         raise Phase12StartupMetadataStoreError(
+  L486:             Phase12CapitalAdmissionPolicy
+  L496:         Phase12StartupPolicyError,
+
+FILE: scripts/run_realistic_smoke_fill.py
+  L13:     RealisticExecutionJournal,
+  L24:     PaperBroker,
+  L28:     RealisticPaperRuntime,
+  L34:     RealisticPaperStateStore,
+  L159:         RealisticExecutionJournal(
+  L166:     broker = PaperBroker(
+  L179:         RealisticPaperStateStore(
+  L186:     runtime = RealisticPaperRuntime(
+
+FILE: scripts/run_realistic_v2_execution_benchmark.py
+  L35:     PaperBroker,
+  L39:     RealisticPaperRuntime,
+  L209:     broker = PaperBroker(
+  L261:     runtime = RealisticPaperRuntime(
+
+FILE: src/agent/ai_manager.py
+  L26: USER_PORTFOLIO_PATH = 'data/live_state/user_portfolio.json'
+
+FILE: src/agent/multi_asset_runner.py
+  L20:             state_directory or "data/live_state"
+
+=== LEGACY DURABLE WRITER REFERENCES ===
+scripts/audit_history_risk_restart_gap.py:8:    "data/live_state/test_history_risk_restart.json"
+scripts/audit_live_process_restart_open_position.py:9:        "data/live_state/test_restart_open_position.json"
+scripts/audit_live_restart_position_continuation.py:8:    "data/live_state/test_restart_position_continuation.json"
+scripts/audit_live_state_crash_safety.py:8:    "data/live_state/test_crash_safety.json"
+scripts/audit_paper_live_restart_equivalence.py:13:STATE_DIR = Path("data/live_state")
+scripts/audit_persistence_crash_consistency.py:51:state_path = Path("data/live_state/audit_history_runtime.json")
+scripts/audit_persistence_crash_consistency.py:88:crash_path = Path("data/live_state/audit_crash_consistency.json")
+scripts/run_paper_live.py:9:ai_manager = AIPaperManager('data/live_state/ai_paper.json')
+scripts/run_phase10_persisted_accounting_smoke.py:15:    StartupMetadataJournal,
+scripts/run_phase10_persisted_accounting_smoke.py:19:    PersistingAccountingRuntime,
+scripts/run_phase10_persisted_accounting_smoke.py:134:        StartupMetadataJournal(
+scripts/run_phase10_persisted_accounting_smoke.py:568:        PersistingAccountingRuntime(
+scripts/run_phase11_cash_accounting_smoke.py:12:    Phase11CashLedger,
+scripts/run_phase11_cash_accounting_smoke.py:25:    StartupMetadataJournal,
+scripts/run_phase11_cash_accounting_smoke.py:185:        Phase11CashLedger(
+scripts/run_phase11_cash_accounting_smoke.py:219:        StartupMetadataJournal(
+scripts/run_phase12_capital_accounting_smoke.py:39:    Phase12StartupMetadataJournal,
+scripts/run_phase12_capital_accounting_smoke.py:150:        Phase12StartupMetadataJournal(
+scripts/run_realistic_smoke_fill.py:13:    RealisticExecutionJournal,
+scripts/run_realistic_smoke_fill.py:34:    RealisticPaperStateStore,
+scripts/run_realistic_smoke_fill.py:159:        RealisticExecutionJournal(
+scripts/run_realistic_smoke_fill.py:179:        RealisticPaperStateStore(
+src/accounting/cash_ledger.py:153:class Phase11CashLedger:
+src/accounting/cash_runtime.py:7:    Phase11CashLedger,
+src/accounting/cash_runtime.py:14:    PersistingAccountingRuntime,
+src/accounting/cash_runtime.py:36:        Phase11CashLedger,
+src/accounting/cash_runtime.py:39:            "cash_ledger must be Phase11CashLedger"
+src/accounting/cash_runtime.py:110:            Phase11CashLedger,
+src/accounting/cash_runtime.py:113:                "cash_ledger must be Phase11CashLedger"
+src/accounting/cash_runtime.py:339:    persisting_runtime: PersistingAccountingRuntime
+src/accounting/cash_runtime.py:340:    cash_ledger: Phase11CashLedger
+src/accounting/cash_runtime.py:371:        Phase11CashLedger,
+src/accounting/cash_runtime.py:374:            "cash_ledger must be Phase11CashLedger"
+src/accounting/cash_runtime.py:423:        PersistingAccountingRuntime(
+src/accounting/realized_persistence.py:477:class PersistingAccountingRuntime:
+src/accounting/startup_metadata_store.py:363:class StartupMetadataJournal:
+src/accounting/startup_metadata_store.py:368:    execution_journal.jsonl, state.json or data/live_state.
+src/agent/ai_manager.py:26:USER_PORTFOLIO_PATH = 'data/live_state/user_portfolio.json'
+src/agent/live_state_store.py:7:    def __init__(self, path="data/live_state/agent_state.json"):
+src/agent/multi_asset_runner.py:20:            state_directory or "data/live_state"
+src/execution/capital_startup_store.py:346:class Phase12StartupMetadataJournal:
+src/execution/execution_journal.py:312:class RealisticExecutionJournal:
+src/execution/state_store.py:282:class RealisticPaperStateStore:
+src/execution/state_store.py:287:    existing LEGACY data/live_state files.
+
+=== SQLITE BUNDLE PRODUCTION REFERENCES ===
+NONE
+
+=== MAIN-GUARD ENTRYPOINTS ===
+run_backtest.py
+scripts/analyze_baseline_candidate_transactions.py
+scripts/analyze_buy_micro_boundary.py
+scripts/analyze_buy_sell_stability.py
+scripts/analyze_ema_sma_distance.py
+scripts/analyze_entry_quality.py
+scripts/analyze_exact_sell_boundary.py
+scripts/analyze_exposure.py
+scripts/analyze_final_entry_rsi.py
+scripts/analyze_final_trade_rsi.py
+scripts/analyze_local_rsi_matrix.py
+scripts/analyze_market_regime.py
+scripts/analyze_pre_signal_momentum.py
+scripts/analyze_real_entries.py
+scripts/analyze_real_sell_divergence.py
+scripts/analyze_real_sell_regions.py
+scripts/analyze_rejected_short_quality.py
+scripts/analyze_reversal_confirmation.py
+scripts/analyze_rolling_robustness.py
+scripts/analyze_rsi_3475_new.py
+scripts/analyze_rsi_entry_context.py
+scripts/analyze_rsi_signal_to_entry.py
+scripts/analyze_rsi_thresholds_outside_positions.py
+scripts/analyze_sell_causal_windows.py
+scripts/analyze_sell_divergence.py
+scripts/analyze_sell_first_divergences.py
+scripts/analyze_sell_micro_boundary.py
+scripts/analyze_sell_occupancy.py
+scripts/analyze_sell_signal_strength.py
+scripts/analyze_sell_threshold_divergence.py
+scripts/analyze_signal_quality.py
+scripts/analyze_signal_regime.py
+scripts/analyze_strategy_robustness.py
+scripts/analyze_trade_profit_concentration.py
+scripts/analyze_trade_quality.py
+scripts/analyze_unique_rejected_sell.py
+scripts/analyze_volatility_regime.py
+scripts/audit_history_risk_restart_gap.py
+scripts/audit_live_api_exception.py
+scripts/audit_live_open_position_failure.py
+scripts/audit_live_process_restart_open_position.py
+scripts/audit_live_recovery.py
+scripts/audit_live_resilience.py
+scripts/audit_live_restart_position_continuation.py
+scripts/audit_live_state_crash_safety.py
+scripts/check_rsi_new_signals_position.py
+scripts/compare_baseline_candidate_fee.py
+scripts/compare_buy_rsi_cross_dataset.py
+scripts/compare_buy_rsi_fine.py
+scripts/compare_equity_baseline_candidate.py
+scripts/compare_position_time.py
+scripts/compare_rsi_3450_3475_backtest.py
+scripts/compare_rsi_3450_3475_trades.py
+scripts/compare_rsi_3450_3550_trades.py
+scripts/compare_rsi_incremental_full_backtest.py
+scripts/compare_rsi_stability.py
+scripts/compare_rsi_trade_by_trade.py
+scripts/compare_sell_exit_sequences.py
+scripts/compare_sell_first_divergence.py
+scripts/compare_top_rsi_entries.py
+scripts/create_test_data.py
+scripts/find_rsi_threshold_events.py
+scripts/fine_buy_rsi_test.py
+scripts/fine_buy_sell_time_scan.py
+scripts/fine_rsi_sweep.py
+scripts/fine_sell_rsi_sweep.py
+scripts/fine_time_exit_test.py
+scripts/incremental_rsi_threshold_test.py
+scripts/inspect_candle_confirmation.py
+scripts/inspect_entry_quality.py
+scripts/inspect_rsi_confirmation.py
+scripts/inspect_rsi_dynamics.py
+scripts/inspect_signal_quality.py
+scripts/inspect_top_rsi_configs.py
+scripts/inspect_trade_fields_rsi.py
+scripts/interaction_buy_sell_time_test.py
+scripts/interaction_buy_time_test.py
+scripts/interaction_sell_time_test.py
+scripts/leave_one_out_current_candidate.py
+scripts/map_sell_trade_indices.py
+scripts/micro_time_exit_test.py
+scripts/min_diff_robustness_test.py
+scripts/optimize_position_time.py
+scripts/optimize_rsi.py
+scripts/probe_phase07_sessions_fx.py
+scripts/probe_provider_capability.py
+scripts/real_sell_sweep.py
+scripts/run_agent_benchmark.py
+scripts/run_fx_provider_probe.py
+scripts/run_phase10_accounting_smoke.py
+scripts/run_phase10_persisted_accounting_smoke.py
+scripts/run_phase11_cash_accounting_smoke.py
+scripts/run_phase12_capital_accounting_smoke.py
+scripts/run_realistic_paper.py
+scripts/run_realistic_smoke_fill.py
+scripts/run_realistic_v2_execution_benchmark.py
+scripts/sell_rsi_stability.py
+scripts/test_candle_confirmation.py
+scripts/test_candle_strength.py
+scripts/test_ema_sma_combinations.py
+scripts/test_ema_sma_filter.py
+scripts/test_ema_trend_filter.py
+scripts/test_entry_delay.py
+scripts/test_fee_robustness.py
+scripts/test_next_candle_entry.py
+scripts/test_profit_protection.py
+scripts/test_regime_filter.py
+scripts/test_reversal_filter.py
+scripts/test_rsi_confirmation.py
+scripts/test_rsi_cross.py
+scripts/test_rsi_delay_stability.py
+scripts/test_rsi_fine_scan.py
+scripts/test_rsi_isolation.py
+scripts/test_rsi_testset.py
+scripts/test_rsi_thresholds.py
+scripts/test_rsi_wide_testset.py
+scripts/test_side_ema_sma_filter.py
+scripts/test_signal_freshness.py
+scripts/test_two_candle_confirmation.py
+scripts/validate_position_time.py
+src/backtest/test_runner.py
+src/backtest/validation_runner.py
+src/main.py
+
+PHASE14_A1_INVENTORY=PASS
+PRODUCTION_SQLITE_CUTOVER_PRESENT=NO
+
+TARGETED REGRESSION:
+------------------------------------------------------------
+........................................................................ [ 17%]
+........................................................................ [ 34%]
+........................................................................ [ 51%]
+........................................................................ [ 68%]
+........................................................................ [ 85%]
+.............................................................            [100%]
+421 passed in 6.43s
+
+FULL OFFLINE REGRESSION:
+------------------------------------------------------------
+........................................................................ [  6%]
+........................................................................ [ 13%]
+........................................................................ [ 20%]
+........................................................................ [ 27%]
+........................................................................ [ 34%]
+........................................................................ [ 41%]
+........................................................................ [ 48%]
+........................................................................ [ 55%]
+........................................................................ [ 62%]
+........................................................................ [ 69%]
+........................................................................ [ 76%]
+........................................................................ [ 83%]
+........................................................................ [ 90%]
+........................................................................ [ 97%]
+..............................                                           [100%]
+1038 passed in 92.54s (0:01:32)
+
+BTC LEGACY_V1 GOLDEN:
+------------------------------------------------------------
+=== BACKTEST BENCHMARK ===
+Symbol:           BTCUSDT
+Interval:         1m
+îwiece:           5000
+Kapita│ pocz╣tk.: 1000.0
+Kapita│ ko˝cowy:  1014.8392976799995
+Transakcje:       13
+Wygrane:          7
+Przegrane:        6
+Win rate:         53.84615384615385
+Total profit:     14.839297679999504
+Max drawdown:     18.485012400000187
+Profit factor:    1.692128777090018
+Average win:      5.182768514285695
+Average loss:     3.573346986666712
+Largest win:     13.000798400000047
+Largest loss:     9.580003080000042
+Expectancy:       1.1414844369230388
+
+LIVE DB SHA256 BEFORE:
+F51C2DB77B6346372340AC772DD58099CF4E842144A7F196567A2E0D4591212D
+
+LIVE DB SHA256 AFTER:
+F51C2DB77B6346372340AC772DD58099CF4E842144A7F196567A2E0D4591212D
+
+LIVE DATABASE MODIFIED:
+NO
+
+BOOTSTRAP BACKUP MODIFIED:
+NO
+
+SOURCE/RUNTIME CODE MODIFIED:
+NO
+
+PRODUCTION SQLITE CUTOVER:
+NOT PRESENT
+
+HALT CLEARED:
+NO
+
+TRADING ACTIVATED:
+NO
+
+PHASE 14 A.1:
+PASS
+
+NEXT:
+PHASE 14 A.2 - OPT-IN CUTOVER CONSTRUCTION SEAM
+TEMP/TEST SQLITE ONLY
+
+HARD STOP BEFORE REAL LIVE DB WRITER WIRING OR HALT CLEAR
