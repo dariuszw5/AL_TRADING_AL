@@ -1,0 +1,119 @@
+﻿PHASE 14 A.4 - DEDICATED OPT-IN SQLITE CUTOVER ENTRYPOINT
+============================================================
+
+BASE HEAD:
+ec5a976
+
+CONTROLLED RED:
+CONFIRMED
+
+A.4 TESTS:
+------------------------------------------------------------
+........                                                                 [100%]
+8 passed in 0.19s
+
+DEFAULT CLI:
+------------------------------------------------------------
+PHASE 14 SQLITE CUTOVER ENTRYPOINT
+CONSTRUCTION ONLY
+CUTOVER MODE: LEGACY
+SQLITE CONSTRUCTED: NO
+SQLITE BUNDLE CLOSED: NO
+PAPER CYCLE: NOT RUN
+HALT CLEAR: NOT REQUESTED
+REAL ORDER PATH: NOT USED
+
+PHASE 13/14 SQLITE REGRESSION:
+------------------------------------------------------------
+........................................................................ [ 53%]
+...............................................................          [100%]
+135 passed in 3.44s
+
+TARGETED PHASE 10-14 REGRESSION:
+------------------------------------------------------------
+........................................................................ [ 16%]
+........................................................................ [ 32%]
+........................................................................ [ 48%]
+........................................................................ [ 64%]
+........................................................................ [ 80%]
+........................................................................ [ 96%]
+................                                                         [100%]
+448 passed in 4.51s
+
+FULL OFFLINE REGRESSION:
+------------------------------------------------------------
+........................................................................ [  6%]
+........................................................................ [ 13%]
+........................................................................ [ 20%]
+........................................................................ [ 27%]
+........................................................................ [ 33%]
+........................................................................ [ 40%]
+........................................................................ [ 47%]
+........................................................................ [ 54%]
+........................................................................ [ 60%]
+........................................................................ [ 67%]
+........................................................................ [ 74%]
+........................................................................ [ 81%]
+........................................................................ [ 87%]
+........................................................................ [ 94%]
+.........................................................                [100%]
+1065 passed in 79.82s (0:01:19)
+
+BTC LEGACY_V1 GOLDEN:
+------------------------------------------------------------
+=== BACKTEST BENCHMARK ===
+Symbol:           BTCUSDT
+Interval:         1m
+îwiece:           5000
+Kapita│ pocz╣tk.: 1000.0
+Kapita│ ko˝cowy:  1014.8392976799995
+Transakcje:       13
+Wygrane:          7
+Przegrane:        6
+Win rate:         53.84615384615385
+Total profit:     14.839297679999504
+Max drawdown:     18.485012400000187
+Profit factor:    1.692128777090018
+Average win:      5.182768514285695
+Average loss:     3.573346986666712
+Largest win:     13.000798400000047
+Largest loss:     9.580003080000042
+Expectancy:       1.1414844369230388
+
+VERIFIED:
+- dedicated Phase 14 CLI exists
+- default CLI mode is legacy
+- default CLI constructs no SQLite runtime
+- explicit sqlite mode requires confirmation
+- live DB rejected before dependency acquisition
+- live directory candidates rejected before dependency acquisition
+- sqlite mode requires dependency provider
+- successful construction calls A.3 factory
+- constructed bundle is immediately closed
+- run_cycle is never called
+- existing Phase 10/11/12 entrypoints unchanged
+- default runtime unchanged
+- live DB unchanged
+- bootstrap backup unchanged
+- protected user change preserved
+- HALT clear not requested
+- real order path not used
+- trading not activated
+
+LIVE DATABASE SHA256 BEFORE:
+F51C2DB77B6346372340AC772DD58099CF4E842144A7F196567A2E0D4591212D
+
+LIVE DATABASE SHA256 AFTER:
+F51C2DB77B6346372340AC772DD58099CF4E842144A7F196567A2E0D4591212D
+
+LIVE DATABASE MODIFIED:
+NO
+
+PHASE 14 A.4:
+PASS
+
+NEXT:
+PHASE 14 A.5 - REAL PAPER DEPENDENCY COMPOSITION
+TEMP/TEST SQLITE ONLY
+
+HARD STOP BEFORE REAL LIVE DB WRITER WIRING OR HALT CLEAR
