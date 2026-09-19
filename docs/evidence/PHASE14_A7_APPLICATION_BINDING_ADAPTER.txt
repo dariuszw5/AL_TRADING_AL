@@ -1,0 +1,114 @@
+﻿PHASE 14 A.7 - APPLICATION BINDING ADAPTER
+============================================================
+
+BASE HEAD:
+316bbbf
+
+CONTROLLED RED:
+CONFIRMED
+
+A.7 TESTS:
+------------------------------------------------------------
+............                                                             [100%]
+12 passed in 0.23s
+
+TARGETED PHASE 10-14 REGRESSION:
+------------------------------------------------------------
+........................................................................ [ 15%]
+........................................................................ [ 30%]
+........................................................................ [ 46%]
+........................................................................ [ 61%]
+........................................................................ [ 76%]
+........................................................................ [ 92%]
+....................................                                     [100%]
+468 passed in 4.94s
+
+FULL OFFLINE REGRESSION:
+------------------------------------------------------------
+........................................................................ [  6%]
+........................................................................ [ 13%]
+........................................................................ [ 19%]
+........................................................................ [ 26%]
+........................................................................ [ 33%]
+........................................................................ [ 39%]
+........................................................................ [ 46%]
+........................................................................ [ 53%]
+........................................................................ [ 59%]
+........................................................................ [ 66%]
+........................................................................ [ 72%]
+........................................................................ [ 79%]
+........................................................................ [ 86%]
+........................................................................ [ 92%]
+........................................................................ [ 99%]
+.....                                                                    [100%]
+1085 passed in 79.66s (0:01:19)
+
+BTC LEGACY_V1 GOLDEN:
+------------------------------------------------------------
+=== BACKTEST BENCHMARK ===
+Symbol:           BTCUSDT
+Interval:         1m
+Świece:           5000
+Kapitał początk.: 1000.0
+Kapitał końcowy:  1014.8392976799995
+Transakcje:       13
+Wygrane:          7
+Przegrane:        6
+Win rate:         53.84615384615385
+Total profit:     14.839297679999504
+Max drawdown:     18.485012400000187
+Profit factor:    1.692128777090018
+Average win:      5.182768514285695
+Average loss:     3.573346986666712
+Largest win:     13.000798400000047
+Largest loss:     9.580003080000042
+Expectancy:       1.1414844369230388
+
+A.6-BASED BINDING POLICY:
+- MarketSessionService: AUTO
+- SystemClock: AUTO
+- get_asset: AUTO
+- market_data_service: EXPLICIT
+- decision_provider: EXPLICIT
+- fx_conversion_resolver: EXPLICIT
+- estimated_exit_fee_resolver: EXPLICIT
+- realized_quotes_resolver: EXPLICIT
+- execution_evidence_resolver: EXPLICIT
+- realized_evidence_resolver: EXPLICIT
+
+VERIFIED:
+- ambiguous bindings fail closed
+- no fake market data
+- no fake decisions
+- no fake FX/PLN data
+- no fake execution or realized evidence
+- real A.5 dependency composition accepts A.7 context
+- real Phase 13 bundle constructs on TEMP SQLite
+- bundle immediately closes
+- run_cycle not called
+- TEMP database remains HALTED
+- no JSON/JSONL durable writers
+- existing entrypoints unchanged
+- live DB unchanged
+- bootstrap backup unchanged
+- protected user change preserved
+- HALT not cleared
+- trading not activated
+
+LIVE DATABASE SHA256 BEFORE:
+F51C2DB77B6346372340AC772DD58099CF4E842144A7F196567A2E0D4591212D
+
+LIVE DATABASE SHA256 AFTER:
+F51C2DB77B6346372340AC772DD58099CF4E842144A7F196567A2E0D4591212D
+
+LIVE DATABASE MODIFIED:
+NO
+
+PHASE 14 A.7:
+PASS
+
+NEXT:
+PHASE 14 A.8 - DEDICATED ENTRYPOINT APPLICATION BINDING INTEGRATION
+TEMP/TEST SQLITE CONSTRUCTION ONLY
+
+HARD STOP BEFORE REAL LIVE DB WRITER WIRING OR HALT CLEAR
