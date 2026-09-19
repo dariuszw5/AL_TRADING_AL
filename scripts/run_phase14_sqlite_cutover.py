@@ -1,8 +1,11 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import argparse
 from pathlib import Path
 
+from src.persistence.sqlite_cutover_dependencies import (
+    make_phase14_sqlite_bundle_kwargs_provider,
+)
 from src.persistence.sqlite_cutover_factory import (
     Phase14CutoverFactoryError,
     build_phase14_runtime,
@@ -117,6 +120,7 @@ def main(
     argv=None,
     *,
     sqlite_bundle_kwargs_provider=None,
+    paper_dependency_context=None,
 ):
     args = _parser().parse_args(
         argv
@@ -205,6 +209,16 @@ def main(
     live = Path(
         args.live_db
     ).resolve()
+
+    if (
+        sqlite_bundle_kwargs_provider is None
+        and paper_dependency_context is not None
+    ):
+        sqlite_bundle_kwargs_provider = (
+            make_phase14_sqlite_bundle_kwargs_provider(
+                paper_dependency_context
+            )
+        )
 
     if not callable(
         sqlite_bundle_kwargs_provider

@@ -1,0 +1,111 @@
+﻿PHASE 14 A.5 - REAL PAPER DEPENDENCY COMPOSITION
+============================================================
+
+BASE HEAD:
+ddada8e
+
+CONTROLLED RED:
+CONFIRMED
+
+A.5 TESTS:
+------------------------------------------------------------
+........                                                                 [100%]
+8 passed in 0.28s
+
+PHASE 13/14 SQLITE REGRESSION:
+------------------------------------------------------------
+........................................................................ [ 50%]
+.......................................................................  [100%]
+143 passed in 3.32s
+
+TARGETED PHASE 10-14 REGRESSION:
+------------------------------------------------------------
+........................................................................ [ 15%]
+........................................................................ [ 31%]
+........................................................................ [ 47%]
+........................................................................ [ 63%]
+........................................................................ [ 78%]
+........................................................................ [ 94%]
+........................                                                 [100%]
+456 passed in 4.26s
+
+FULL OFFLINE REGRESSION:
+------------------------------------------------------------
+........................................................................ [  6%]
+........................................................................ [ 13%]
+........................................................................ [ 20%]
+........................................................................ [ 26%]
+........................................................................ [ 33%]
+........................................................................ [ 40%]
+........................................................................ [ 46%]
+........................................................................ [ 53%]
+........................................................................ [ 60%]
+........................................................................ [ 67%]
+........................................................................ [ 73%]
+........................................................................ [ 80%]
+........................................................................ [ 87%]
+........................................................................ [ 93%]
+.................................................................        [100%]
+1073 passed in 81.66s (0:01:21)
+
+BTC LEGACY_V1 GOLDEN:
+------------------------------------------------------------
+=== BACKTEST BENCHMARK ===
+Symbol:           BTCUSDT
+Interval:         1m
+îwiece:           5000
+Kapita│ pocz╣tk.: 1000.0
+Kapita│ ko˝cowy:  1014.8392976799995
+Transakcje:       13
+Wygrane:          7
+Przegrane:        6
+Win rate:         53.84615384615385
+Total profit:     14.839297679999504
+Max drawdown:     18.485012400000187
+Profit factor:    1.692128777090018
+Average win:      5.182768514285695
+Average loss:     3.573346986666712
+Largest win:     13.000798400000047
+Largest loss:     9.580003080000042
+Expectancy:       1.1414844369230388
+
+VERIFIED:
+- real PaperBroker used
+- PaperBroker execution_journal=None
+- real FixedBpsSlippage used
+- real Phase09 accounting bridge used
+- real realized FX selection/booker used
+- real RealisticV2SQLiteMapper used
+- no fabricated execution/realized evidence defaults
+- dedicated A.4 entrypoint accepts paper dependency context
+- real Phase 13 bundle constructs on TEMP SQLite
+- constructed bundle immediately closes
+- no run_cycle
+- TEMP database remains HALTED
+- TEMP cash reconciliation matches
+- TEMP realized reconciliation matches
+- no JSON/JSONL durable files
+- existing Phase 10/11/12 entrypoints unchanged
+- live DB unchanged
+- bootstrap backup unchanged
+- protected user change preserved
+- HALT not cleared
+- trading not activated
+
+LIVE DATABASE SHA256 BEFORE:
+F51C2DB77B6346372340AC772DD58099CF4E842144A7F196567A2E0D4591212D
+
+LIVE DATABASE SHA256 AFTER:
+F51C2DB77B6346372340AC772DD58099CF4E842144A7F196567A2E0D4591212D
+
+LIVE DATABASE MODIFIED:
+NO
+
+PHASE 14 A.5:
+PASS
+
+NEXT:
+PHASE 14 A.6 - APPLICATION SERVICE BINDING PREFLIGHT
+NO LIVE CYCLE
+
+HARD STOP BEFORE REAL LIVE DB WRITER WIRING OR HALT CLEAR
