@@ -341,6 +341,7 @@ class _DashboardPageState extends State<DashboardPage> {
     final deposited = (portfolio['total_deposited'] as num?)?.toDouble() ?? 0;
     final withdrawn = (portfolio['total_withdrawn'] as num?)?.toDouble() ?? 0;
     final result = (portfolio['result'] as num?)?.toDouble() ?? 0;
+
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(18),
@@ -357,12 +358,21 @@ class _DashboardPageState extends State<DashboardPage> {
               style: const TextStyle(fontSize: 20),
             ),
             Text(
-              'Wpłaty: ${deposited.toStringAsFixed(2)} PLN • Wypłaty: ${withdrawn.toStringAsFixed(2)} PLN',
+              'Wpłaty: ${deposited.toStringAsFixed(2)} PLN • '
+              'Wypłaty: ${withdrawn.toStringAsFixed(2)} PLN',
             ),
             Text(
               'Wynik: ${result >= 0 ? '+' : ''}${result.toStringAsFixed(2)} PLN',
             ),
-            const Text('Portfel użytkownika jest oddzielny od wirtualnego kapitału AI.');
+            const SizedBox(height: 6),
+            const Text(
+              'Portfel użytkownika jest oddzielny od wirtualnego kapitału AI.',
+              style: TextStyle(color: Colors.white60, fontSize: 12),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   Future<void> loadAi() async {
