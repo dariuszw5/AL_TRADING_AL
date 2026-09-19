@@ -17,7 +17,8 @@ Write-Host "=== CORE / MULTI-ASSET / PLN ===" -ForegroundColor Cyan
     tests/test_data_provider_storage.py `
     tests/test_agent_loop.py `
     tests/test_agent_loop_live.py `
-    tests/test_ai_manager.py
+    tests/test_ai_manager.py `
+    tests/test_research_automation.py
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
 Write-Host ""
