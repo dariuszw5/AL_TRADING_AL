@@ -123,7 +123,7 @@ class DataProvider:
         return self.data
 
     def get_candles(self, symbol="BTCUSDT", interval="1m", limit=100):
-        asset = get_asset(symbol)
+        asset = get_asset(symbol, allow_dynamic_binance=True)
 
         if asset.provider == "yahoo":
             candles = self._get_yahoo_candles(
@@ -226,7 +226,7 @@ class DataProvider:
         )
 
     def get_historical_candles(self, symbol="BTCUSDT", interval="1m", limit=1000):
-        asset = get_asset(symbol)
+        asset = get_asset(symbol, allow_dynamic_binance=True)
 
         if asset.provider == "yahoo":
             candles = self._get_yahoo_candles(

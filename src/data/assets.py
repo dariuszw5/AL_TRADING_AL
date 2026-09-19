@@ -1,4 +1,5 @@
 from dataclasses import asdict, dataclass
+import re
 
 
 @dataclass(frozen=True)
@@ -15,99 +16,55 @@ class AssetSpec:
     note: str | None = None
 
 
-# Paper-trading instruments exposed by the existing application.
-# Crypto candles come from Binance. Non-crypto market candles use Yahoo's
-# chart endpoint. GOLD/WTI are deliberately named as continuous-futures
-# proxies so the UI never presents GC=F / CL=F as spot XAUUSD / WTIUSD.
 SUPPORTED_ASSETS = (
+    AssetSpec("BTCUSDT", "Bitcoin", "crypto", "binance", "BTCUSDT", "USDT", 1.0),
+    AssetSpec("ETHUSDT", "Ethereum", "crypto", "binance", "ETHUSDT", "USDT", 1.0),
+    AssetSpec("SOLUSDT", "Solana", "crypto", "binance", "SOLUSDT", "USDT", 0.1),
+    AssetSpec("BNBUSDT", "BNB", "crypto", "binance", "BNBUSDT", "USDT", 0.2),
+    AssetSpec("XRPUSDT", "XRP", "crypto", "binance", "XRPUSDT", "USDT", 0.001),
     AssetSpec(
-        symbol="BTCUSDT",
-        name="Bitcoin",
-        asset_type="crypto",
-        provider="binance",
-        provider_symbol="BTCUSDT",
-        quote="USDT",
-        min_difference=1.0,
+        "GOLD_FUT_CONT",
+        "Złoto (futures proxy)",
+        "gold",
+        "yahoo",
+        "GC=F",
+        "USD",
+        0.5,
+        "continuous_future_proxy",
+        ("XAUUSD", "GC=F"),
+        "Ciągły kontrakt futures GC=F; proxy do paper/research, nie spot XAUUSD.",
     ),
     AssetSpec(
-        symbol="ETHUSDT",
-        name="Ethereum",
-        asset_type="crypto",
-        provider="binance",
-        provider_symbol="ETHUSDT",
-        quote="USDT",
-        min_difference=1.0,
+        "WTI_FUT_CONT",
+        "Ropa WTI (futures proxy)",
+        "oil",
+        "yahoo",
+        "CL=F",
+        "USD",
+        0.05,
+        "continuous_future_proxy",
+        ("WTIUSD", "CL=F"),
+        "Ciągły kontrakt futures CL=F; proxy do paper/research, nie spot WTIUSD.",
     ),
     AssetSpec(
-        symbol="SOLUSDT",
-        name="Solana",
-        asset_type="crypto",
-        provider="binance",
-        provider_symbol="SOLUSDT",
-        quote="USDT",
-        min_difference=0.1,
+        "EURUSD",
+        "Euro / dolar",
+        "forex",
+        "yahoo",
+        "EURUSD=X",
+        "USD",
+        0.0001,
+        "fx_spot_reference",
     ),
     AssetSpec(
-        symbol="BNBUSDT",
-        name="BNB",
-        asset_type="crypto",
-        provider="binance",
-        provider_symbol="BNBUSDT",
-        quote="USDT",
-        min_difference=0.2,
-    ),
-    AssetSpec(
-        symbol="XRPUSDT",
-        name="XRP",
-        asset_type="crypto",
-        provider="binance",
-        provider_symbol="XRPUSDT",
-        quote="USDT",
-        min_difference=0.001,
-    ),
-    AssetSpec(
-        symbol="GOLD_FUT_CONT",
-        name="Złoto (futures proxy)",
-        asset_type="gold",
-        provider="yahoo",
-        provider_symbol="GC=F",
-        quote="USD",
-        min_difference=0.5,
-        instrument_type="continuous_future_proxy",
-        aliases=("XAUUSD", "GC=F"),
-        note="Ciągły kontrakt futures GC=F; proxy do paper/research, nie spot XAUUSD.",
-    ),
-    AssetSpec(
-        symbol="WTI_FUT_CONT",
-        name="Ropa WTI (futures proxy)",
-        asset_type="oil",
-        provider="yahoo",
-        provider_symbol="CL=F",
-        quote="USD",
-        min_difference=0.05,
-        instrument_type="continuous_future_proxy",
-        aliases=("WTIUSD", "CL=F"),
-        note="Ciągły kontrakt futures CL=F; proxy do paper/research, nie spot WTIUSD.",
-    ),
-    AssetSpec(
-        symbol="EURUSD",
-        name="Euro / dolar",
-        asset_type="forex",
-        provider="yahoo",
-        provider_symbol="EURUSD=X",
-        quote="USD",
-        min_difference=0.0001,
-        instrument_type="fx_spot_reference",
-    ),
-    AssetSpec(
-        symbol="AAPL",
-        name="Apple",
-        asset_type="stock",
-        provider="yahoo",
-        provider_symbol="AAPL",
-        quote="USD",
-        min_difference=0.05,
-        instrument_type="equity",
+        "AAPL",
+        "Apple",
+        "stock",
+        "yahoo",
+        "AAPL",
+        "USD",
+        0.05,
+        "equity",
     ),
 )
 
@@ -117,19 +74,39 @@ ASSET_ALIASES = {
     for asset in SUPPORTED_ASSETS
     for alias in asset.aliases
 }
+_BINANCE_USDT_RE = re.compile(r"^[A-Z0-9]{2,20}USDT$")
 
 
-def get_asset(symbol: str) -> AssetSpec:
+def dynamic_binance_asset(symbol: str) -> AssetSpec:
+    normalized = symbol.upper().strip()
+    if not _BINANCE_USDT_RE.fullmatch(normalized):
+        raise ValueError(f"Unsupported dynamic Binance symbol '{symbol}'")
+    base = normalized[:-4]
+    return AssetSpec(
+        symbol=normalized,
+        name=base,
+        asset_type="crypto",
+        provider="binance",
+        provider_symbol=normalized,
+        quote="USDT",
+        min_difference=0.00000001,
+        instrument_type="spot",
+        note="Transient symbol discovered from Binance market data.",
+    )
+
+
+def get_asset(symbol: str, *, allow_dynamic_binance: bool = False) -> AssetSpec:
     normalized = symbol.upper().strip()
     canonical = ASSET_ALIASES.get(normalized, normalized)
-
-    try:
-        return ASSET_BY_SYMBOL[canonical]
-    except KeyError as exc:
-        supported = ", ".join(ASSET_BY_SYMBOL)
-        raise ValueError(
-            f"Unsupported asset '{symbol}'. Supported assets: {supported}"
-        ) from exc
+    asset = ASSET_BY_SYMBOL.get(canonical)
+    if asset is not None:
+        return asset
+    if allow_dynamic_binance:
+        return dynamic_binance_asset(canonical)
+    supported = ", ".join(ASSET_BY_SYMBOL)
+    raise ValueError(
+        f"Unsupported asset '{symbol}'. Supported assets: {supported}"
+    )
 
 
 def asset_payload(asset: AssetSpec) -> dict[str, object]:

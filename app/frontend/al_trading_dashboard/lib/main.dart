@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 
 import 'ai_panel.dart';
+import 'research_panel.dart';
 
 const List<Map<String, String>> fallbackAssets = [
   {'symbol': 'BTCUSDT', 'name': 'Bitcoin', 'asset_type': 'crypto'},
@@ -116,6 +117,9 @@ class _DashboardPageState extends State<DashboardPage> {
   Map<String, Map<String, dynamic>> assetStatuses = {};
   String? userPortfolioError;
   bool followAiSelection = false;
+  Map<String, dynamic>? researchData;
+  String? researchError;
+  bool researchLoading = false;
 
   String? error;
   bool loading = true;
@@ -132,11 +136,13 @@ class _DashboardPageState extends State<DashboardPage> {
       loadAssetOverview();
       loadData();
       loadAi();
+      loadResearch();
       loadUserPortfolio();
 
       timer = Timer.periodic(const Duration(seconds: 5), (_) {
         loadData();
         loadAi();
+        loadResearch();
         loadUserPortfolio();
         loadAssetOverview();
       });
@@ -335,7 +341,6 @@ class _DashboardPageState extends State<DashboardPage> {
     final deposited = (portfolio['total_deposited'] as num?)?.toDouble() ?? 0;
     final withdrawn = (portfolio['total_withdrawn'] as num?)?.toDouble() ?? 0;
     final result = (portfolio['result'] as num?)?.toDouble() ?? 0;
-    final aiProfit = (portfolio['profit_transferred'] as num?)?.toDouble() ?? 0;
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(18),
@@ -357,35 +362,7 @@ class _DashboardPageState extends State<DashboardPage> {
             Text(
               'Wynik: ${result >= 0 ? '+' : ''}${result.toStringAsFixed(2)} PLN',
             ),
-            Text(
-              'Zysk przekazany przez AI: ${aiProfit.toStringAsFixed(2)} PLN',
-            ),
-            if (userPortfolioError != null)
-              Text(
-                userPortfolioError!,
-                style: const TextStyle(color: Colors.redAccent),
-              ),
-            Wrap(
-              spacing: 8,
-              children: [
-                FilledButton.tonal(
-                  onPressed: () => changeUserFunds(deposit: true),
-                  child: const Text('Wpłać'),
-                ),
-                OutlinedButton(
-                  onPressed: () => changeUserFunds(deposit: false),
-                  child: const Text('Wypłać'),
-                ),
-              ],
-            ),
-            const Text(
-              'Ten portfel jest niezależny od portfela AI i nie składa zleceń.',
-              style: TextStyle(color: Colors.white60, fontSize: 12),
-            ),
-          ],
-        ),
-      ),
-    );
+            const Text('Portfel użytkownika jest oddzielny od wirtualnego kapitału AI.');
   }
 
   Future<void> loadAi() async {
@@ -458,6 +435,40 @@ class _DashboardPageState extends State<DashboardPage> {
       followAiAsset();
     },
   );
+
+  Future<void> loadResearch() async {
+    if (researchLoading) return;
+    researchLoading = true;
+
+    try {
+      final response = await http
+          .get(Uri.parse('$apiBaseUrl/api/research'))
+          .timeout(const Duration(seconds: 10));
+
+      if (response.statusCode != 200) {
+        throw Exception('Research API HTTP ${response.statusCode}');
+      }
+
+      final decoded = json.decode(response.body);
+      if (!mounted) return;
+
+      setState(() {
+        researchData = Map<String, dynamic>.from(decoded as Map);
+        researchError = null;
+      });
+    } catch (exception) {
+      if (!mounted) return;
+      setState(() {
+        researchError = exception.toString();
+      });
+    } finally {
+      researchLoading = false;
+    }
+  }
+
+  Widget buildResearchPanel() {
+    return ResearchPanel(data: researchData, error: researchError);
+  }
 
   Future<void> loadAssets() async {
     try {
@@ -1234,6 +1245,8 @@ class _DashboardPageState extends State<DashboardPage> {
             buildUserPortfolio(),
             const SizedBox(height: 24),
             buildAiPanel(),
+            const SizedBox(height: 16),
+            buildResearchPanel(),
             Center(child: Text(error ?? 'Brak danych z API.')),
           ],
         ),
@@ -1441,6 +1454,8 @@ class _DashboardPageState extends State<DashboardPage> {
             buildMarketChart(),
 
             buildAiPanel(),
+            const SizedBox(height: 16),
+            buildResearchPanel(),
 
             sectionTitle('KRZYWA KAPITAŁU · PLN JEŚLI DOSTĘPNE'),
             buildEquityChart(),

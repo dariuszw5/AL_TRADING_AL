@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 import time
 from typing import Any
@@ -15,7 +16,7 @@ from src.data.fx_provider import FxRateProvider, PlnRate
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
-LIVE_STATE_DIR = PROJECT_ROOT / "data" / "live_state"
+LIVE_STATE_DIR = Path(\n    os.getenv("AL_TRADING_DATA_DIR", str(PROJECT_ROOT / "data" / "live_state"))\n)
 TRADE_HISTORY_FILE = LIVE_STATE_DIR / "paper_live_history.csv"
 SNAPSHOTS_FILE = LIVE_STATE_DIR / "paper_live_snapshots.csv"
 DAILY_FILE = LIVE_STATE_DIR / "paper_live_daily.csv"
@@ -83,6 +84,36 @@ def load_state(symbol: str = "BTCUSDT") -> dict[str, Any]:
             "symbol": asset.symbol,
             "error": str(exc),
         }
+
+
+def load_research_state() -> dict[str, Any]:
+    if not RESEARCH_STATE_FILE.exists():
+        return {
+            "available": False,
+            "stale": True,
+            "opportunities": [],
+            "macro_events": [],
+            "error": f"Research state not found: {RESEARCH_STATE_FILE}",
+        }
+
+    try:
+        with RESEARCH_STATE_FILE.open("r", encoding="utf-8-sig") as handle:
+            state = json.load(handle)
+    except (OSError, json.JSONDecodeError) as exc:
+        return {
+            "available": False,
+            "stale": True,
+            "opportunities": [],
+            "macro_events": [],
+            "error": str(exc),
+        }
+
+    updated_at_unix = float(state.get("updated_at_unix") or 0.0)
+    age_seconds = max(0.0, time.time() - updated_at_unix) if updated_at_unix else None
+    state["available"] = True
+    state["age_seconds"] = age_seconds
+    state["stale"] = age_seconds is None or age_seconds > 180.0
+    return state
 
 
 def position_payload(state: dict[str, Any]) -> dict[str, Any]:
@@ -568,4 +599,33 @@ def files(symbol: str = "BTCUSDT") -> dict[str, bool]:
         "trade_history": TRADE_HISTORY_FILE.exists(),
         "snapshots": SNAPSHOTS_FILE.exists(),
         "daily": DAILY_FILE.exists(),
+    }
+
+
+@app.get("/api/research")
+def research() -> dict[str, Any]:
+    return load_research_state()
+
+
+@app.get("/api/research/opportunities")
+def research_opportunities() -> dict[str, Any]:
+    state = load_research_state()
+    return {
+        "available": state.get("available", False),
+        "stale": state.get("stale", True),
+        "updated_at": state.get("updated_at"),
+        "universe_count": state.get("universe_count", 0),
+        "opportunities": state.get("opportunities", []),
+        "errors": state.get("errors", {}),
+    }
+
+
+@app.get("/api/research/macro")
+def research_macro() -> dict[str, Any]:
+    state = load_research_state()
+    return {
+        "available": state.get("available", False),
+        "stale": state.get("stale", True),
+        "updated_at": state.get("updated_at"),
+        "events": state.get("macro_events", []),
     }
