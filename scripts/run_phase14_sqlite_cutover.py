@@ -3,6 +3,10 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
+from src.persistence.sqlite_application_binding import (
+    Phase14ApplicationBindingError,
+    build_phase14_application_context,
+)
 from src.persistence.sqlite_cutover_dependencies import (
     make_phase14_sqlite_bundle_kwargs_provider,
 )
@@ -21,6 +25,7 @@ EXIT_CONFIRMATION_REQUIRED = 4
 EXIT_PREFLIGHT_FAILED = 5
 EXIT_DEPENDENCIES_REQUIRED = 6
 EXIT_CONSTRUCTION_FAILED = 7
+EXIT_APPLICATION_BINDING_FAILED = 8
 
 
 def _parser():
@@ -121,6 +126,7 @@ def main(
     *,
     sqlite_bundle_kwargs_provider=None,
     paper_dependency_context=None,
+    application_binding_inputs=None,
 ):
     args = _parser().parse_args(
         argv
@@ -209,6 +215,38 @@ def main(
     live = Path(
         args.live_db
     ).resolve()
+
+    if (
+        sqlite_bundle_kwargs_provider is None
+        and paper_dependency_context is None
+        and application_binding_inputs is not None
+    ):
+        try:
+            paper_dependency_context = (
+                build_phase14_application_context(
+                    application_binding_inputs
+                )
+            )
+        except (
+            Phase14ApplicationBindingError,
+            TypeError,
+            ValueError,
+        ) as exc:
+            print(
+                "APPLICATION BINDING FAILED: "
+                + str(exc)
+            )
+
+            _print_safe_footer(
+                constructed=False,
+                closed=False,
+            )
+
+            return EXIT_APPLICATION_BINDING_FAILED
+
+        print(
+            "APPLICATION BINDING: PASS"
+        )
 
     if (
         sqlite_bundle_kwargs_provider is None
