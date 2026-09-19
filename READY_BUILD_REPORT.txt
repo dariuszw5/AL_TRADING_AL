@@ -1,0 +1,47 @@
+AL TRADING AGENT - READY BUILD REPORT
+====================================
+
+Basis:
+- original application architecture retained
+- no Phase 13/14 SQLite/runtime/cutover stack ported
+
+Implemented:
+- 9-market registry
+- Binance crypto candles
+- Yahoo non-crypto candles
+- GOLD_FUT_CONT / WTI_FUT_CONT canonical proxy naming
+- legacy aliases XAUUSD / WTIUSD retained
+- reporting FX:
+  USD -> PLN via NBP table A
+  USDT -> USD via Coinbase Exchange
+  USDT -> USD -> PLN, no USDT=USD assumption
+- native + PLN account/PnL/equity fields in FastAPI
+- provider/freshness metadata in /api/market
+- active DashboardPage with synchronized asset list
+- market chart scaling based only on candle high/low
+- full numeric equity labels
+- experimental AI opt-in only
+- portable Windows setup/start scripts
+
+Validation before GitHub transfer:
+- Python compileall: PASS
+- targeted dashboard/backend regression: 22 passed
+- earlier core/multi-asset/PLN/backend/loop group: 45 passed
+- earlier backtest regression group: 66 passed
+- BTC LEGACY golden: MATCH EXACT
+
+BTC LEGACY golden:
+- final balance: 1014.8392976799995
+- trades: 13
+- wins: 7
+- losses: 6
+- profit: 14.839297679999504
+- max drawdown: 18.485012400000187
+- profit factor: 1.692128777090018
+- expectancy: 1.1414844369230388
+
+Environment limitation:
+- Flutter SDK was unavailable during packaging; run flutter analyze/test locally.
+
+Real exchange orders supported/sent: NO
+Paper money only: YES
