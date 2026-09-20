@@ -230,10 +230,20 @@ class _ProDashboardState extends State<ProDashboard>
     return research?['stale'] == true;
   }
 
-  bool get aiRiskBlocked {
+  String get aiDecisionAction {
     final decision = asMap(ai?['decision']);
-    return decision['action']?.toString() == 'HALT';
+    return decision['action']?.toString() ?? '';
   }
+
+  bool get aiRiskBlocked => aiDecisionAction == 'HALT';
+
+  bool get aiScanning =>
+      !aiRiskBlocked &&
+      (aiDecisionAction == 'CASH' ||
+          aiDecisionAction == 'WAIT_MULTI' ||
+          aiDecisionAction == 'SELECT_MULTI' ||
+          aiDecisionAction == 'HOLD_MULTI' ||
+          aiDecisionAction == 'PROFIT_SWEEP');
 
   String aiRiskMessage() {
     final state = ai ?? const <String, dynamic>{};
@@ -295,6 +305,106 @@ class _ProDashboardState extends State<ProDashboard>
                 const SizedBox(height: 4),
                 Text(
                   aiRiskMessage(),
+                  style: const TextStyle(
+                    color: muted,
+                    fontSize: 12,
+                    height: 1.4,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget aiActivityBanner() {
+    if (aiRiskBlocked || !aiScanning) return const SizedBox.shrink();
+
+    final decision = asMap(ai?['decision']);
+    final action = aiDecisionAction;
+
+    String title;
+    String detail;
+    IconData icon;
+    Color tone;
+
+    switch (action) {
+      case 'HOLD_MULTI':
+        title = 'AI AKTYWNE • ZARZĄDZANIE POZYCJAMI';
+        detail = decision['reason']?.toString() ??
+            'Agent monitoruje otwarte pozycje i kontroluje ryzyko.';
+        icon = Icons.monitor_heart_outlined;
+        tone = mint;
+        break;
+      case 'WAIT_MULTI':
+        title = 'AI AKTYWNE • POTWIERDZANIE SYGNAŁÓW';
+        detail = decision['reason']?.toString() ??
+            'Agent oczekuje na kolejną zamkniętą świecę przed wejściem.';
+        icon = Icons.hourglass_top_rounded;
+        tone = cyan;
+        break;
+      case 'SELECT_MULTI':
+        title = 'AI AKTYWNE • WYBRANO SYGNAŁY';
+        detail = decision['reason']?.toString() ??
+            'Agent znalazł kandydatów i rozpoczął ich potwierdzanie.';
+        icon = Icons.bolt_rounded;
+        tone = cyan;
+        break;
+      case 'PROFIT_SWEEP':
+        title = 'AI AKTYWNE • ZYSK PRZEKAZANY';
+        detail = decision['reason']?.toString() ??
+            'Zrealizowana nadwyżka została przekazana do portfela.';
+        icon = Icons.savings_outlined;
+        tone = mint;
+        break;
+      case 'CASH':
+      default:
+        title = 'AI AKTYWNE • SKANOWANIE RYNKÓW';
+        detail = decision['reason']?.toString() ??
+            'Brak kwalifikowanego sygnału. Agent nadal analizuje rynki automatycznie.';
+        icon = Icons.radar_rounded;
+        tone = mint;
+        break;
+    }
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 18),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: tone.withValues(alpha: 0.07),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: tone.withValues(alpha: 0.35)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(icon, color: tone, size: 24),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    activityPulseDot(tone, active: true),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        title,
+                        style: TextStyle(
+                          color: tone,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 5),
+                Text(
+                  detail,
                   style: const TextStyle(
                     color: muted,
                     fontSize: 12,
@@ -583,14 +693,20 @@ class _ProDashboardState extends State<ProDashboard>
         color: aiRiskBlocked && positions.isEmpty
             ? Colors.redAccent
             : mint,
-        active: positions.isNotEmpty || aiRiskBlocked,
+        active: positions.isNotEmpty || aiRiskBlocked || aiScanning,
         status: positions.isEmpty
-            ? (aiRiskBlocked ? 'LIMIT RYZYKA' : 'BRAK AKCJI')
+            ? (aiRiskBlocked
+                  ? 'LIMIT RYZYKA'
+                  : aiScanning
+                  ? 'AI AKTYWNE'
+                  : 'OCZEKIWANIE')
             : 'AKTYWNE',
         detail: positions.isEmpty
             ? (aiRiskBlocked
                   ? aiRiskMessage()
-                  : 'Brak aktywnych pozycji')
+                  : aiScanning
+                  ? 'Brak otwartych pozycji • agent analizuje rynki i czeka na kwalifikowany sygnał.'
+                  : 'Oczekiwanie na aktywny cykl AI')
             : positions.entries.take(4).map((entry) {
                 final p = asMap(entry.value);
                 final pnl =
@@ -607,14 +723,20 @@ class _ProDashboardState extends State<ProDashboard>
         color: aiRiskBlocked && pending.isEmpty
             ? Colors.redAccent
             : cyan,
-        active: pending.isNotEmpty || aiRiskBlocked,
+        active: pending.isNotEmpty || aiRiskBlocked || aiScanning,
         status: pending.isEmpty
-            ? (aiRiskBlocked ? 'AI HALT' : 'BRAK AKCJI')
+            ? (aiRiskBlocked
+                  ? 'AI HALT'
+                  : aiScanning
+                  ? 'SKANOWANIE'
+                  : 'OCZEKIWANIE')
             : 'POTWIERDZANIE',
         detail: pending.isEmpty
             ? (aiRiskBlocked
                   ? 'Nowe sygnały nie będą dodawane, dopóki aktywny jest limit ryzyka.'
-                  : 'Brak sygnałów oczekujących na potwierdzenie')
+                  : aiScanning
+                  ? 'Brak sygnałów oczekujących • agent wykonuje kolejne cykle analizy automatycznie.'
+                  : 'Oczekiwanie na aktywny cykl AI')
             : pending.take(4).map((row) {
                 return '${row['symbol'] ?? '—'} ${row['side'] ?? ''} • weryfikacja sygnału';
               }).join(' • '),
@@ -2543,6 +2665,7 @@ class _ProDashboardState extends State<ProDashboard>
                     if (received == null && failure == null)
                       const LinearProgressIndicator(),
                     if (aiRiskBlocked) riskHaltBanner(),
+                    if (aiScanning) aiActivityBanner(),
                     if (page == 0) ...[
                       summary(),
                       const SizedBox(height: 20),
