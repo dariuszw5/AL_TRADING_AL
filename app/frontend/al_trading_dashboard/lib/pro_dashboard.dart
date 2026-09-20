@@ -582,7 +582,7 @@ class _ProDashboardState extends State<ProDashboard>
 
     if (upper.endsWith('USDT') && upper.length > 4) {
       final base = upper.substring(0, upper.length - 4).toLowerCase();
-      return 'https://assets.coincap.io/assets/icons/${base}@2x.png';
+      return 'https://assets.coincap.io/assets/icons/$base@2x.png';
     }
 
     const companyDomains = <String, String>{
@@ -679,7 +679,7 @@ class _ProDashboardState extends State<ProDashboard>
                 height: size,
                 fit: BoxFit.contain,
                 filterQuality: FilterQuality.high,
-                errorBuilder: (_, __, ___) => Center(child: fallback()),
+                errorBuilder: (_, _, _) => Center(child: fallback()),
               ),
             ),
     );
