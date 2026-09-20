@@ -333,6 +333,8 @@ class AIPaperManager:
             "funding_received": 0.0,
             "profit_swept": 0.0,
             "profit_transfers": [],
+            "accounting_gap": 0.0,
+            "accounting_error": False,
             "market_marks": {},
             "strategy_learning": {
                 strategy: {
@@ -371,8 +373,25 @@ class AIPaperManager:
 
             old_position = loaded.get("position")
             if old_position and old_position.get("symbol"):
+                migrated_position = deepcopy(old_position)
+                allocation = float(
+                    migrated_position.get("allocation_pln") or 0.0
+                )
+
+                # v2 kept the full account balance untouched while a position
+                # was open and treated allocation_pln as notional exposure.
+                # v3 reserves position principal from free balance and adds it
+                # back when calculating equity. Subtract the allocation once
+                # during migration or the principal is double-counted.
+                state["balance"] = (
+                    float(state.get("balance") or 0.0) - allocation
+                )
+                migrated_position.setdefault(
+                    "unrealized_pnl",
+                    float(loaded.get("unrealized_pnl") or 0.0),
+                )
                 state["positions"] = {
-                    old_position["symbol"]: deepcopy(old_position)
+                    migrated_position["symbol"]: migrated_position
                 }
             old_pending = loaded.get("pending")
             if old_pending:
@@ -388,6 +407,8 @@ class AIPaperManager:
         state.setdefault("funded_capital", state.get("initial_balance", 0.0))
         state.setdefault("profit_swept", 0.0)
         state.setdefault("profit_transfers", [])
+        state.setdefault("accounting_gap", 0.0)
+        state.setdefault("accounting_error", False)
         state.setdefault("strategy_learning", {})
         for strategy in STRATEGIES:
             state["strategy_learning"].setdefault(
@@ -494,8 +515,19 @@ class AIPaperManager:
             s["halted"] = True
         return bool(
             s.get("halted", False)
+            or s.get("accounting_error", False)
             or s["daily_loss"] >= self._daily_loss_limit()
         )
+
+    def _accounting_gap(self):
+        s = self.state
+        expected = (
+            float(s.get("funded_capital") or 0.0)
+            + float(s.get("realized_pnl") or 0.0)
+            + float(s.get("unrealized_pnl") or 0.0)
+            - float(s.get("profit_swept") or 0.0)
+        )
+        return float(s.get("equity") or 0.0) - expected
 
     def _mark_equity(self):
         s = self.state
@@ -507,6 +539,10 @@ class AIPaperManager:
         s["unrealized_pnl"] = unrealized
         s["equity"] = s["balance"] + principal + unrealized
         s["peak"] = max(s["peak"], s["equity"])
+
+        gap = self._accounting_gap()
+        s["accounting_gap"] = gap
+        s["accounting_error"] = abs(gap) > 0.01
 
     def _sweep_realized_profit(self, now_ms):
         """Move realized account value above funded capital into an outbox.
