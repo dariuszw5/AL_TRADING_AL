@@ -896,6 +896,23 @@ def save_ai_control(state: dict[str, Any]) -> dict[str, Any]:
     return ai_control_state()
 
 
+@app.get("/api/dashboard-snapshot")
+def dashboard_snapshot() -> dict[str, Any]:
+    """Fast dashboard state without external market-provider calls.
+
+    The mobile/desktop dashboards use this endpoint for critical local state
+    so slow Yahoo/Binance quote refreshes cannot blank the portfolio, AI
+    decision or research status.
+    """
+    return {
+        "available": True,
+        "served_at_unix": time.time(),
+        "research": load_research_state(),
+        "ai": ai_status(),
+        "user_portfolio": user_portfolio_state(),
+    }
+
+
 @app.get("/api/user-portfolio")
 def get_user_portfolio() -> dict[str, Any]:
     return user_portfolio_state()
