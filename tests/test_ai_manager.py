@@ -544,8 +544,8 @@ def test_accounting_gap_guard_blocks_corrupted_state(tmp_path):
     _fund_manager(manager)
 
     manager.state["balance"] = 1250.0
-    manager._mark_equity()
+    manager.state["equity"] = 1250.0
 
+    assert manager._blocked() is True
     assert manager.state["accounting_error"] is True
     assert round(manager.state["accounting_gap"], 6) == 250.0
-    assert manager._blocked() is True
