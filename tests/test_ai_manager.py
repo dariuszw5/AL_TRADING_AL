@@ -1,4 +1,5 @@
 import json
+from types import SimpleNamespace
 
 from src.agent.ai_manager import AIPaperManager, STRATEGIES
 
@@ -244,3 +245,132 @@ def test_ai_manager_does_not_sweep_unrealized_profit(tmp_path):
     assert event is None
     assert s["balance"] == 900.0
     assert s["equity"] == 1050.0
+
+
+
+def _candle(ts, close=100.0):
+    return SimpleNamespace(
+        timestamp=ts,
+        open=close,
+        high=close,
+        low=close,
+        close=close,
+        volume=1.0,
+    )
+
+
+def _fund_manager(manager, amount=1000.0):
+    manager.state["funded_capital"] = amount
+    manager.state["initial_balance"] = amount
+    manager.state["balance"] = amount
+    manager.state["equity"] = amount
+    manager.state["peak"] = amount
+
+
+def test_pending_waits_for_a_new_closed_candle_before_confirmation(tmp_path):
+    manager = AIPaperManager(tmp_path / "ai_paper.json", assets=[])
+    _fund_manager(manager)
+
+    manager.state["pending"] = [
+        {
+            "symbol": "TESTUSDT",
+            "strategy": "trend",
+            "side": "LONG",
+            "timestamp": 60_000,
+            "signal_timestamp": 60_000,
+            "score": 0.01,
+        }
+    ]
+
+    result = manager._execute_pending(
+        {"TESTUSDT": [_candle(60_000, 101.0)]},
+        {"TESTUSDT": [_candle(60_000, 101.0)]},
+        [
+            {
+                "symbol": "TESTUSDT",
+                "strategy": "trend",
+                "side": "LONG",
+                "eligible": True,
+                "score": 0.02,
+                "exploratory": False,
+            }
+        ],
+        90_000,
+    )
+
+    assert result["opened"] == []
+    assert result["cancelled"] == []
+    assert len(manager.state["pending"]) == 1
+    assert manager.state["positions"] == {}
+
+
+def test_pending_signal_is_cancelled_when_not_reconfirmed(tmp_path):
+    manager = AIPaperManager(tmp_path / "ai_paper.json", assets=[])
+    _fund_manager(manager)
+
+    manager.state["pending"] = [
+        {
+            "symbol": "TESTUSDT",
+            "strategy": "trend",
+            "side": "LONG",
+            "timestamp": 60_000,
+            "signal_timestamp": 60_000,
+            "score": 0.01,
+        }
+    ]
+
+    result = manager._execute_pending(
+        {"TESTUSDT": [_candle(120_000, 102.0)]},
+        {"TESTUSDT": [_candle(120_000, 102.0)]},
+        [],
+        150_000,
+    )
+
+    assert result["opened"] == []
+    assert len(result["cancelled"]) == 1
+    assert result["cancelled"][0]["cancel_reason"] == "SIGNAL_NOT_CONFIRMED"
+    assert manager.state["pending"] == []
+    assert manager.state["positions"] == {}
+
+
+def test_pending_signal_opens_only_after_reconfirmation(tmp_path):
+    manager = AIPaperManager(tmp_path / "ai_paper.json", assets=[])
+    _fund_manager(manager)
+
+    manager.state["pending"] = [
+        {
+            "symbol": "TESTUSDT",
+            "strategy": "trend",
+            "side": "LONG",
+            "timestamp": 60_000,
+            "signal_timestamp": 60_000,
+            "score": 0.01,
+        }
+    ]
+
+    result = manager._execute_pending(
+        {"TESTUSDT": [_candle(120_000, 103.0), _candle(150_000, 104.0)]},
+        {"TESTUSDT": [_candle(120_000, 103.0)]},
+        [
+            {
+                "symbol": "TESTUSDT",
+                "strategy": "trend",
+                "side": "LONG",
+                "eligible": True,
+                "score": 0.025,
+                "exploratory": False,
+            }
+        ],
+        150_000,
+    )
+
+    assert result["opened"] == ["TESTUSDT"]
+    assert result["cancelled"] == []
+    assert manager.state["pending"] == []
+
+    position = manager.state["positions"]["TESTUSDT"]
+    assert position["entry"] == 104.0
+    assert position["selected_score"] == 0.01
+    assert position["score"] == 0.025
+    assert position["confirmed_timestamp"] == 120_000
+    assert position["allocation_pln"] == 150.0
