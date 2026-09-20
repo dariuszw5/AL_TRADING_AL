@@ -230,6 +230,85 @@ class _ProDashboardState extends State<ProDashboard>
     return research?['stale'] == true;
   }
 
+  bool get aiRiskBlocked {
+    final decision = asMap(ai?['decision']);
+    return decision['action']?.toString() == 'HALT';
+  }
+
+  String aiRiskMessage() {
+    final state = ai ?? const <String, dynamic>{};
+    final decision = asMap(state['decision']);
+    final limits = asMap(state['limits']);
+    final dailyLoss = (state['daily_loss'] as num?)?.toDouble() ?? 0.0;
+    final dailyLimit =
+        (limits['daily_loss_limit_pln'] as num?)?.toDouble() ?? 0.0;
+
+    if (dailyLimit > 0 && dailyLoss >= dailyLimit) {
+      return 'Dzienny limit straty: ${number(dailyLoss)} / '
+          '${number(dailyLimit)} PLN. Nowe wejścia są zablokowane '
+          'do resetu kolejnej doby UTC.';
+    }
+
+    if (state['halted'] == true) {
+      return 'Limit obsunięcia kapitału został aktywowany. '
+          'Nowe wejścia są zablokowane przez kontrolę ryzyka.';
+    }
+
+    return decision['reason']?.toString() ??
+        'Kontrola ryzyka zablokowała nowe wejścia.';
+  }
+
+  Widget riskHaltBanner() {
+    if (!aiRiskBlocked) return const SizedBox.shrink();
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 18),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Colors.redAccent.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: Colors.redAccent.withValues(alpha: 0.45),
+        ),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Icon(
+            Icons.gpp_bad_rounded,
+            color: Colors.redAccent,
+            size: 24,
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'AI ZATRZYMANE • LIMIT RYZYKA',
+                  style: TextStyle(
+                    color: Colors.redAccent,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  aiRiskMessage(),
+                  style: const TextStyle(
+                    color: muted,
+                    fontSize: 12,
+                    height: 1.4,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   String number(dynamic value, [int digits = 2]) {
     return value is num ? value.toDouble().toStringAsFixed(digits) : '—';
   }
@@ -497,13 +576,21 @@ class _ProDashboardState extends State<ProDashboard>
       ),
       positionStatusCard(
         title: 'Pozycje otwarte',
-        value: positions.isEmpty ? 'BRAK' : '${positions.length} OTWARTE',
+        value: positions.isEmpty
+            ? (aiRiskBlocked ? 'HALT' : 'BRAK')
+            : '${positions.length} OTWARTE',
         icon: Icons.play_circle_outline_rounded,
-        color: mint,
-        active: positions.isNotEmpty,
-        status: positions.isEmpty ? 'BRAK AKCJI' : 'AKTYWNE',
+        color: aiRiskBlocked && positions.isEmpty
+            ? Colors.redAccent
+            : mint,
+        active: positions.isNotEmpty || aiRiskBlocked,
+        status: positions.isEmpty
+            ? (aiRiskBlocked ? 'LIMIT RYZYKA' : 'BRAK AKCJI')
+            : 'AKTYWNE',
         detail: positions.isEmpty
-            ? 'Brak aktywnych pozycji'
+            ? (aiRiskBlocked
+                  ? aiRiskMessage()
+                  : 'Brak aktywnych pozycji')
             : positions.entries.take(4).map((entry) {
                 final p = asMap(entry.value);
                 final pnl =
@@ -513,13 +600,21 @@ class _ProDashboardState extends State<ProDashboard>
       ),
       positionStatusCard(
         title: 'Pozycje oczekujące',
-        value: pending.isEmpty ? 'BRAK' : '${pending.length} OCZEKUJE',
+        value: pending.isEmpty
+            ? (aiRiskBlocked ? 'WSTRZYMANE' : 'BRAK')
+            : '${pending.length} OCZEKUJE',
         icon: Icons.hourglass_top_rounded,
-        color: cyan,
-        active: pending.isNotEmpty,
-        status: pending.isEmpty ? 'BRAK AKCJI' : 'POTWIERDZANIE',
+        color: aiRiskBlocked && pending.isEmpty
+            ? Colors.redAccent
+            : cyan,
+        active: pending.isNotEmpty || aiRiskBlocked,
+        status: pending.isEmpty
+            ? (aiRiskBlocked ? 'AI HALT' : 'BRAK AKCJI')
+            : 'POTWIERDZANIE',
         detail: pending.isEmpty
-            ? 'Brak sygnałów oczekujących na potwierdzenie'
+            ? (aiRiskBlocked
+                  ? 'Nowe sygnały nie będą dodawane, dopóki aktywny jest limit ryzyka.'
+                  : 'Brak sygnałów oczekujących na potwierdzenie')
             : pending.take(4).map((row) {
                 return '${row['symbol'] ?? '—'} ${row['side'] ?? ''} • weryfikacja sygnału';
               }).join(' • '),
@@ -2447,6 +2542,7 @@ class _ProDashboardState extends State<ProDashboard>
                       ),
                     if (received == null && failure == null)
                       const LinearProgressIndicator(),
+                    if (aiRiskBlocked) riskHaltBanner(),
                     if (page == 0) ...[
                       summary(),
                       const SizedBox(height: 20),
