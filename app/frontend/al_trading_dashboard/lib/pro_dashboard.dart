@@ -38,6 +38,8 @@ class _ProDashboardState extends State<ProDashboard>
   String? failure;
   DateTime? received;
   Timer? timer;
+  final http.Client httpClient = http.Client();
+  DateTime? lastAssetsRefresh;
   late final AnimationController activityPulse;
   bool busy = false;
   Future<void>? refreshInFlight;
@@ -72,12 +74,13 @@ class _ProDashboardState extends State<ProDashboard>
       upperBound: 1.0,
     )..repeat(reverse: true);
     refresh();
-    timer = Timer.periodic(const Duration(seconds: 5), (_) => refresh());
+    timer = Timer.periodic(const Duration(seconds: 10), (_) => refresh());
   }
 
   @override
   void dispose() {
     timer?.cancel();
+    httpClient.close();
     activityPulse.dispose();
     super.dispose();
   }
@@ -98,16 +101,15 @@ class _ProDashboardState extends State<ProDashboard>
     params['_ts'] = DateTime.now().millisecondsSinceEpoch.toString();
     final uri = original.replace(queryParameters: params);
 
-    final response = await http
+    final response = await httpClient
         .get(
           uri,
           headers: const {
-            'Cache-Control': 'no-cache, no-store, max-age=0',
+            'Cache-Control': 'no-cache, max-age=0',
             'Pragma': 'no-cache',
-            'Connection': 'close',
           },
         )
-        .timeout(const Duration(seconds: 15));
+        .timeout(const Duration(seconds: 30));
 
     if (response.statusCode != 200) {
       throw Exception('HTTP ${response.statusCode} dla $path');
@@ -177,20 +179,27 @@ class _ProDashboardState extends State<ProDashboard>
         return;
       }
 
-      final results = await Future.wait([
-        safeGet('assets', '/api/assets'),
+      final now = DateTime.now();
+      final refreshAssets =
+          assets.isEmpty ||
+          lastAssetsRefresh == null ||
+          now.difference(lastAssetsRefresh!).inSeconds >= 20;
+
+      final requests = <Future<Map<String, dynamic>>>[
         safeGet('research', '/api/research'),
         safeGet('ai', '/api/ai'),
         safeGet('portfolio', '/api/user-portfolio'),
-      ]);
+        if (refreshAssets) safeGet('assets', '/api/assets'),
+      ];
+
+      final results = await Future.wait(requests);
 
       final byKey = {
         for (final row in results) row['key'].toString(): row,
       };
-      final errors = results
-          .where((row) => row['ok'] != true)
-          .map((row) => '${row['key']}: ${row['error']}')
-          .toList();
+      final errors = results.where((row) => row['ok'] != true).toList();
+      final successCount =
+          results.where((row) => row['ok'] == true).length;
 
       if (!mounted) return;
       setState(() {
@@ -200,6 +209,7 @@ class _ProDashboardState extends State<ProDashboard>
               .whereType<Map>()
               .map((row) => Map<String, dynamic>.from(row))
               .toList();
+          lastAssetsRefresh = DateTime.now();
         }
 
         final researchRow = byKey['research'];
@@ -217,8 +227,18 @@ class _ProDashboardState extends State<ProDashboard>
           userPortfolio = asMap(portfolioRow?['value']);
         }
 
-        received = DateTime.now();
-        failure = errors.isEmpty ? null : errors.join(' • ');
+        if (successCount > 0) {
+          received = DateTime.now();
+        }
+        if (errors.isEmpty) {
+          failure = null;
+        } else if (successCount == 0) {
+          failure =
+              'Brak odpowiedzi API. Zachowano ostatnie poprawne dane i aplikacja spróbuje ponownie automatycznie.';
+        } else {
+          failure =
+              'Część danych chwilowo niedostępna. Zachowano ostatnie poprawne dane.';
+        }
       });
     } finally {
       busy = false;
