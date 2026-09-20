@@ -581,7 +581,7 @@ def test_daily_loss_uses_net_realized_pnl_and_wins_offset_losses(tmp_path):
 def test_loaded_state_rebuilds_current_day_loss_from_net_trade_history(tmp_path):
     path = tmp_path / "ai_paper.json"
     day = "2026-09-20"
-    timestamp = 1_790_000_000_000
+    timestamp = 1_789_920_000_000
 
     path.write_text(
         json.dumps(
