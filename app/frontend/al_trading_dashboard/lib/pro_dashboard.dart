@@ -1806,6 +1806,62 @@ class _ProDashboardState extends State<ProDashboard>
     Navigator.of(context).push(MaterialPageRoute<void>(builder: builder));
   }
 
+  Future<void> openMobileMoreMenu() async {
+    final selected = await showModalBottomSheet<int>(
+      context: context,
+      backgroundColor: panel,
+      showDragHandle: true,
+      builder: (context) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ListTile(
+                leading: const Icon(Icons.newspaper, color: cyan),
+                title: const Text('Wydarzenia'),
+                subtitle: const Text(
+                  'Makro i informacje z warstwy research',
+                  style: TextStyle(color: muted, fontSize: 12),
+                ),
+                onTap: () => Navigator.pop(context, 4),
+              ),
+              ListTile(
+                leading: const Icon(Icons.history, color: cyan),
+                title: const Text('Historia'),
+                subtitle: const Text(
+                  'Zamknięte transakcje AI',
+                  style: TextStyle(color: muted, fontSize: 12),
+                ),
+                onTap: () => Navigator.pop(context, 5),
+              ),
+              if (widget.legacyBuilder != null)
+                ListTile(
+                  leading: const Icon(
+                    Icons.analytics_outlined,
+                    color: cyan,
+                  ),
+                  title: const Text('Szczegóły rynku'),
+                  subtitle: const Text(
+                    'Pełny techniczny widok wybranego instrumentu',
+                    style: TextStyle(color: muted, fontSize: 12),
+                  ),
+                  onTap: () {
+                    Navigator.pop(context);
+                    openLegacy();
+                  },
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+
+    if (selected != null && mounted) {
+      setState(() => page = selected);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final screenWidth = MediaQuery.sizeOf(context).width;
@@ -1818,21 +1874,36 @@ class _ProDashboardState extends State<ProDashboard>
       bottomNavigationBar: wide
           ? null
           : NavigationBar(
-              selectedIndex: page,
+              selectedIndex: page <= 3 ? page : 4,
               backgroundColor: panel,
-              onDestinationSelected: (value) => setState(() => page = value),
-              destinations: [
-                for (int i = 0; i < labels.length; i++)
-                  NavigationDestination(
-                    icon: Icon(icons[i]),
-                    label: i == 2
-                        ? 'TOP 10'
-                        : i == 3
-                        ? 'AI'
-                        : i == 4
-                        ? 'News'
-                        : labels[i],
-                  ),
+              onDestinationSelected: (value) {
+                if (value == 4) {
+                  openMobileMoreMenu();
+                  return;
+                }
+                setState(() => page = value);
+              },
+              destinations: const [
+                NavigationDestination(
+                  icon: Icon(Icons.account_balance_wallet),
+                  label: 'Portfel',
+                ),
+                NavigationDestination(
+                  icon: Icon(Icons.candlestick_chart),
+                  label: 'Rynki',
+                ),
+                NavigationDestination(
+                  icon: Icon(Icons.travel_explore),
+                  label: 'TOP 10',
+                ),
+                NavigationDestination(
+                  icon: Icon(Icons.psychology),
+                  label: 'AI',
+                ),
+                NavigationDestination(
+                  icon: Icon(Icons.more_horiz_rounded),
+                  label: 'Więcej',
+                ),
               ],
             ),
       body: SafeArea(
