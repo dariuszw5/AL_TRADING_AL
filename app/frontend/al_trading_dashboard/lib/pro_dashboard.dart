@@ -1049,6 +1049,14 @@ class _ProDashboardState extends State<ProDashboard>
       final symbol = asset['symbol']?.toString() ?? '';
       final price = (asset['market_price'] as num?)?.toDouble();
       final pricePln = (asset['market_price_pln'] as num?)?.toDouble();
+      final change = (asset['market_change'] as num?)?.toDouble();
+      final changePct = (asset['market_change_pct'] as num?)?.toDouble();
+      final dayHigh = (asset['market_day_high'] as num?)?.toDouble();
+      final dayLow = (asset['market_day_low'] as num?)?.toDouble();
+      final changePeriod =
+          asset['market_change_period']?.toString() ??
+          (currency ? 'sesja' : '24h');
+      final quote = asset['quote']?.toString() ?? '';
       final position = asset['position']?.toString() ?? 'FLAT';
       final isOpen = position != 'FLAT';
       final isPending = pendingSymbols.contains(symbol);
@@ -1065,23 +1073,40 @@ class _ProDashboardState extends State<ProDashboard>
           ? Colors.amberAccent.withValues(alpha: 0.07)
           : const Color(0xFF102534);
 
+      final moveColor = changePct == null || changePct == 0
+          ? muted
+          : changePct > 0
+          ? mint
+          : Colors.redAccent;
+
       final digits = currency
           ? (symbol == 'USDJPY' ? 3 : 5)
           : price != null && price.abs() < 10
           ? 5
           : 2;
 
-      final displaySymbol = currency && symbol.length == 6
-          ? '${symbol.substring(0, 3)}/${symbol.substring(3)}'
-          : symbol;
+      String displaySymbol = symbol;
+      if (currency && symbol.length == 6) {
+        displaySymbol =
+            '${symbol.substring(0, 3)}/${symbol.substring(3)}';
+      } else if (symbol.endsWith('USDT') && symbol.length > 4) {
+        displaySymbol = '${symbol.substring(0, symbol.length - 4)}/USDT';
+      }
+
+      String currencyRateText() {
+        if (!currency || price == null || symbol.length != 6) return '';
+        final base = symbol.substring(0, 3);
+        final counter = symbol.substring(3);
+        return '1 $base = ${number(price, digits)} $counter';
+      }
 
       return ConstrainedBox(
         constraints: BoxConstraints(
-          minWidth: currency ? 146 : 142,
-          maxWidth: currency ? 190 : 215,
+          minWidth: currency ? 210 : 220,
+          maxWidth: currency ? 260 : 285,
         ),
         child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+          padding: const EdgeInsets.all(12),
           decoration: BoxDecoration(
             color: tileColor,
             borderRadius: BorderRadius.circular(12),
@@ -1089,76 +1114,132 @@ class _ProDashboardState extends State<ProDashboard>
               color: accent,
               width: isOpen || isPending ? 1.35 : 1.0,
             ),
-            boxShadow: isOpen || isPending
-                ? [
-                    BoxShadow(
-                      color: accent.withValues(alpha: 0.08),
-                      blurRadius: 10,
-                      spreadRadius: 1,
-                    ),
-                  ]
-                : null,
           ),
           child: Row(
-            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              assetLogo(symbol, size: 28),
-              const SizedBox(width: 8),
-              Flexible(
+              assetLogo(symbol, size: 32),
+              const SizedBox(width: 10),
+              Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Row(
-                      mainAxisSize: MainAxisSize.min,
                       children: [
-                        Flexible(
+                        Expanded(
                           child: Text(
                             displaySymbol,
                             overflow: TextOverflow.ellipsis,
                             style: const TextStyle(
-                              fontSize: 11,
-                              fontWeight: FontWeight.w700,
+                              fontSize: 12,
+                              fontWeight: FontWeight.w800,
                             ),
                           ),
                         ),
-                        if (isOpen || isPending) ...[
-                          const SizedBox(width: 5),
+                        if (isOpen || isPending)
                           Container(
-                            width: 6,
-                            height: 6,
+                            width: 7,
+                            height: 7,
                             decoration: BoxDecoration(
                               color: accent,
                               shape: BoxShape.circle,
                             ),
                           ),
-                        ],
                       ],
                     ),
+                    const SizedBox(height: 5),
                     Text(
-                      price == null ? '—' : number(price, digits),
+                      currency
+                          ? currencyRateText()
+                          : price == null
+                          ? '—'
+                          : '${number(price, digits)} $quote',
+                      overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
-                        color: muted,
-                        fontSize: 10,
-                        fontWeight: FontWeight.w600,
+                        fontSize: 16,
+                        fontWeight: FontWeight.w700,
                       ),
                     ),
-                    if (!currency && pricePln != null)
+                    const SizedBox(height: 4),
+                    Row(
+                      children: [
+                        Icon(
+                          changePct == null || changePct == 0
+                              ? Icons.remove
+                              : changePct > 0
+                              ? Icons.arrow_drop_up
+                              : Icons.arrow_drop_down,
+                          color: moveColor,
+                          size: 19,
+                        ),
+                        Text(
+                          changePct == null
+                              ? 'brak zmiany'
+                              : '${changePct >= 0 ? '+' : ''}${changePct.toStringAsFixed(2)}%',
+                          style: TextStyle(
+                            color: moveColor,
+                            fontSize: 12,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                        if (change != null && !currency) ...[
+                          const SizedBox(width: 6),
+                          Expanded(
+                            child: Text(
+                              '(${change >= 0 ? '+' : ''}${number(change, digits)})',
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                color: moveColor,
+                                fontSize: 10,
+                              ),
+                            ),
+                          ),
+                        ],
+                        const Spacer(),
+                        Text(
+                          changePeriod,
+                          style: const TextStyle(
+                            color: muted,
+                            fontSize: 9,
+                          ),
+                        ),
+                      ],
+                    ),
+                    if (pricePln != null) ...[
+                      const SizedBox(height: 3),
                       Text(
-                        '≈ ${number(pricePln, 2)} PLN',
+                        currency
+                            ? '≈ ${number(pricePln, 4)} PLN za 1 ${symbol.substring(0, 3)}'
+                            : '≈ ${number(pricePln, 2)} PLN',
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          color: muted,
+                          fontSize: 10,
+                        ),
+                      ),
+                    ],
+                    if (dayHigh != null && dayLow != null) ...[
+                      const SizedBox(height: 4),
+                      Text(
+                        'H ${number(dayHigh, digits)}  •  L ${number(dayLow, digits)}',
                         overflow: TextOverflow.ellipsis,
                         style: const TextStyle(
                           color: muted,
                           fontSize: 9,
                         ),
                       ),
+                    ],
                     if (isStale)
-                      const Text(
-                        'RYNEK ZAMKNIĘTY / STARE',
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          color: Colors.amber,
-                          fontSize: 8,
-                          fontWeight: FontWeight.w700,
+                      const Padding(
+                        padding: EdgeInsets.only(top: 4),
+                        child: Text(
+                          'RYNEK ZAMKNIĘTY / DANE REFERENCYJNE',
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            color: Colors.amber,
+                            fontSize: 8,
+                            fontWeight: FontWeight.w700,
+                          ),
                         ),
                       ),
                   ],
