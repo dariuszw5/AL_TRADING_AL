@@ -454,8 +454,8 @@ class AIPaperManager:
 
         state["version"] = 3
         state["model"] = (
-            "cross-market multi-position k-NN v3.3 "
-            "supervised controlled-learning long-short"
+            "cross-market multi-position k-NN v3.4 "
+            "adaptive controlled-learning long-short"
         )
         state.setdefault("positions", {})
         state.setdefault("pending", [])
