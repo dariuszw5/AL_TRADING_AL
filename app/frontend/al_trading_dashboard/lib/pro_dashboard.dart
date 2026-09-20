@@ -366,6 +366,92 @@ class _ProDashboardState extends State<ProDashboard>
     );
   }
 
+  Map<String, dynamic> aiScanSummary() {
+    final state = ai ?? const <String, dynamic>{};
+    final supplied = asMap(state['ranking_summary']);
+    if (supplied.isNotEmpty) return supplied;
+
+    final ranking = asList(state['ranking']).whereType<Map>().toList();
+    final reasons = <String, int>{};
+    var liveSignals = 0;
+    var validated = 0;
+    var exploratory = 0;
+    var learningProbes = 0;
+    var eligible = 0;
+
+    for (final raw in ranking) {
+      final row = Map<String, dynamic>.from(raw);
+      if (row['live_signal'] == true) liveSignals += 1;
+      if (row['validated'] == true) validated += 1;
+      if (row['exploratory'] == true) exploratory += 1;
+      if (row['learning_probe'] == true) learningProbes += 1;
+      if (row['eligible'] == true) {
+        eligible += 1;
+        continue;
+      }
+
+      final reason = row['live_signal'] != true
+          ? 'NO_LIVE_SIGNAL'
+          : row['eligibility_reason']?.toString() ??
+                'MODEL_OR_VALIDATION_REJECTED';
+      reasons[reason] = (reasons[reason] ?? 0) + 1;
+    }
+
+    return {
+      'rows': ranking.length,
+      'live_signals': liveSignals,
+      'validated': validated,
+      'exploratory': exploratory,
+      'learning_probes': learningProbes,
+      'eligible': eligible,
+      'rejection_reasons': reasons,
+    };
+  }
+
+  String rejectionLabel(String value) {
+    switch (value) {
+      case 'NO_LIVE_SIGNAL':
+        return 'brak sygnału live';
+      case 'MODEL_OR_VALIDATION_REJECTED':
+        return 'model / walidacja';
+      case 'LIVE_LEARNING_EDGE_REJECTED':
+        return 'live-learning';
+      case 'STRATEGY_SUPERVISOR_PAUSED':
+        return 'Supervisor PAUSED';
+      case 'STRATEGY_SUPERVISOR_WATCH_NO_EXPLORATION':
+        return 'Supervisor WATCH';
+      default:
+        return value;
+    }
+  }
+
+  String aiScanMetrics() {
+    final summary = aiScanSummary();
+    final rows = (summary['rows'] as num?)?.toInt() ?? 0;
+    final live = (summary['live_signals'] as num?)?.toInt() ?? 0;
+    final validated = (summary['validated'] as num?)?.toInt() ?? 0;
+    final eligible = (summary['eligible'] as num?)?.toInt() ?? 0;
+    final probes = (summary['learning_probes'] as num?)?.toInt() ?? 0;
+    final reasons = asMap(summary['rejection_reasons']);
+
+    String? topReason;
+    var topCount = 0;
+    for (final entry in reasons.entries) {
+      final count = (entry.value as num?)?.toInt() ?? 0;
+      if (count > topCount) {
+        topCount = count;
+        topReason = entry.key;
+      }
+    }
+
+    final base =
+        'Oceniono: $rows • sygnały live: $live • walidowane: $validated • '
+        'dopuszczone: $eligible • learning probe: $probes';
+
+    if (topReason == null || topCount <= 0) return base;
+    return '$base\nNajczęściej odrzucone: ${rejectionLabel(topReason)} ($topCount)';
+  }
+
   Widget aiActivityBanner() {
     if (aiRiskBlocked || !aiScanning) return const SizedBox.shrink();
 
@@ -409,8 +495,9 @@ class _ProDashboardState extends State<ProDashboard>
       case 'CASH':
       default:
         title = 'AI AKTYWNE • SKANOWANIE RYNKÓW';
-        detail = decision['reason']?.toString() ??
+        final reason = decision['reason']?.toString() ??
             'Brak kwalifikowanego sygnału. Agent nadal analizuje rynki automatycznie.';
+        detail = '$reason\n${aiScanMetrics()}';
         icon = Icons.radar_rounded;
         tone = mint;
         break;
@@ -758,7 +845,8 @@ class _ProDashboardState extends State<ProDashboard>
                 final p = asMap(entry.value);
                 final pnl =
                     (p['unrealized_pnl'] as num?)?.toDouble() ?? 0.0;
-                return '${entry.key} ${p['side'] ?? ''} ${signed(pnl)} PLN';
+                final probe = p['learning_probe'] == true ? ' • LEARNING' : '';
+                return '${entry.key} ${p['side'] ?? ''}$probe ${signed(pnl)} PLN';
               }).join(' • '),
       ),
       positionStatusCard(
@@ -785,7 +873,10 @@ class _ProDashboardState extends State<ProDashboard>
                   ? 'Brak sygnałów oczekujących • agent wykonuje kolejne cykle analizy automatycznie.'
                   : 'Oczekiwanie na aktywny cykl AI')
             : pending.take(4).map((row) {
-                return '${row['symbol'] ?? '—'} ${row['side'] ?? ''} • weryfikacja sygnału';
+                final probe = row['learning_probe'] == true
+                    ? ' • LEARNING PROBE 2%'
+                    : '';
+                return '${row['symbol'] ?? '—'} ${row['side'] ?? ''}$probe • weryfikacja sygnału';
               }).join(' • '),
       ),
       stat(
