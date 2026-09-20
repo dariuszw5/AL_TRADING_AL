@@ -987,134 +987,240 @@ class _ProDashboardState extends State<ProDashboard>
         .whereType<String>()
         .toSet();
 
-    final rows = assets.where((asset) => asset['market_price'] is num).toList()
+    int priority(Map<String, dynamic> asset) {
+      final symbol = asset['symbol']?.toString() ?? '';
+      final isOpen = (asset['position']?.toString() ?? 'FLAT') != 'FLAT';
+      final isPending = pendingSymbols.contains(symbol);
+      if (isOpen) return 0;
+      if (isPending) return 1;
+      if (opportunityRank(symbol) != null) return 2;
+      return 3;
+    }
+
+    final quoted = assets
+        .where(
+          (asset) =>
+              asset['market_price'] is num &&
+              (asset['market_price'] as num).toDouble() > 0,
+        )
+        .toList();
+
+    const currencyOrder = <String>[
+      'EURUSD',
+      'GBPUSD',
+      'USDJPY',
+      'USDCHF',
+      'USDCAD',
+      'AUDUSD',
+      'NZDUSD',
+    ];
+
+    final currencies = quoted
+        .where((asset) => asset['asset_type']?.toString() == 'forex')
+        .toList()
       ..sort((a, b) {
         final aSymbol = a['symbol']?.toString() ?? '';
         final bSymbol = b['symbol']?.toString() ?? '';
-        final aOpen = (a['position']?.toString() ?? 'FLAT') != 'FLAT';
-        final bOpen = (b['position']?.toString() ?? 'FLAT') != 'FLAT';
-        final aPending = pendingSymbols.contains(aSymbol);
-        final bPending = pendingSymbols.contains(bSymbol);
-
-        final aPriority = aOpen ? 0 : aPending ? 1 : 2;
-        final bPriority = bOpen ? 0 : bPending ? 1 : 2;
-        if (aPriority != bPriority) return aPriority.compareTo(bPriority);
-
-        final ar = opportunityRank(aSymbol) ?? 9999;
-        final br = opportunityRank(bSymbol) ?? 9999;
-        return ar.compareTo(br);
+        final ai = currencyOrder.indexOf(aSymbol);
+        final bi = currencyOrder.indexOf(bSymbol);
+        final av = ai < 0 ? 999 : ai;
+        final bv = bi < 0 ? 999 : bi;
+        if (av != bv) return av.compareTo(bv);
+        return aSymbol.compareTo(bSymbol);
       });
 
-    final shown = rows.take(14).toList();
+    final ourAssets = quoted
+        .where((asset) => asset['asset_type']?.toString() != 'forex')
+        .toList()
+      ..sort((a, b) {
+        final ap = priority(a);
+        final bp = priority(b);
+        if (ap != bp) return ap.compareTo(bp);
+
+        final aSymbol = a['symbol']?.toString() ?? '';
+        final bSymbol = b['symbol']?.toString() ?? '';
+        final ar = opportunityRank(aSymbol) ?? 9999;
+        final br = opportunityRank(bSymbol) ?? 9999;
+        if (ar != br) return ar.compareTo(br);
+        return aSymbol.compareTo(bSymbol);
+      });
+
+    Widget tickerTile(Map<String, dynamic> asset, {required bool currency}) {
+      final symbol = asset['symbol']?.toString() ?? '';
+      final price = (asset['market_price'] as num?)?.toDouble();
+      final pricePln = (asset['market_price_pln'] as num?)?.toDouble();
+      final position = asset['position']?.toString() ?? 'FLAT';
+      final isOpen = position != 'FLAT';
+      final isPending = pendingSymbols.contains(symbol);
+      final isStale = asset['market_stale'] == true;
+
+      final accent = isOpen
+          ? mint
+          : isPending
+          ? Colors.amberAccent
+          : const Color(0xFF294152);
+      final tileColor = isOpen
+          ? mint.withValues(alpha: 0.08)
+          : isPending
+          ? Colors.amberAccent.withValues(alpha: 0.07)
+          : const Color(0xFF102534);
+
+      final digits = currency
+          ? (symbol == 'USDJPY' ? 3 : 5)
+          : price != null && price.abs() < 10
+          ? 5
+          : 2;
+
+      final displaySymbol = currency && symbol.length == 6
+          ? '${symbol.substring(0, 3)}/${symbol.substring(3)}'
+          : symbol;
+
+      return ConstrainedBox(
+        constraints: BoxConstraints(
+          minWidth: currency ? 146 : 142,
+          maxWidth: currency ? 190 : 215,
+        ),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+          decoration: BoxDecoration(
+            color: tileColor,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: accent,
+              width: isOpen || isPending ? 1.35 : 1.0,
+            ),
+            boxShadow: isOpen || isPending
+                ? [
+                    BoxShadow(
+                      color: accent.withValues(alpha: 0.08),
+                      blurRadius: 10,
+                      spreadRadius: 1,
+                    ),
+                  ]
+                : null,
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              assetLogo(symbol, size: 28),
+              const SizedBox(width: 8),
+              Flexible(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Flexible(
+                          child: Text(
+                            displaySymbol,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ),
+                        if (isOpen || isPending) ...[
+                          const SizedBox(width: 5),
+                          Container(
+                            width: 6,
+                            height: 6,
+                            decoration: BoxDecoration(
+                              color: accent,
+                              shape: BoxShape.circle,
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                    Text(
+                      price == null ? '—' : number(price, digits),
+                      style: const TextStyle(
+                        color: muted,
+                        fontSize: 10,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    if (!currency && pricePln != null)
+                      Text(
+                        '≈ ${number(pricePln, 2)} PLN',
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          color: muted,
+                          fontSize: 9,
+                        ),
+                      ),
+                    if (isStale)
+                      const Text(
+                        'RYNEK ZAMKNIĘTY / STARE',
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: Colors.amber,
+                          fontSize: 8,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
 
     return box(
       Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          heading('Notowania', 'Szybki podgląd naszych aktywów'),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: [
-              for (final asset in shown)
-                Builder(
-                  builder: (context) {
-                    final symbol = asset['symbol']?.toString() ?? '';
-                    final price =
-                        (asset['market_price'] as num?)?.toDouble();
-                    final position =
-                        asset['position']?.toString() ?? 'FLAT';
-                    final isOpen = position != 'FLAT';
-                    final isPending = pendingSymbols.contains(symbol);
-                    final accent = isOpen
-                        ? mint
-                        : isPending
-                        ? Colors.amberAccent
-                        : const Color(0xFF294152);
-                    final tileColor = isOpen
-                        ? mint.withValues(alpha: 0.08)
-                        : isPending
-                        ? Colors.amberAccent.withValues(alpha: 0.07)
-                        : const Color(0xFF102534);
-                    final digits =
-                        price != null && price.abs() < 10 ? 5 : 2;
-                    return ConstrainedBox(
-                      constraints: const BoxConstraints(
-                        minWidth: 132,
-                        maxWidth: 190,
-                      ),
-                      child: Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 10,
-                        vertical: 8,
-                      ),
-                      decoration: BoxDecoration(
-                        color: tileColor,
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(
-                          color: accent,
-                          width: isOpen || isPending ? 1.35 : 1.0,
-                        ),
-                        boxShadow: isOpen || isPending
-                            ? [
-                                BoxShadow(
-                                  color: accent.withValues(alpha: 0.08),
-                                  blurRadius: 10,
-                                  spreadRadius: 1,
-                                ),
-                              ]
-                            : null,
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          assetLogo(symbol, size: 28),
-                          const SizedBox(width: 8),
-                          Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Text(
-                                    symbol,
-                                    style: const TextStyle(
-                                      fontSize: 11,
-                                      fontWeight: FontWeight.w700,
-                                    ),
-                                  ),
-                                  if (isOpen || isPending) ...[
-                                    const SizedBox(width: 5),
-                                    Container(
-                                      width: 6,
-                                      height: 6,
-                                      decoration: BoxDecoration(
-                                        color: accent,
-                                        shape: BoxShape.circle,
-                                      ),
-                                    ),
-                                  ],
-                                ],
-                              ),
-                              Text(
-                                price == null
-                                    ? '—'
-                                    : '${number(price, digits)} ${asset['quote'] ?? ''}',
-                                style: const TextStyle(
-                                  color: muted,
-                                  fontSize: 10,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ],
-                      ),
-                    ),
-                    );
-                  },
-                ),
-            ],
+          heading(
+            'Notowania',
+            'Waluty oraz aktywa obserwowane i handlowane przez AI',
           ),
+          if (currencies.isNotEmpty) ...[
+            const Text(
+              'Waluty',
+              style: TextStyle(
+                color: cyan,
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                for (final asset in currencies)
+                  tickerTile(asset, currency: true),
+              ],
+            ),
+            const SizedBox(height: 16),
+          ],
+          const Text(
+            'Nasze aktywa',
+            style: TextStyle(
+              color: cyan,
+              fontSize: 12,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          const SizedBox(height: 8),
+          if (ourAssets.isEmpty)
+            const Text(
+              'Brak aktualnych notowań aktywów.',
+              style: TextStyle(color: muted, fontSize: 12),
+            )
+          else
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                for (final asset in ourAssets.take(16))
+                  tickerTile(asset, currency: false),
+              ],
+            ),
         ],
       ),
     );
