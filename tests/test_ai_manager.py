@@ -5,6 +5,7 @@ from src.agent.ai_manager import (
     AIPaperManager,
     EXPLORATION_POSITION_EXPOSURE,
     MAX_EXPLORATORY_POSITIONS,
+    MAX_DAILY_LOSS_PCT,
     MIN_MODEL_EDGE,
     MIN_VALIDATION_TRADES,
     STRATEGIES,
@@ -549,3 +550,84 @@ def test_accounting_gap_guard_blocks_corrupted_state(tmp_path):
     assert manager._blocked() is True
     assert manager.state["accounting_error"] is True
     assert round(manager.state["accounting_gap"], 6) == 250.0
+
+
+def test_daily_loss_limit_is_ten_percent_of_funded_capital(tmp_path):
+    manager = AIPaperManager(tmp_path / "ai_paper.json", assets=[])
+    _fund_manager(manager, 1000.0)
+
+    assert MAX_DAILY_LOSS_PCT == 0.10
+    assert manager._daily_loss_limit() == 100.0
+
+
+def test_daily_loss_uses_net_realized_pnl_and_wins_offset_losses(tmp_path):
+    manager = AIPaperManager(tmp_path / "ai_paper.json", assets=[])
+    _fund_manager(manager, 1000.0)
+
+    manager._apply_daily_realized_result(-60.0)
+    assert manager.state["daily_realized_pnl"] == -60.0
+    assert manager.state["daily_loss"] == 60.0
+
+    manager._apply_daily_realized_result(25.0)
+    assert manager.state["daily_realized_pnl"] == -35.0
+    assert manager.state["daily_loss"] == 35.0
+
+    manager._apply_daily_realized_result(40.0)
+    assert manager.state["daily_realized_pnl"] == 5.0
+    assert manager.state["daily_loss"] == 0.0
+    assert manager._blocked() is False
+
+
+def test_loaded_state_rebuilds_current_day_loss_from_net_trade_history(tmp_path):
+    path = tmp_path / "ai_paper.json"
+    day = "2026-09-20"
+    timestamp = 1_790_000_000_000
+
+    path.write_text(
+        json.dumps(
+            {
+                "version": 3,
+                "mode": "PAPER_ONLY",
+                "unit": "PLN",
+                "initial_balance": 1000.0,
+                "funded_capital": 1000.0,
+                "balance": 975.0,
+                "equity": 975.0,
+                "peak": 1000.0,
+                "daily_loss": 65.0,
+                "day": day,
+                "realized_pnl": -25.0,
+                "unrealized_pnl": 0.0,
+                "positions": {},
+                "pending": [],
+                "decisions": [],
+                "trades": [
+                    {
+                        "exit_timestamp": timestamp,
+                        "profit": -50.0,
+                    },
+                    {
+                        "exit_timestamp": timestamp + 60_000,
+                        "profit": 25.0,
+                    },
+                ],
+                "last_cycle": timestamp,
+                "applied_control_ids": [],
+                "funding_received": 1000.0,
+                "profit_swept": 0.0,
+                "profit_transfers": [],
+                "accounting_gap": 0.0,
+                "accounting_error": False,
+                "market_marks": {},
+                "strategy_supervisor": {},
+                "strategy_learning": {},
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    manager = AIPaperManager(path, assets=[])
+
+    # The old gross-loss counter (65 PLN) is replaced by same-day net PnL.
+    assert manager.state["daily_realized_pnl"] == -25.0
+    assert manager.state["daily_loss"] == 25.0
