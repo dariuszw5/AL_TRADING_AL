@@ -4,6 +4,7 @@ from concurrent.futures import ThreadPoolExecutor
 import json
 import os
 from pathlib import Path
+from threading import Lock
 import time
 from typing import Any
 from uuid import uuid4
@@ -34,6 +35,7 @@ RESEARCH_STATE_FILE = LIVE_STATE_DIR / "research_state.json"
 FX_PROVIDER = FxRateProvider(ttl_seconds=60.0)
 MARKET_CACHE: dict[str, dict[str, Any]] = {}
 ASSET_LIVE_CACHE: dict[str, Any] = {"timestamp": 0.0, "prices": {}}
+USER_PORTFOLIO_LOCK = Lock()
 
 
 class PortfolioAmount(BaseModel):
@@ -691,9 +693,9 @@ def ai_status() -> dict[str, Any]:
         }
 
 
-def user_portfolio_state() -> dict[str, Any]:
-    default = {
-        "version": 1,
+def _user_portfolio_default() -> dict[str, Any]:
+    return {
+        "version": 2,
         "currency": "PLN",
         "balance": 0.0,
         "total_deposited": 0.0,
@@ -702,19 +704,25 @@ def user_portfolio_state() -> dict[str, Any]:
         "ai_transfers": [],
         "profit_transferred": 0.0,
         "profit_transfers": [],
+        "applied_ai_profit_ids": [],
         "result": 0.0,
         "available": True,
     }
+
+
+def _read_user_portfolio_unlocked() -> dict[str, Any]:
+    default = _user_portfolio_default()
     try:
         with USER_PORTFOLIO_FILE.open(encoding="utf-8-sig") as handle:
-            state = {**default, **json.load(handle)}
-        state["result"] = state.get("profit_transferred", 0.0)
-        return state
-    except (OSError, ValueError, TypeError, KeyError):
+            value = json.load(handle)
+        if not isinstance(value, dict):
+            return default
+        return {**default, **value}
+    except (OSError, ValueError, TypeError):
         return default
 
 
-def save_user_portfolio(state: dict[str, Any]) -> dict[str, Any]:
+def _write_user_portfolio_unlocked(state: dict[str, Any]) -> None:
     LIVE_STATE_DIR.mkdir(parents=True, exist_ok=True)
     temporary = USER_PORTFOLIO_FILE.with_suffix(".tmp")
     temporary.write_text(
@@ -722,7 +730,61 @@ def save_user_portfolio(state: dict[str, Any]) -> dict[str, Any]:
         encoding="utf-8",
     )
     temporary.replace(USER_PORTFOLIO_FILE)
-    return user_portfolio_state()
+
+
+def _reconcile_ai_profit_transfers_unlocked(
+    state: dict[str, Any],
+) -> dict[str, Any]:
+    """Credit each realized AI profit sweep to the user's virtual wallet once."""
+    ai_state = load_ai_state_raw()
+    events = ai_state.get("profit_transfers") or []
+    applied = set(state.get("applied_ai_profit_ids") or [])
+    history = list(state.get("profit_transfers") or [])
+    changed = False
+
+    for event in events:
+        if not isinstance(event, dict):
+            continue
+
+        event_id = str(event.get("id") or "")
+        if not event_id or event_id in applied:
+            continue
+
+        amount = float(event.get("amount") or 0.0)
+        applied.add(event_id)
+        changed = True
+
+        if amount <= 0:
+            continue
+
+        state["balance"] = float(state.get("balance") or 0.0) + amount
+        state["profit_transferred"] = (
+            float(state.get("profit_transferred") or 0.0) + amount
+        )
+        history.append(event)
+
+    state["applied_ai_profit_ids"] = list(applied)[-2000:]
+    state["profit_transfers"] = history[-1000:]
+    state["result"] = float(state.get("profit_transferred") or 0.0)
+
+    if changed:
+        _write_user_portfolio_unlocked(state)
+
+    return state
+
+
+def user_portfolio_state() -> dict[str, Any]:
+    with USER_PORTFOLIO_LOCK:
+        state = _read_user_portfolio_unlocked()
+        return _reconcile_ai_profit_transfers_unlocked(state)
+
+
+def save_user_portfolio(state: dict[str, Any]) -> dict[str, Any]:
+    with USER_PORTFOLIO_LOCK:
+        state = {**_user_portfolio_default(), **state}
+        state = _reconcile_ai_profit_transfers_unlocked(state)
+        _write_user_portfolio_unlocked(state)
+        return state
 
 
 def ai_control_state() -> dict[str, Any]:
