@@ -619,10 +619,18 @@ def dashboard_live_prices() -> dict[str, dict[str, Any]]:
 
         try:
             quote = provider.get_market_quote(asset.symbol)
+            quote_timestamp = int(quote.get("timestamp") or 0)
+            age_seconds = (
+                max(0.0, now - quote_timestamp / 1000.0)
+                if quote_timestamp
+                else None
+            )
+            freshness = 180.0 if asset.asset_type == "crypto" else 1800.0
             payload = {
                 **quote,
                 "_cached_at": now,
-                "stale": False,
+                "age_seconds": age_seconds,
+                "stale": age_seconds is None or age_seconds > freshness,
             }
             MARKET_QUOTE_CACHE[asset.symbol] = payload
             return asset.symbol, dict(payload)
