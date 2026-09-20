@@ -1537,17 +1537,7 @@ class _ProDashboardState extends State<ProDashboard>
                     padding: const EdgeInsets.symmetric(vertical: 13),
                     child: Row(
                       children: [
-                        CircleAvatar(
-                          radius: 17,
-                          backgroundColor: const Color(0xFF23485F),
-                          child: Text(
-                            assetBadge(symbol),
-                            style: const TextStyle(
-                              color: cyan,
-                              fontWeight: FontWeight.w700,
-                            ),
-                          ),
-                        ),
+                        assetLogo(symbol, size: 34),
                         const SizedBox(width: 12),
                         Expanded(
                           child: Column(
