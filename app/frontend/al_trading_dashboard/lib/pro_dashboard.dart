@@ -237,17 +237,63 @@ class _ProDashboardState extends State<ProDashboard> {
 
   Widget heading(String title, [String? detail]) => Padding(
     padding: const EdgeInsets.only(bottom: 18),
-    child: Row(
-      children: [
-        Expanded(
-          child: Text(
-            title,
-            style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+    child: LayoutBuilder(
+      builder: (context, constraints) {
+        final compact = constraints.maxWidth < 560 && detail != null;
+
+        final titleWidget = Text(
+          title,
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
+          style: const TextStyle(
+            fontSize: 18,
+            fontWeight: FontWeight.w600,
           ),
-        ),
-        if (detail != null)
-          Text(detail, style: const TextStyle(color: muted, fontSize: 12)),
-      ],
+        );
+
+        if (compact) {
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              titleWidget,
+              const SizedBox(height: 5),
+              Text(
+                detail!,
+                maxLines: 3,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  color: muted,
+                  fontSize: 12,
+                  height: 1.35,
+                ),
+              ),
+            ],
+          );
+        }
+
+        return Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(child: titleWidget),
+            if (detail != null) ...[
+              const SizedBox(width: 14),
+              Flexible(
+                child: Text(
+                  detail,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  textAlign: TextAlign.right,
+                  style: const TextStyle(
+                    color: muted,
+                    fontSize: 12,
+                    height: 1.35,
+                  ),
+                ),
+              ),
+            ],
+          ],
+        );
+      },
     ),
   );
 
@@ -463,9 +509,16 @@ class _ProDashboardState extends State<ProDashboard> {
                 style: const TextStyle(color: muted, fontSize: 12),
               ),
             ),
-            Text(
-              '${number(value)} PLN • ${pct.toStringAsFixed(1)}%',
-              style: const TextStyle(fontSize: 12),
+            const SizedBox(width: 8),
+            Flexible(
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                alignment: Alignment.centerRight,
+                child: Text(
+                  '${number(value)} PLN • ${pct.toStringAsFixed(1)}%',
+                  style: const TextStyle(fontSize: 12),
+                ),
+              ),
             ),
           ],
         ),
@@ -480,11 +533,13 @@ class _ProDashboardState extends State<ProDashboard> {
             'Podział środków',
             'Portfel użytkownika • wolna gotówka AI • aktywne pozycje',
           ),
-          Row(
-            children: [
-              SizedBox(
-                width: 170,
-                height: 170,
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final compact = constraints.maxWidth < 500;
+
+              final chart = SizedBox(
+                width: compact ? 150 : 170,
+                height: compact ? 150 : 170,
                 child: CustomPaint(
                   painter: FundsDonutPainter(
                     values: values,
@@ -494,11 +549,14 @@ class _ProDashboardState extends State<ProDashboard> {
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Text(
-                          '${number(total)} PLN',
-                          style: const TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.w700,
+                        FittedBox(
+                          fit: BoxFit.scaleDown,
+                          child: Text(
+                            '${number(total)} PLN',
+                            style: const TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.w700,
+                            ),
                           ),
                         ),
                         const Text(
@@ -509,20 +567,37 @@ class _ProDashboardState extends State<ProDashboard> {
                     ),
                   ),
                 ),
-              ),
-              const SizedBox(width: 20),
-              Expanded(
-                child: Column(
+              );
+
+              final details = Column(
+                children: [
+                  for (int i = 0; i < values.length; i++) legendRow(i),
+                  const Divider(color: Color(0xFF294152)),
+                  _miniMetric('Wpłacono do AI', funded),
+                  _miniMetric('Zysk przelany', swept),
+                  _miniMetric('Strata AI', loss),
+                ],
+              );
+
+              if (compact) {
+                return Column(
                   children: [
-                    for (int i = 0; i < values.length; i++) legendRow(i),
-                    const Divider(color: Color(0xFF294152)),
-                    _miniMetric('Wpłacono do AI', funded),
-                    _miniMetric('Zysk przelany', swept),
-                    _miniMetric('Strata AI', loss),
+                    Center(child: chart),
+                    const SizedBox(height: 18),
+                    details,
                   ],
-                ),
-              ),
-            ],
+                );
+              }
+
+              return Row(
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  chart,
+                  const SizedBox(width: 20),
+                  Expanded(child: details),
+                ],
+              );
+            },
           ),
         ],
       ),
@@ -581,7 +656,12 @@ class _ProDashboardState extends State<ProDashboard> {
                         asset['position']?.toString() ?? 'FLAT';
                     final digits =
                         price != null && price.abs() < 10 ? 5 : 2;
-                    return Container(
+                    return ConstrainedBox(
+                      constraints: const BoxConstraints(
+                        minWidth: 132,
+                        maxWidth: 190,
+                      ),
+                      child: Container(
                       padding: const EdgeInsets.symmetric(
                         horizontal: 10,
                         vertical: 8,
@@ -634,6 +714,7 @@ class _ProDashboardState extends State<ProDashboard> {
                           ),
                         ],
                       ),
+                    ),
                     );
                   },
                 ),
@@ -1342,7 +1423,9 @@ class _ProDashboardState extends State<ProDashboard> {
 
   @override
   Widget build(BuildContext context) {
-    final wide = MediaQuery.sizeOf(context).width >= 1100;
+    final screenWidth = MediaQuery.sizeOf(context).width;
+    final wide = screenWidth >= 1180;
+    final roomy = screenWidth >= 1500;
     final researchData = research;
 
     return Scaffold(
@@ -1372,7 +1455,7 @@ class _ProDashboardState extends State<ProDashboard> {
           children: [
             if (wide)
               Container(
-                width: 205,
+                width: roomy ? 205 : 184,
                 padding: const EdgeInsets.symmetric(
                   horizontal: 16,
                   vertical: 30,
@@ -1409,7 +1492,11 @@ class _ProDashboardState extends State<ProDashboard> {
                           leading: Icon(icons[i], size: 20),
                           title: Text(
                             labels[i],
-                            style: const TextStyle(fontSize: 13),
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              fontSize: roomy ? 13 : 12,
+                            ),
                           ),
                           onTap: () => setState(() => page = i),
                         ),
@@ -1435,7 +1522,13 @@ class _ProDashboardState extends State<ProDashboard> {
               child: RefreshIndicator(
                 onRefresh: refresh,
                 child: ListView(
-                  padding: EdgeInsets.all(wide ? 28 : 16),
+                  padding: EdgeInsets.all(
+                    screenWidth >= 1500
+                        ? 28
+                        : screenWidth >= 900
+                        ? 22
+                        : 14,
+                  ),
                   children: [
                     Row(
                       children: [
@@ -1513,17 +1606,17 @@ class _ProDashboardState extends State<ProDashboard> {
                       const SizedBox(height: 20),
                       marketTickerStrip(),
                       const SizedBox(height: 20),
-                      if (wide)
+                      if (roomy)
                         Row(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Expanded(
-                              flex: 3,
+                              flex: 7,
                               child: equityChart(),
                             ),
                             const SizedBox(width: 20),
                             Expanded(
-                              flex: 2,
+                              flex: 5,
                               child: Column(
                                 children: [
                                   fundsDonut(),
