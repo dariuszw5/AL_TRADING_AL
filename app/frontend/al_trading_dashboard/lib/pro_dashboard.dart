@@ -30,8 +30,6 @@ class ProDashboard extends StatefulWidget {
 }
 
 class _ProDashboardState extends State<ProDashboard> {
-  final http.Client client = http.Client();
-
   List<Map<String, dynamic>> assets = [];
   Map<String, dynamic>? research;
   Map<String, dynamic>? ai;
@@ -69,7 +67,6 @@ class _ProDashboardState extends State<ProDashboard> {
   @override
   void dispose() {
     timer?.cancel();
-    client.close();
     super.dispose();
   }
 
@@ -84,10 +81,19 @@ class _ProDashboardState extends State<ProDashboard> {
   }
 
   Future<dynamic> getJson(String path) async {
-    final response = await client
+    final original = Uri.parse('${widget.baseUrl}$path');
+    final params = Map<String, String>.from(original.queryParameters);
+    params['_ts'] = DateTime.now().millisecondsSinceEpoch.toString();
+    final uri = original.replace(queryParameters: params);
+
+    final response = await http
         .get(
-          Uri.parse('${widget.baseUrl}$path'),
-          headers: const {'Cache-Control': 'no-cache'},
+          uri,
+          headers: const {
+            'Cache-Control': 'no-cache, no-store, max-age=0',
+            'Pragma': 'no-cache',
+            'Connection': 'close',
+          },
         )
         .timeout(const Duration(seconds: 15));
 
@@ -97,54 +103,95 @@ class _ProDashboardState extends State<ProDashboard> {
     return jsonDecode(response.body);
   }
 
+  Future<Map<String, dynamic>> safeGet(String key, String path) async {
+    try {
+      return {
+        'key': key,
+        'ok': true,
+        'value': await getJson(path),
+      };
+    } catch (error) {
+      return {
+        'key': key,
+        'ok': false,
+        'error': error.toString(),
+      };
+    }
+  }
+
   Future<void> refresh() async {
     if (busy) return;
     busy = true;
+
     try {
-      Map<String, dynamic> combined;
       if (widget.loader != null) {
-        combined = await widget.loader!();
-      } else {
-        final results = await Future.wait([
-          getJson('/api/assets'),
-          getJson('/api/research'),
-          getJson('/api/ai'),
-          getJson('/api/user-portfolio'),
-        ]);
-        combined = {
-          'assets': results[0],
-          'research': results[1],
-          'ai': results[2],
-          'user_portfolio': results[3],
-        };
+        final combined = await widget.loader!();
+        final rawAssets = asList(combined['assets']);
+        if (!mounted) return;
+        setState(() {
+          assets = rawAssets
+              .whereType<Map>()
+              .map((row) => Map<String, dynamic>.from(row))
+              .toList();
+          research = asMap(combined['research']);
+          ai = asMap(combined['ai']);
+          userPortfolio = asMap(combined['user_portfolio']);
+          received = DateTime.now();
+          failure = null;
+        });
+        return;
       }
 
-      final rawAssets = asList(combined['assets']);
+      final results = await Future.wait([
+        safeGet('assets', '/api/assets'),
+        safeGet('research', '/api/research'),
+        safeGet('ai', '/api/ai'),
+        safeGet('portfolio', '/api/user-portfolio'),
+      ]);
+
+      final byKey = {
+        for (final row in results) row['key'].toString(): row,
+      };
+      final errors = results
+          .where((row) => row['ok'] != true)
+          .map((row) => '${row['key']}: ${row['error']}')
+          .toList();
+
       if (!mounted) return;
       setState(() {
-        assets = rawAssets
-            .whereType<Map>()
-            .map((row) => Map<String, dynamic>.from(row))
-            .toList();
-        research = asMap(combined['research']);
-        ai = asMap(combined['ai']);
-        userPortfolio = asMap(combined['user_portfolio']);
+        final assetsRow = byKey['assets'];
+        if (assetsRow?['ok'] == true) {
+          assets = asList(assetsRow?['value'])
+              .whereType<Map>()
+              .map((row) => Map<String, dynamic>.from(row))
+              .toList();
+        }
+
+        final researchRow = byKey['research'];
+        if (researchRow?['ok'] == true) {
+          research = asMap(researchRow?['value']);
+        }
+
+        final aiRow = byKey['ai'];
+        if (aiRow?['ok'] == true) {
+          ai = asMap(aiRow?['value']);
+        }
+
+        final portfolioRow = byKey['portfolio'];
+        if (portfolioRow?['ok'] == true) {
+          userPortfolio = asMap(portfolioRow?['value']);
+        }
+
         received = DateTime.now();
-        failure = null;
+        failure = errors.isEmpty ? null : errors.join(' • ');
       });
-    } catch (error) {
-      if (mounted) {
-        setState(() => failure = 'Połączenie API: $error');
-      }
     } finally {
       busy = false;
     }
   }
 
   bool get stale {
-    return failure != null ||
-        research?['stale'] == true ||
-        (ai?['available'] == true && ai?['stale'] == true);
+    return research?['stale'] == true;
   }
 
   String number(dynamic value, [int digits = 2]) {
@@ -253,28 +300,42 @@ class _ProDashboardState extends State<ProDashboard> {
 
   Widget summary() {
     final aiState = ai ?? const <String, dynamic>{};
-    final initial = (aiState['initial_balance'] as num?)?.toDouble() ?? 1000.0;
-    final equity = (aiState['equity'] as num?)?.toDouble() ?? initial;
+    final initial = (aiState['initial_balance'] as num?)?.toDouble() ?? 0.0;
+    final equity = (aiState['equity'] as num?)?.toDouble() ?? 0.0;
     final realized = (aiState['realized_pnl'] as num?)?.toDouble() ?? 0.0;
     final unrealized = (aiState['unrealized_pnl'] as num?)?.toDouble() ?? 0.0;
-    final result = equity - initial;
+    final result = realized + unrealized;
     final position = asMap(aiState['position']);
     final portfolioBalance =
         (userPortfolio?['balance'] as num?)?.toDouble() ?? 0.0;
     final classes = asMap(research?['selected_by_class']).length;
+
+    Map<String, dynamic>? btc;
+    for (final asset in assets) {
+      if (asset['symbol']?.toString() == 'BTCUSDT') {
+        btc = asset;
+        break;
+      }
+    }
+    final btcPrice = (btc?['market_price'] as num?)?.toDouble();
+    final btcLive = btc?['market_live'] == true;
+
     final cards = <Widget>[
       stat(
         'Kapitał AI',
-        '${number(equity)} jedn.',
+        '${number(equity)} PLN',
         Icons.account_balance_wallet_outlined,
-        detail: 'Kapitał wyłącznie wirtualny',
+        detail: initial <= 0
+            ? 'Najpierw przekaż środki z portfela'
+            : 'Wpłacony kapitał: ${number(initial)} PLN',
       ),
       stat(
         'Wynik AI',
-        '${signed(result)} jedn.',
+        '${signed(result)} PLN',
         Icons.trending_up,
         color: result >= 0 ? mint : Colors.redAccent,
-        detail: 'Real. ${signed(realized)} • otw. ${signed(unrealized)}',
+        detail:
+            'Zamknięty ${signed(realized)} • otwarty ${signed(unrealized)}',
       ),
       stat(
         'Pozycja AI',
@@ -282,14 +343,23 @@ class _ProDashboardState extends State<ProDashboard> {
         Icons.layers_outlined,
         color: position.isEmpty ? muted : cyan,
         detail: position.isEmpty
-            ? 'Brak otwartej pozycji'
-            : position['strategy']?.toString(),
+            ? (aiState['decision'] is Map
+                  ? asMap(aiState['decision'])['action']?.toString()
+                  : 'Brak otwartej pozycji')
+            : '${position['side'] ?? ''} • ${position['strategy'] ?? ''}',
       ),
       stat(
         'Mój portfel',
         '${number(portfolioBalance)} PLN',
         Icons.savings_outlined,
-        detail: 'Oddzielny od kapitału AI',
+        detail: 'Wirtualne środki oczekujące na decyzję użytkownika',
+      ),
+      stat(
+        'BTC LIVE',
+        btcPrice == null ? '—' : '${btcPrice.toStringAsFixed(2)} USDT',
+        Icons.currency_bitcoin,
+        color: btcLive ? mint : Colors.amber,
+        detail: btcLive ? 'Bieżące realne notowanie' : 'Oczekiwanie na rynek',
       ),
       stat(
         'Research TOP 10',
@@ -302,7 +372,7 @@ class _ProDashboardState extends State<ProDashboard> {
         stale ? 'STALE' : 'LIVE',
         stale ? Icons.cloud_off : Icons.cloud_done,
         color: stale ? Colors.amber : mint,
-        detail: 'Realne dane • zero realnych zleceń',
+        detail: 'Realne dane • wyłącznie wirtualne zlecenia',
       ),
     ];
 
@@ -327,7 +397,7 @@ class _ProDashboardState extends State<ProDashboard> {
 
   List<double> aiEquityValues() {
     final aiState = ai ?? const <String, dynamic>{};
-    final initial = (aiState['initial_balance'] as num?)?.toDouble() ?? 1000.0;
+    final initial = (aiState['initial_balance'] as num?)?.toDouble() ?? 0.0;
     final values = <double>[initial];
     var running = initial;
     for (final raw in asList(aiState['trades'])) {
@@ -383,7 +453,7 @@ class _ProDashboardState extends State<ProDashboard> {
             ),
             const SizedBox(height: 10),
             const Text(
-              'Jednostki symulacyjne. PLN pozostaje warstwą raportową tam, gdzie API ma realną ścieżkę FX.',
+              'Kapitał i PnL konta AI są prowadzone w wirtualnych PLN. Notowania pozostają realne.',
               style: TextStyle(color: muted, fontSize: 12),
             ),
           ],
@@ -426,10 +496,13 @@ class _ProDashboardState extends State<ProDashboard> {
         ? '/api/user-portfolio/deposit'
         : '/api/user-portfolio/withdraw';
     try {
-      final response = await client
+      final response = await http
           .post(
             Uri.parse('${widget.baseUrl}$path'),
-            headers: const {'content-type': 'application/json'},
+            headers: const {
+              'content-type': 'application/json',
+              'Connection': 'close',
+            },
             body: jsonEncode({'amount': amount}),
           )
           .timeout(const Duration(seconds: 15));
@@ -443,7 +516,84 @@ class _ProDashboardState extends State<ProDashboard> {
     }
   }
 
+  Future<void> fundAi() async {
+    final controller = TextEditingController();
+    final amount = await showDialog<double>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Przekaż wirtualne PLN do AI'),
+        content: TextField(
+          controller: controller,
+          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+          autofocus: true,
+          decoration: InputDecoration(
+            labelText: 'Kwota PLN',
+            helperText:
+                'Dostępne: ${number(userPortfolio?['balance'])} PLN',
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Anuluj'),
+          ),
+          FilledButton.icon(
+            onPressed: () => Navigator.pop(
+              context,
+              double.tryParse(controller.text.replaceAll(',', '.')),
+            ),
+            icon: const Icon(Icons.play_arrow),
+            label: const Text('WYKONAJ'),
+          ),
+        ],
+      ),
+    );
+    controller.dispose();
+    if (amount == null || amount <= 0) return;
+
+    try {
+      final response = await http
+          .post(
+            Uri.parse('${widget.baseUrl}/api/ai/fund'),
+            headers: const {
+              'content-type': 'application/json',
+              'Connection': 'close',
+            },
+            body: jsonEncode({'amount': amount}),
+          )
+          .timeout(const Duration(seconds: 15));
+
+      if (response.statusCode < 200 || response.statusCode >= 300) {
+        throw Exception('HTTP ${response.statusCode}: ${response.body}');
+      }
+
+      await refresh();
+
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Przekazano ${amount.toStringAsFixed(2)} PLN do konta AI. '
+            'Agent zastosuje środki w najbliższym cyklu.',
+          ),
+        ),
+      );
+    } catch (error) {
+      if (!mounted) return;
+      setState(() => failure = 'Transfer do AI: $error');
+    }
+  }
+
   Widget portfolioActions() {
+    final aiState = ai ?? const <String, dynamic>{};
+    final aiBalance = (aiState['balance'] as num?)?.toDouble() ?? 0.0;
+    final aiEquity = (aiState['equity'] as num?)?.toDouble() ?? 0.0;
+    final aiRealized = (aiState['realized_pnl'] as num?)?.toDouble() ?? 0.0;
+    final aiUnrealized =
+        (aiState['unrealized_pnl'] as num?)?.toDouble() ?? 0.0;
+    final position = asMap(aiState['position']);
+    final decision = asMap(aiState['decision']);
+
     return box(
       Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -456,12 +606,14 @@ class _ProDashboardState extends State<ProDashboard> {
           const SizedBox(height: 6),
           Text(
             'Wpłaty: ${number(userPortfolio?['total_deposited'])} PLN • '
-            'Wypłaty: ${number(userPortfolio?['total_withdrawn'])} PLN',
+            'Wypłaty: ${number(userPortfolio?['total_withdrawn'])} PLN • '
+            'Do AI: ${number(userPortfolio?['transferred_to_ai'])} PLN',
             style: const TextStyle(color: muted),
           ),
           const SizedBox(height: 14),
           Wrap(
             spacing: 10,
+            runSpacing: 10,
             children: [
               FilledButton.icon(
                 onPressed: () => changeUserFunds(deposit: true),
@@ -473,11 +625,53 @@ class _ProDashboardState extends State<ProDashboard> {
                 icon: const Icon(Icons.remove),
                 label: const Text('Wypłać'),
               ),
+              FilledButton.icon(
+                onPressed:
+                    ((userPortfolio?['balance'] as num?)?.toDouble() ?? 0.0) > 0
+                    ? fundAi
+                    : null,
+                icon: const Icon(Icons.play_arrow),
+                label: const Text('WYKONAJ • PRZEKAŻ DO AI'),
+              ),
             ],
           ),
-          const SizedBox(height: 10),
+          const Divider(height: 34, color: Color(0xFF294152)),
+          heading('Konto AI', 'Autonomiczny paper trading'),
+          Text(
+            'Gotówka: ${number(aiBalance)} PLN',
+            style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'Equity: ${number(aiEquity)} PLN • '
+            'PnL otwarty: ${signed(aiUnrealized)} PLN • '
+            'PnL zamknięty: ${signed(aiRealized)} PLN',
+            style: const TextStyle(color: muted),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            position.isEmpty
+                ? 'Pozycja: FLAT • ${decision['action'] ?? 'WAIT'}'
+                : 'Pozycja: ${position['symbol']} • '
+                      '${position['side']} • '
+                      '${position['strategy']} • '
+                      'alokacja ${number(position['allocation_pln'])} PLN',
+            style: TextStyle(
+              color: position.isEmpty ? muted : mint,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          if (decision['reason'] != null) ...[
+            const SizedBox(height: 6),
+            Text(
+              decision['reason'].toString(),
+              style: const TextStyle(color: muted, fontSize: 12),
+            ),
+          ],
+          const SizedBox(height: 12),
           const Text(
-            'To wyłącznie wirtualny portfel. Nie wykonuje przelewów ani zleceń giełdowych.',
+            'WYKONAJ oznacza wyłącznie transfer wirtualnych PLN do autonomicznego konta paper. '
+            'Nie są wysyłane żadne prawdziwe zlecenia.',
             style: TextStyle(color: muted, fontSize: 12),
           ),
         ],
