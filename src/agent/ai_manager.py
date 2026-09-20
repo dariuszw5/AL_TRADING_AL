@@ -41,7 +41,7 @@ STRATEGIES = ("trend", "mean_reversion", "breakout")
 SIDES = ("LONG", "SHORT")
 LEARNING_WEIGHT = 0.15
 MAX_DRAWDOWN = 0.08
-MAX_DAILY_LOSS_PCT = 0.03
+MAX_DAILY_LOSS_PCT = 0.10
 MIN_VALIDATION_TRADES = 4
 MIN_MODEL_EDGE = 0.00100
 EXPLORATION_EDGE = 0.00200
@@ -313,6 +313,11 @@ class AIPaperManager:
         else:
             self.state = self._fresh_state()
 
+        # Rebuild the current UTC day's risk counter from realized trade
+        # history. This upgrades legacy "gross losses only" states to the
+        # current net daily PnL semantics without manually resetting risk.
+        self._reconcile_daily_risk_state()
+
     def _fresh_state(self):
         return {
             "version": 3,
@@ -325,6 +330,7 @@ class AIPaperManager:
             "equity": 0.0,
             "peak": 0.0,
             "daily_loss": 0.0,
+            "daily_realized_pnl": 0.0,
             "day": None,
             "realized_pnl": 0.0,
             "unrealized_pnl": 0.0,
@@ -473,6 +479,64 @@ class AIPaperManager:
     def _daily_loss_limit(self):
         funded = max(float(self.state.get("funded_capital") or 0.0), 0.0)
         return max(1.0, funded * MAX_DAILY_LOSS_PCT)
+
+    def _apply_daily_realized_result(self, profit):
+        """Track current UTC-day realized PnL net of wins and losses."""
+        s = self.state
+        s["daily_realized_pnl"] = (
+            float(s.get("daily_realized_pnl") or 0.0) + float(profit)
+        )
+        # Risk consumption is the negative part of net daily PnL only.
+        # Winning trades therefore offset losing trades from the same UTC day.
+        s["daily_loss"] = max(0.0, -s["daily_realized_pnl"])
+
+    def _reconcile_daily_risk_state(self):
+        """Upgrade persisted daily risk state to net realized PnL semantics."""
+        s = self.state
+        day = s.get("day")
+
+        if not day:
+            net = float(s.get("daily_realized_pnl") or 0.0)
+            s["daily_realized_pnl"] = net
+            s["daily_loss"] = max(0.0, -net)
+            return
+
+        found = False
+        net = 0.0
+
+        for trade in s.get("trades") or []:
+            if not isinstance(trade, dict):
+                continue
+
+            timestamp = trade.get("exit_timestamp")
+            profit = trade.get("profit")
+            if timestamp is None or not isinstance(profit, (int, float)):
+                continue
+
+            try:
+                trade_day = datetime.fromtimestamp(
+                    int(timestamp) / 1000,
+                    timezone.utc,
+                ).date().isoformat()
+            except (TypeError, ValueError, OSError, OverflowError):
+                continue
+
+            if trade_day != day:
+                continue
+
+            found = True
+            net += float(profit)
+
+        if not found:
+            # Backward-compatible fallback for old persisted states that do not
+            # contain enough timestamped trade history to rebuild the day.
+            if "daily_realized_pnl" in s:
+                net = float(s.get("daily_realized_pnl") or 0.0)
+            else:
+                net = -float(s.get("daily_loss") or 0.0)
+
+        s["daily_realized_pnl"] = net
+        s["daily_loss"] = max(0.0, -net)
 
     def _allocated_principal(self):
         return sum(
@@ -639,7 +703,7 @@ class AIPaperManager:
                     profit = position["allocation_pln"] * trade_return
                     s["balance"] += position["allocation_pln"] + profit
                     s["realized_pnl"] += profit
-                    s["daily_loss"] += max(0.0, -profit)
+                    self._apply_daily_realized_result(profit)
 
                     learning = s["strategy_learning"].setdefault(
                         position["strategy"],
@@ -922,7 +986,12 @@ class AIPaperManager:
             timezone.utc,
         ).date().isoformat()
         if day != s["day"]:
-            s.update(day=day, daily_loss=0.0, halted=False)
+            s.update(
+                day=day,
+                daily_loss=0.0,
+                daily_realized_pnl=0.0,
+                halted=False,
+            )
 
         markets = {}
         issues = dict(errors or {})
