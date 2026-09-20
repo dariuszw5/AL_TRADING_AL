@@ -834,3 +834,47 @@ def test_learning_probe_rejects_materially_negative_validation(tmp_path):
 
     assert row["eligible"] is False
     assert row["learning_probe"] is False
+
+
+def test_v3_state_migrates_model_label_to_v34(tmp_path):
+    path = tmp_path / "ai_paper.json"
+    path.write_text(
+        json.dumps(
+            {
+                "version": 3,
+                "mode": "PAPER_ONLY",
+                "model": "cross-market multi-position k-NN v3.3 supervised controlled-learning long-short",
+                "unit": "PLN",
+                "initial_balance": 1000.0,
+                "funded_capital": 1000.0,
+                "balance": 1000.0,
+                "equity": 1000.0,
+                "peak": 1000.0,
+                "daily_loss": 0.0,
+                "daily_realized_pnl": 0.0,
+                "day": "2026-09-20",
+                "realized_pnl": 0.0,
+                "unrealized_pnl": 0.0,
+                "positions": {},
+                "pending": [],
+                "decisions": [],
+                "trades": [],
+                "last_cycle": 0,
+                "applied_control_ids": [],
+                "funding_received": 1000.0,
+                "profit_swept": 0.0,
+                "profit_transfers": [],
+                "accounting_gap": 0.0,
+                "accounting_error": False,
+                "market_marks": {},
+                "strategy_supervisor": {},
+                "strategy_learning": {},
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    manager = AIPaperManager(path, assets=[])
+
+    assert "v3.4" in manager.state["model"]
+    assert "adaptive controlled-learning" in manager.state["model"]
