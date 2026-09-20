@@ -27,8 +27,10 @@ HORIZON = 15
 FEE = 0.0004
 SLIPPAGE = 0.0005
 PER_POSITION_EXPOSURE = 0.15
+EXPLORATION_POSITION_EXPOSURE = 0.05
 MAX_TOTAL_EXPOSURE = 0.75
 MAX_OPEN_POSITIONS = 5
+MAX_EXPLORATORY_POSITIONS = 1
 STOP = 0.012
 TAKE = 0.024
 STRATEGIES = ("trend", "mean_reversion", "breakout")
@@ -36,8 +38,8 @@ SIDES = ("LONG", "SHORT")
 LEARNING_WEIGHT = 0.15
 MAX_DRAWDOWN = 0.08
 MAX_DAILY_LOSS_PCT = 0.03
-MIN_VALIDATION_TRADES = 2
-MIN_MODEL_EDGE = 0.00020
+MIN_VALIDATION_TRADES = 4
+MIN_MODEL_EDGE = 0.00100
 EXPLORATION_EDGE = 0.00200
 MAX_EXPLORATION_SPREAD = 0.018
 
@@ -253,10 +255,11 @@ def rank_asset(symbol, candles):
             exploration = (
                 live_signal
                 and prediction > EXPLORATION_EDGE
+                and score > MIN_MODEL_EDGE
                 and spread <= MAX_EXPLORATION_SPREAD
                 and (
                     validation_mean is None
-                    or validation_mean > -0.001
+                    or validation_mean >= 0.0
                 )
             )
 
@@ -310,7 +313,7 @@ class AIPaperManager:
         return {
             "version": 3,
             "mode": "PAPER_ONLY",
-            "model": "cross-market multi-position k-NN v3 long-short",
+            "model": "cross-market multi-position k-NN v3.1 guarded long-short",
             "unit": "PLN",
             "initial_balance": 0.0,
             "funded_capital": 0.0,
@@ -376,7 +379,7 @@ class AIPaperManager:
                 state["pending"] = [deepcopy(old_pending)]
 
         state["version"] = 3
-        state["model"] = "cross-market multi-position k-NN v3 long-short"
+        state["model"] = "cross-market multi-position k-NN v3.1 guarded long-short"
         state.setdefault("positions", {})
         state.setdefault("pending", [])
         state.setdefault("market_marks", {})
@@ -449,6 +452,41 @@ class AIPaperManager:
             float(position.get("allocation_pln") or 0.0)
             for position in self.state["positions"].values()
         )
+
+    def _exploratory_slots_used(self):
+        open_count = sum(
+            1
+            for position in self.state["positions"].values()
+            if position.get("exploratory")
+        )
+        pending_count = sum(
+            1
+            for pending in self.state.get("pending") or []
+            if pending.get("exploratory")
+        )
+        return open_count + pending_count
+
+    def _apply_live_learning(self, row):
+        """Apply realized live strategy evidence before final eligibility."""
+        learning = self.state["strategy_learning"].get(row["strategy"], {})
+        sample_count = int(learning.get("trades", 0))
+        observed = (
+            float(learning.get("total_return", 0.0)) / sample_count
+            if sample_count
+            else 0.0
+        )
+        bonus = LEARNING_WEIGHT * observed if sample_count >= 3 else 0.0
+
+        row["learning_trades"] = sample_count
+        row["learning_mean_return"] = observed if sample_count else None
+        row["learning_bonus"] = bonus
+        row["score"] += bonus
+
+        if row.get("eligible") and row["score"] <= MIN_MODEL_EDGE:
+            row["eligible"] = False
+            row["eligibility_reason"] = "LIVE_LEARNING_EDGE_REJECTED"
+
+        return row
 
     def _blocked(self):
         s = self.state
@@ -686,7 +724,12 @@ class AIPaperManager:
                     float(s.get("equity") or 0.0),
                 ),
             )
-            target = equity_base * PER_POSITION_EXPOSURE
+            exposure = (
+                EXPLORATION_POSITION_EXPOSURE
+                if confirmed.get("exploratory")
+                else PER_POSITION_EXPOSURE
+            )
+            target = equity_base * exposure
             total_cap = equity_base * MAX_TOTAL_EXPOSURE
             remaining_cap = max(
                 0.0,
@@ -759,9 +802,16 @@ class AIPaperManager:
         eligible = [row for row in rows if row.get("eligible")]
         selected = []
 
+        exploratory_slots_used = self._exploratory_slots_used()
+
         for row in eligible:
             symbol = row["symbol"]
             if symbol in occupied:
+                continue
+            if (
+                row.get("exploratory")
+                and exploratory_slots_used >= MAX_EXPLORATORY_POSITIONS
+            ):
                 continue
             latest_bar = fresh.get(symbol, [None])[-1]
             if latest_bar is None:
@@ -779,6 +829,8 @@ class AIPaperManager:
                     "exploratory": row.get("exploratory", False),
                 }
             )
+            if row.get("exploratory"):
+                exploratory_slots_used += 1
             occupied.add(symbol)
             if len(selected) >= slots:
                 break
@@ -873,23 +925,7 @@ class AIPaperManager:
                 issues[symbol] = "Za mało danych do treningu i walidacji"
 
         for row in rows:
-            learning = s["strategy_learning"].get(row["strategy"], {})
-            sample_count = int(learning.get("trades", 0))
-            observed = (
-                learning.get("total_return", 0.0) / sample_count
-                if sample_count
-                else 0.0
-            )
-            row["learning_trades"] = sample_count
-            row["learning_mean_return"] = (
-                observed if sample_count else None
-            )
-            row["learning_bonus"] = (
-                LEARNING_WEIGHT * observed
-                if sample_count >= 3
-                else 0.0
-            )
-            row["score"] += row["learning_bonus"]
+            self._apply_live_learning(row)
 
         rows.sort(
             key=lambda row: (
@@ -920,6 +956,8 @@ class AIPaperManager:
             last_pending_cancelled=pending_result["cancelled"],
             limits={
                 "per_position_exposure": PER_POSITION_EXPOSURE,
+                "exploration_position_exposure": EXPLORATION_POSITION_EXPOSURE,
+                "max_exploratory_positions": MAX_EXPLORATORY_POSITIONS,
                 "max_total_exposure": MAX_TOTAL_EXPOSURE,
                 "max_open_positions": MAX_OPEN_POSITIONS,
                 "daily_loss_pct": MAX_DAILY_LOSS_PCT,
