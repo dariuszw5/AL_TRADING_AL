@@ -511,6 +511,11 @@ class AIPaperManager:
 
     def _blocked(self):
         s = self.state
+
+        gap = self._accounting_gap()
+        s["accounting_gap"] = gap
+        s["accounting_error"] = abs(gap) > 0.01
+
         if s["peak"] > 0 and s["equity"] <= s["peak"] * (1 - MAX_DRAWDOWN):
             s["halted"] = True
         return bool(
