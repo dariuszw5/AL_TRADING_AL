@@ -258,7 +258,7 @@ class _ProDashboardState extends State<ProDashboard> {
               titleWidget,
               const SizedBox(height: 5),
               Text(
-                detail!,
+                detail,
                 maxLines: 3,
                 overflow: TextOverflow.ellipsis,
                 style: const TextStyle(
