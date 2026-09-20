@@ -981,13 +981,27 @@ class _ProDashboardState extends State<ProDashboard>
   }
 
   Widget marketTickerStrip() {
+    final pendingSymbols = asList(ai?['pending'])
+        .whereType<Map>()
+        .map((row) => row['symbol']?.toString())
+        .whereType<String>()
+        .toSet();
+
     final rows = assets.where((asset) => asset['market_price'] is num).toList()
       ..sort((a, b) {
+        final aSymbol = a['symbol']?.toString() ?? '';
+        final bSymbol = b['symbol']?.toString() ?? '';
         final aOpen = (a['position']?.toString() ?? 'FLAT') != 'FLAT';
         final bOpen = (b['position']?.toString() ?? 'FLAT') != 'FLAT';
-        if (aOpen != bOpen) return aOpen ? -1 : 1;
-        final ar = opportunityRank(a['symbol']?.toString() ?? '') ?? 9999;
-        final br = opportunityRank(b['symbol']?.toString() ?? '') ?? 9999;
+        final aPending = pendingSymbols.contains(aSymbol);
+        final bPending = pendingSymbols.contains(bSymbol);
+
+        final aPriority = aOpen ? 0 : aPending ? 1 : 2;
+        final bPriority = bOpen ? 0 : bPending ? 1 : 2;
+        if (aPriority != bPriority) return aPriority.compareTo(bPriority);
+
+        final ar = opportunityRank(aSymbol) ?? 9999;
+        final br = opportunityRank(bSymbol) ?? 9999;
         return ar.compareTo(br);
       });
 
@@ -1010,6 +1024,18 @@ class _ProDashboardState extends State<ProDashboard>
                         (asset['market_price'] as num?)?.toDouble();
                     final position =
                         asset['position']?.toString() ?? 'FLAT';
+                    final isOpen = position != 'FLAT';
+                    final isPending = pendingSymbols.contains(symbol);
+                    final accent = isOpen
+                        ? mint
+                        : isPending
+                        ? Colors.amberAccent
+                        : const Color(0xFF294152);
+                    final tileColor = isOpen
+                        ? mint.withValues(alpha: 0.08)
+                        : isPending
+                        ? Colors.amberAccent.withValues(alpha: 0.07)
+                        : const Color(0xFF102534);
                     final digits =
                         price != null && price.abs() < 10 ? 5 : 2;
                     return ConstrainedBox(
@@ -1023,13 +1049,21 @@ class _ProDashboardState extends State<ProDashboard>
                         vertical: 8,
                       ),
                       decoration: BoxDecoration(
-                        color: const Color(0xFF102534),
+                        color: tileColor,
                         borderRadius: BorderRadius.circular(12),
                         border: Border.all(
-                          color: position == 'FLAT'
-                              ? const Color(0xFF294152)
-                              : mint,
+                          color: accent,
+                          width: isOpen || isPending ? 1.35 : 1.0,
                         ),
+                        boxShadow: isOpen || isPending
+                            ? [
+                                BoxShadow(
+                                  color: accent.withValues(alpha: 0.08),
+                                  blurRadius: 10,
+                                  spreadRadius: 1,
+                                ),
+                              ]
+                            : null,
                       ),
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
@@ -1039,12 +1073,28 @@ class _ProDashboardState extends State<ProDashboard>
                           Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Text(
-                                symbol,
-                                style: const TextStyle(
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.w700,
-                                ),
+                              Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Text(
+                                    symbol,
+                                    style: const TextStyle(
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                                  ),
+                                  if (isOpen || isPending) ...[
+                                    const SizedBox(width: 5),
+                                    Container(
+                                      width: 6,
+                                      height: 6,
+                                      decoration: BoxDecoration(
+                                        color: accent,
+                                        shape: BoxShape.circle,
+                                      ),
+                                    ),
+                                  ],
+                                ],
                               ),
                               Text(
                                 price == null
