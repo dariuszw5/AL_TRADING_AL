@@ -310,16 +310,6 @@ class _ProDashboardState extends State<ProDashboard> {
         (userPortfolio?['balance'] as num?)?.toDouble() ?? 0.0;
     final classes = asMap(research?['selected_by_class']).length;
 
-    Map<String, dynamic>? btc;
-    for (final asset in assets) {
-      if (asset['symbol']?.toString() == 'BTCUSDT') {
-        btc = asset;
-        break;
-      }
-    }
-    final btcPrice = (btc?['market_price'] as num?)?.toDouble();
-    final btcLive = btc?['market_live'] == true;
-
     final cards = <Widget>[
       stat(
         'Kapitał AI',
@@ -355,13 +345,6 @@ class _ProDashboardState extends State<ProDashboard> {
         detail: 'Wirtualne środki oczekujące na decyzję użytkownika',
       ),
       stat(
-        'BTC LIVE',
-        btcPrice == null ? '—' : '${btcPrice.toStringAsFixed(2)} USDT',
-        Icons.currency_bitcoin,
-        color: btcLive ? mint : Colors.amber,
-        detail: btcLive ? 'Bieżące realne notowanie' : 'Oczekiwanie na rynek',
-      ),
-      stat(
         'Research TOP 10',
         '${opportunities.length}/10',
         Icons.travel_explore,
@@ -392,6 +375,270 @@ class _ProDashboardState extends State<ProDashboard> {
           ],
         );
       },
+    );
+  }
+
+  String assetBadge(String symbol) {
+    const badges = <String, String>{
+      'BTCUSDT': '₿',
+      'ETHUSDT': 'Ξ',
+      'SOLUSDT': '◎',
+      'BNBUSDT': '◈',
+      'XRPUSDT': '✕',
+      'EURUSD': '€',
+      'GBPUSD': '£',
+      'USDJPY': '¥',
+      'AAPL': 'A',
+      'MSFT': 'M',
+      'NVDA': 'N',
+      'TSLA': 'T',
+      'SPY': 'S',
+      'QQQ': 'Q',
+    };
+    return badges[symbol] ?? (symbol.isEmpty ? '?' : symbol.substring(0, 1));
+  }
+
+  Widget fundsDonut() {
+    final aiState = ai ?? const <String, dynamic>{};
+    final positions = asMap(aiState['positions']);
+    final wallet =
+        (userPortfolio?['balance'] as num?)?.toDouble() ?? 0.0;
+    final aiCash = (aiState['balance'] as num?)?.toDouble() ?? 0.0;
+    final funded =
+        (aiState['funded_capital'] as num?)?.toDouble() ?? 0.0;
+    final equity = (aiState['equity'] as num?)?.toDouble() ?? 0.0;
+    final swept =
+        (userPortfolio?['profit_transferred'] as num?)?.toDouble() ?? 0.0;
+
+    var positionsValue = 0.0;
+    for (final raw in positions.values) {
+      final p = asMap(raw);
+      final allocation =
+          (p['allocation_pln'] as num?)?.toDouble() ?? 0.0;
+      final unrealized =
+          (p['unrealized_pnl'] as num?)?.toDouble() ?? 0.0;
+      positionsValue += math.max(0.0, allocation + unrealized);
+    }
+
+    final values = <double>[
+      math.max(0.0, wallet),
+      math.max(0.0, aiCash),
+      math.max(0.0, positionsValue),
+    ];
+    final total = values.fold<double>(0.0, (sum, value) => sum + value);
+    final loss = math.max(0.0, funded - equity);
+
+    final labels = <String>[
+      'Mój portfel',
+      'Wolne AI',
+      'Pozycje AI',
+    ];
+    final colors = <Color>[
+      cyan,
+      mint,
+      const Color(0xFF9C7CFF),
+    ];
+
+    Widget legendRow(int index) {
+      final value = values[index];
+      final pct = total <= 0 ? 0.0 : value / total * 100;
+      return Padding(
+        padding: const EdgeInsets.only(bottom: 8),
+        child: Row(
+          children: [
+            Container(
+              width: 10,
+              height: 10,
+              decoration: BoxDecoration(
+                color: colors[index],
+                shape: BoxShape.circle,
+              ),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                labels[index],
+                style: const TextStyle(color: muted, fontSize: 12),
+              ),
+            ),
+            Text(
+              '${number(value)} PLN • ${pct.toStringAsFixed(1)}%',
+              style: const TextStyle(fontSize: 12),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return box(
+      Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          heading(
+            'Podział środków',
+            'Portfel użytkownika • wolna gotówka AI • aktywne pozycje',
+          ),
+          Row(
+            children: [
+              SizedBox(
+                width: 170,
+                height: 170,
+                child: CustomPaint(
+                  painter: FundsDonutPainter(
+                    values: values,
+                    colors: colors,
+                  ),
+                  child: Center(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          '${number(total)} PLN',
+                          style: const TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                        const Text(
+                          'łącznie',
+                          style: TextStyle(color: muted, fontSize: 11),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 20),
+              Expanded(
+                child: Column(
+                  children: [
+                    for (int i = 0; i < values.length; i++) legendRow(i),
+                    const Divider(color: Color(0xFF294152)),
+                    _miniMetric('Wpłacono do AI', funded),
+                    _miniMetric('Zysk przelany', swept),
+                    _miniMetric('Strata AI', loss),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _miniMetric(String label, double value) {
+    return Padding(
+      padding: const EdgeInsets.only(top: 6),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(
+              label,
+              style: const TextStyle(color: muted, fontSize: 12),
+            ),
+          ),
+          Text(
+            '${number(value)} PLN',
+            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget marketTickerStrip() {
+    final rows = assets.where((asset) => asset['market_price'] is num).toList()
+      ..sort((a, b) {
+        final aOpen = (a['position']?.toString() ?? 'FLAT') != 'FLAT';
+        final bOpen = (b['position']?.toString() ?? 'FLAT') != 'FLAT';
+        if (aOpen != bOpen) return aOpen ? -1 : 1;
+        final ar = opportunityRank(a['symbol']?.toString() ?? '') ?? 9999;
+        final br = opportunityRank(b['symbol']?.toString() ?? '') ?? 9999;
+        return ar.compareTo(br);
+      });
+
+    final shown = rows.take(14).toList();
+
+    return box(
+      Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          heading('Notowania', 'Szybki podgląd naszych aktywów'),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              for (final asset in shown)
+                Builder(
+                  builder: (context) {
+                    final symbol = asset['symbol']?.toString() ?? '';
+                    final price =
+                        (asset['market_price'] as num?)?.toDouble();
+                    final position =
+                        asset['position']?.toString() ?? 'FLAT';
+                    final digits =
+                        price != null && price.abs() < 10 ? 5 : 2;
+                    return Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 8,
+                      ),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF102534),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                          color: position == 'FLAT'
+                              ? const Color(0xFF294152)
+                              : mint,
+                        ),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          CircleAvatar(
+                            radius: 13,
+                            backgroundColor: const Color(0xFF23485F),
+                            child: Text(
+                              assetBadge(symbol),
+                              style: const TextStyle(
+                                color: cyan,
+                                fontSize: 12,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                symbol,
+                                style: const TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                              Text(
+                                price == null
+                                    ? '—'
+                                    : '${number(price, digits)} ${asset['quote'] ?? ''}',
+                                style: const TextStyle(
+                                  color: muted,
+                                  fontSize: 10,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    );
+                  },
+                ),
+            ],
+          ),
+        ],
+      ),
     );
   }
 
@@ -866,8 +1113,11 @@ class _ProDashboardState extends State<ProDashboard> {
                           radius: 17,
                           backgroundColor: const Color(0xFF23485F),
                           child: Text(
-                            symbol.isEmpty ? '?' : symbol.substring(0, 1),
-                            style: const TextStyle(color: cyan),
+                            assetBadge(symbol),
+                            style: const TextStyle(
+                              color: cyan,
+                              fontWeight: FontWeight.w700,
+                            ),
                           ),
                         ),
                         const SizedBox(width: 12),
@@ -1218,6 +1468,8 @@ class _ProDashboardState extends State<ProDashboard> {
                     if (page == 0) ...[
                       summary(),
                       const SizedBox(height: 20),
+                      marketTickerStrip(),
+                      const SizedBox(height: 20),
                       if (wide)
                         Row(
                           crossAxisAlignment: CrossAxisAlignment.start,
@@ -1237,6 +1489,8 @@ class _ProDashboardState extends State<ProDashboard> {
                               flex: 2,
                               child: Column(
                                 children: [
+                                  fundsDonut(),
+                                  const SizedBox(height: 20),
                                   portfolioActions(),
                                   const SizedBox(height: 20),
                                   activity(),
@@ -1246,6 +1500,8 @@ class _ProDashboardState extends State<ProDashboard> {
                           ],
                         )
                       else ...[
+                        fundsDonut(),
+                        const SizedBox(height: 20),
                         portfolioActions(),
                         const SizedBox(height: 20),
                         equityChart(),
@@ -1278,6 +1534,67 @@ class _ProDashboardState extends State<ProDashboard> {
     );
   }
 }
+
+class FundsDonutPainter extends CustomPainter {
+  final List<double> values;
+  final List<Color> colors;
+
+  FundsDonutPainter({
+    required this.values,
+    required this.colors,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final total = values.fold<double>(
+      0.0,
+      (sum, value) => sum + math.max(0.0, value),
+    );
+
+    final center = Offset(size.width / 2, size.height / 2);
+    final radius = math.min(size.width, size.height) / 2 - 6;
+    final rect = Rect.fromCircle(center: center, radius: radius);
+    const stroke = 22.0;
+
+    if (total <= 0) {
+      canvas.drawArc(
+        rect,
+        0,
+        math.pi * 2,
+        false,
+        Paint()
+          ..color = const Color(0xFF294152)
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = stroke,
+      );
+      return;
+    }
+
+    var start = -math.pi / 2;
+    for (int i = 0; i < values.length; i++) {
+      final value = math.max(0.0, values[i]);
+      if (value <= 0) continue;
+
+      final sweep = math.pi * 2 * value / total;
+      canvas.drawArc(
+        rect,
+        start,
+        sweep,
+        false,
+        Paint()
+          ..color = colors[i % colors.length]
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = stroke
+          ..strokeCap = StrokeCap.butt,
+      );
+      start += sweep;
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant FundsDonutPainter oldDelegate) => true;
+}
+
 
 class EquityPainter extends CustomPainter {
   final List<double> values;
