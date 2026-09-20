@@ -38,6 +38,7 @@ class _ProDashboardState extends State<ProDashboard> {
   DateTime? received;
   Timer? timer;
   bool busy = false;
+  Future<void>? refreshInFlight;
   int page = 0;
   String query = '';
 
@@ -121,9 +122,32 @@ class _ProDashboardState extends State<ProDashboard> {
     }
   }
 
-  Future<void> refresh() async {
-    if (busy) return;
+  Future<void> refresh() {
+    final active = refreshInFlight;
+    if (active != null) return active;
+
+    late Future<void> future;
+    future = _refreshOnce().whenComplete(() {
+      if (identical(refreshInFlight, future)) {
+        refreshInFlight = null;
+      }
+    });
+    refreshInFlight = future;
+    return future;
+  }
+
+  Future<void> manualRefresh() async {
+    final active = refreshInFlight;
+    if (active != null) {
+      await active;
+    }
+    if (!mounted) return;
+    await refresh();
+  }
+
+  Future<void> _refreshOnce() async {
     busy = true;
+    if (mounted) setState(() {});
 
     try {
       if (widget.loader != null) {
@@ -189,6 +213,7 @@ class _ProDashboardState extends State<ProDashboard> {
       });
     } finally {
       busy = false;
+      if (mounted) setState(() {});
     }
   }
 
@@ -1705,9 +1730,23 @@ class _ProDashboardState extends State<ProDashboard> {
                         ),
                         const SizedBox(width: 6),
                         IconButton(
-                          tooltip: 'Odśwież',
-                          onPressed: refresh,
-                          icon: const Icon(Icons.refresh, color: cyan),
+                          tooltip: busy
+                              ? 'Odświeżanie danych…'
+                              : 'Odśwież teraz',
+                          onPressed: manualRefresh,
+                          icon: busy
+                              ? const SizedBox(
+                                  width: 18,
+                                  height: 18,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    color: cyan,
+                                  ),
+                                )
+                              : const Icon(
+                                  Icons.refresh_rounded,
+                                  color: cyan,
+                                ),
                         ),
                       ],
                     ),
