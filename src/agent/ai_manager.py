@@ -52,6 +52,10 @@ CONTROLLED_LEARNING_MIN_SCORE = 0.0005
 CONTROLLED_LEARNING_MAX_SPREAD = 0.015
 CONTROLLED_LEARNING_MIN_VALIDATION_TRADES = 2
 CONTROLLED_LEARNING_MIN_VALIDATION_MEAN = 0.0
+LEARNING_PROBE_MIN_EXPECTED_RETURN = 0.0015
+LEARNING_PROBE_MAX_SPREAD = 0.018
+LEARNING_PROBE_MIN_RISK_ADJUSTED_EDGE = 0.00025
+LEARNING_PROBE_MAX_NEGATIVE_VALIDATION_MEAN = -0.0015
 PAUSED_RECOVERY_MIN_EXPECTED_RETURN = 0.0030
 PAUSED_RECOVERY_MIN_SCORE = 0.0015
 PAUSED_RECOVERY_MIN_VALIDATION_TRADES = 3
@@ -362,7 +366,7 @@ class AIPaperManager:
         return {
             "version": 3,
             "mode": "PAPER_ONLY",
-            "model": "cross-market multi-position k-NN v3.3 supervised controlled-learning long-short",
+            "model": "cross-market multi-position k-NN v3.4 adaptive controlled-learning long-short",
             "unit": "PLN",
             "initial_balance": 0.0,
             "funded_capital": 0.0,
@@ -655,15 +659,35 @@ class AIPaperManager:
         spread = float(row.get("neighbor_spread") or float("inf"))
         validation_trades = int(row.get("validation_trades") or 0)
         validation_mean = row.get("validation_mean")
+        probe_edge = expected - 0.15 * spread
+        row["learning_probe_edge"] = probe_edge
 
-        base_ok = bool(
-            expected >= CONTROLLED_LEARNING_MIN_EXPECTED_RETURN
-            and score >= CONTROLLED_LEARNING_MIN_SCORE
-            and spread <= CONTROLLED_LEARNING_MAX_SPREAD
-            and validation_trades >= CONTROLLED_LEARNING_MIN_VALIDATION_TRADES
-            and validation_mean is not None
-            and float(validation_mean) >= CONTROLLED_LEARNING_MIN_VALIDATION_MEAN
-        )
+        if status == "LEARNING":
+            # A learning strategy may have too little validation history to
+            # ever graduate. Allow one tiny probe when the current model is
+            # positive after a lighter uncertainty haircut and validation is
+            # not materially negative. This does not apply to PAUSED systems.
+            validation_ok = (
+                validation_mean is None
+                or float(validation_mean)
+                >= LEARNING_PROBE_MAX_NEGATIVE_VALIDATION_MEAN
+            )
+            base_ok = bool(
+                expected >= LEARNING_PROBE_MIN_EXPECTED_RETURN
+                and spread <= LEARNING_PROBE_MAX_SPREAD
+                and probe_edge >= LEARNING_PROBE_MIN_RISK_ADJUSTED_EDGE
+                and validation_ok
+            )
+        else:
+            base_ok = bool(
+                expected >= CONTROLLED_LEARNING_MIN_EXPECTED_RETURN
+                and score >= CONTROLLED_LEARNING_MIN_SCORE
+                and spread <= CONTROLLED_LEARNING_MAX_SPREAD
+                and validation_trades >= CONTROLLED_LEARNING_MIN_VALIDATION_TRADES
+                and validation_mean is not None
+                and float(validation_mean)
+                >= CONTROLLED_LEARNING_MIN_VALIDATION_MEAN
+            )
 
         if status == "PAUSED":
             base_ok = bool(
@@ -1274,10 +1298,19 @@ class AIPaperManager:
                 pending_count=len(s["pending"]),
             )
         else:
+            summary = s.get("ranking_summary") or {}
+            live_count = int(summary.get("live_signals") or 0)
+            eligible_count = int(summary.get("eligible") or 0)
+            probe_count = int(summary.get("learning_probes") or 0)
             self._record(
                 now_ms,
                 "CASH",
-                "Brak aktywnych sygnałów spełniających warunki paper po kosztach",
+                (
+                    f"{live_count} sygnałów live; "
+                    f"{eligible_count} dopuszczonych; "
+                    f"{probe_count} learning probe. "
+                    "Brak wejścia spełniającego warunki paper po kosztach."
+                ),
             )
 
         return s
