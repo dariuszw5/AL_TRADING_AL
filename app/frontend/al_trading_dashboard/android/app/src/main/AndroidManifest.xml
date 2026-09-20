@@ -1,5 +1,6 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">\n    <uses-permission android:name="android.permission.INTERNET"/>
     <application
+        android:usesCleartextTraffic="true"
         android:label="AL Trading Agent"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
