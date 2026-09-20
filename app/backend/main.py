@@ -126,6 +126,43 @@ def load_research_state() -> dict[str, Any]:
     return state
 
 
+def load_ai_state_raw() -> dict[str, Any]:
+    """Load the autonomous AI paper account state without HTTP decoration."""
+    path = LIVE_STATE_DIR / "ai_paper.json"
+    try:
+        with path.open(encoding="utf-8-sig") as handle:
+            value = json.load(handle)
+        return value if isinstance(value, dict) else {}
+    except (OSError, ValueError, TypeError):
+        return {}
+
+
+def dashboard_asset_universe() -> tuple:
+    """Curated app/research assets plus current dynamic research opportunities."""
+    result = []
+    seen = set()
+
+    for asset in (*SUPPORTED_ASSETS, *RESEARCH_ASSETS):
+        if asset.symbol in seen:
+            continue
+        result.append(asset)
+        seen.add(asset.symbol)
+
+    research_state = load_research_state()
+    for row in research_state.get("opportunities", []):
+        symbol = str(row.get("symbol") or "").strip()
+        if not symbol or symbol in seen:
+            continue
+        try:
+            asset = get_asset(symbol, allow_dynamic_binance=True)
+        except ValueError:
+            continue
+        result.append(asset)
+        seen.add(asset.symbol)
+
+    return tuple(result)
+
+
 def position_payload(state: dict[str, Any]) -> dict[str, Any]:
     position = state.get("position")
     if not position:
