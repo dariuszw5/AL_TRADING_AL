@@ -8,7 +8,7 @@ import time
 
 from src.agent.ai_manager import AIPaperManager
 from src.agent.live_state_store import LiveStateStore
-from src.data.assets import get_asset
+from src.data.assets import RESEARCH_ASSETS, SUPPORTED_ASSETS, get_asset
 from src.research.event_store import DailyJsonlStore
 from src.research.macro_events import MacroEventCollector
 from src.research.market_scanner import OpportunityScanner
@@ -41,15 +41,27 @@ class AutonomousResearchAgent:
         self._stop = threading.Event()
 
     def _asset_specs(self, opportunities: list[dict]):
+        """All curated app markets plus dynamic research opportunities."""
         assets = []
+        seen = set()
+
+        for asset in (*SUPPORTED_ASSETS, *RESEARCH_ASSETS):
+            if asset.symbol in seen:
+                continue
+            assets.append(asset)
+            seen.add(asset.symbol)
+
         for row in opportunities:
-            symbol = str(row.get("symbol", ""))
-            if not symbol:
+            symbol = str(row.get("symbol", "")).strip()
+            if not symbol or symbol in seen:
                 continue
             try:
-                assets.append(get_asset(symbol, allow_dynamic_binance=True))
+                asset = get_asset(symbol, allow_dynamic_binance=True)
             except ValueError:
                 continue
+            assets.append(asset)
+            seen.add(asset.symbol)
+
         return tuple(assets)
 
     def _persist_state(self, ai_state: dict | None = None) -> dict:
