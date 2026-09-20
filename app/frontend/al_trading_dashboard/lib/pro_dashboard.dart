@@ -305,7 +305,7 @@ class _ProDashboardState extends State<ProDashboard> {
     final realized = (aiState['realized_pnl'] as num?)?.toDouble() ?? 0.0;
     final unrealized = (aiState['unrealized_pnl'] as num?)?.toDouble() ?? 0.0;
     final result = realized + unrealized;
-    final position = asMap(aiState['position']);
+    final positions = asMap(aiState['positions']);
     final portfolioBalance =
         (userPortfolio?['balance'] as num?)?.toDouble() ?? 0.0;
     final classes = asMap(research?['selected_by_class']).length;
@@ -338,15 +338,15 @@ class _ProDashboardState extends State<ProDashboard> {
             'Zamknięty ${signed(realized)} • otwarty ${signed(unrealized)}',
       ),
       stat(
-        'Pozycja AI',
-        position.isEmpty ? 'FLAT' : position['symbol']?.toString() ?? 'OPEN',
+        'Pozycje AI',
+        positions.isEmpty ? 'FLAT' : '${positions.length} OTWARTE',
         Icons.layers_outlined,
-        color: position.isEmpty ? muted : cyan,
-        detail: position.isEmpty
+        color: positions.isEmpty ? muted : cyan,
+        detail: positions.isEmpty
             ? (aiState['decision'] is Map
                   ? asMap(aiState['decision'])['action']?.toString()
-                  : 'Brak otwartej pozycji')
-            : '${position['side'] ?? ''} • ${position['strategy'] ?? ''}',
+                  : 'Brak otwartych pozycji')
+            : positions.keys.take(4).join(' • '),
       ),
       stat(
         'Mój portfel',
@@ -591,7 +591,7 @@ class _ProDashboardState extends State<ProDashboard> {
     final aiRealized = (aiState['realized_pnl'] as num?)?.toDouble() ?? 0.0;
     final aiUnrealized =
         (aiState['unrealized_pnl'] as num?)?.toDouble() ?? 0.0;
-    final position = asMap(aiState['position']);
+    final positions = asMap(aiState['positions']);
     final decision = asMap(aiState['decision']);
 
     return box(
@@ -650,17 +650,46 @@ class _ProDashboardState extends State<ProDashboard> {
           ),
           const SizedBox(height: 8),
           Text(
-            position.isEmpty
-                ? 'Pozycja: FLAT • ${decision['action'] ?? 'WAIT'}'
-                : 'Pozycja: ${position['symbol']} • '
-                      '${position['side']} • '
-                      '${position['strategy']} • '
-                      'alokacja ${number(position['allocation_pln'])} PLN',
+            positions.isEmpty
+                ? 'Pozycje: FLAT • ${decision['action'] ?? 'WAIT'}'
+                : 'Otwarte pozycje: ${positions.length}',
             style: TextStyle(
-              color: position.isEmpty ? muted : mint,
+              color: positions.isEmpty ? muted : mint,
               fontWeight: FontWeight.w600,
             ),
           ),
+          if (positions.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            for (final entry in positions.entries)
+              Builder(
+                builder: (context) {
+                  final p = asMap(entry.value);
+                  final pnl =
+                      (p['unrealized_pnl'] as num?)?.toDouble() ?? 0.0;
+                  return Padding(
+                    padding: const EdgeInsets.only(bottom: 6),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            '${entry.key} • ${p['side'] ?? ''} • ${p['strategy'] ?? ''}',
+                            style: const TextStyle(fontSize: 12),
+                          ),
+                        ),
+                        Text(
+                          '${signed(pnl)} PLN',
+                          style: TextStyle(
+                            color: pnl >= 0 ? mint : Colors.redAccent,
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                },
+              ),
+          ],
           if (decision['reason'] != null) ...[
             const SizedBox(height: 6),
             Text(
@@ -757,8 +786,20 @@ class _ProDashboardState extends State<ProDashboard> {
       final symbol = asset['symbol']?.toString() ?? '';
       final name = asset['name']?.toString() ?? '';
       return '$symbol $name'.toLowerCase().contains(query.toLowerCase());
-    }).toList();
-    final shown = all ? filtered : filtered.take(9).toList();
+    }).toList()
+      ..sort((a, b) {
+        final aOpen = (a['position']?.toString() ?? 'FLAT') != 'FLAT';
+        final bOpen = (b['position']?.toString() ?? 'FLAT') != 'FLAT';
+        if (aOpen != bOpen) return aOpen ? -1 : 1;
+
+        final ar = opportunityRank(a['symbol']?.toString() ?? '') ?? 9999;
+        final br = opportunityRank(b['symbol']?.toString() ?? '') ?? 9999;
+        if (ar != br) return ar.compareTo(br);
+
+        return (a['symbol']?.toString() ?? '')
+            .compareTo(b['symbol']?.toString() ?? '');
+      });
+    final shown = all ? filtered : filtered.take(12).toList();
 
     return box(
       Column(
@@ -768,7 +809,7 @@ class _ProDashboardState extends State<ProDashboard> {
             children: [
               const Expanded(
                 child: Text(
-                  'Rynki paper-live',
+                  'Rynki AI paper-live',
                   style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
                 ),
               ),
@@ -780,7 +821,7 @@ class _ProDashboardState extends State<ProDashboard> {
             ],
           ),
           const Text(
-            'Realne notowania • środki wirtualne • PLN tylko z realnej ścieżki FX',
+            'Wszystkie skonfigurowane rynki • równoległe pozycje AI • wyłącznie wirtualne PLN',
             style: TextStyle(color: muted, fontSize: 12),
           ),
           if (all)
@@ -868,8 +909,10 @@ class _ProDashboardState extends State<ProDashboard> {
                               ),
                             ),
                             Text(
-                              rank == null
-                                  ? '${asset['position'] ?? 'FLAT'} • poza TOP 10'
+                              (asset['position']?.toString() ?? 'FLAT') != 'FLAT'
+                                  ? '${asset['position']} • AI ${number(asset['ai_allocation_pln'])} PLN'
+                                  : rank == null
+                                  ? 'FLAT • poza TOP 10'
                                   : 'TOP $rank • ${classLabel(opportunity?['asset_class'])}',
                               style: const TextStyle(
                                 color: muted,
@@ -987,7 +1030,7 @@ class _ProDashboardState extends State<ProDashboard> {
                   '${raw['reason'] ?? ''} • ${number(raw['entry'], 5)} → ${number(raw['exit_price'], 5)}',
                 ),
                 trailing: Text(
-                  '${signed(raw['profit'])} jedn.',
+                  '${signed(raw['profit'])} PLN',
                   style: TextStyle(
                     color: (raw['profit'] as num? ?? 0) >= 0
                         ? mint
