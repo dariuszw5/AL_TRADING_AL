@@ -327,6 +327,213 @@ class _ProDashboardState extends State<ProDashboard> {
     ),
   );
 
+  Widget pnlNowCard({
+    required double funded,
+    required double equity,
+    required double realized,
+    required double unrealized,
+  }) {
+    final delta = equity - funded;
+    final pct = funded > 0 ? delta / funded * 100 : 0.0;
+    final positive = delta > 0.005;
+    final negative = delta < -0.005;
+    final tone = positive
+        ? mint
+        : negative
+        ? Colors.redAccent
+        : muted;
+    final arrow = positive
+        ? Icons.arrow_upward_rounded
+        : negative
+        ? Icons.arrow_downward_rounded
+        : Icons.remove_rounded;
+    final status = positive
+        ? 'ZYSK TERAZ'
+        : negative
+        ? 'STRATA TERAZ'
+        : 'NA ZERO';
+
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: panel,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(
+          color: tone.withValues(alpha: 0.55),
+          width: 1.2,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: tone.withValues(alpha: 0.06),
+            blurRadius: 18,
+            spreadRadius: 1,
+          ),
+        ],
+      ),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final compact = constraints.maxWidth < 300;
+
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    width: 38,
+                    height: 38,
+                    decoration: BoxDecoration(
+                      color: tone.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(11),
+                    ),
+                    child: Icon(arrow, color: tone, size: 22),
+                  ),
+                  const SizedBox(width: 11),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'Zysk / strata teraz',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        Text(
+                          status,
+                          style: TextStyle(
+                            color: tone,
+                            fontSize: 11,
+                            fontWeight: FontWeight.w700,
+                            letterSpacing: 0.7,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 9,
+                      vertical: 5,
+                    ),
+                    decoration: BoxDecoration(
+                      color: tone.withValues(alpha: 0.10),
+                      borderRadius: BorderRadius.circular(999),
+                    ),
+                    child: Text(
+                      '${pct >= 0 ? '+' : ''}${pct.toStringAsFixed(2)}%',
+                      style: TextStyle(
+                        color: tone,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              FittedBox(
+                fit: BoxFit.scaleDown,
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  '${signed(delta)} PLN',
+                  style: TextStyle(
+                    color: tone,
+                    fontSize: compact ? 24 : 28,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: -0.4,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 5),
+              Text(
+                funded > 0
+                    ? 'Equity ${number(equity)} PLN • cel ${number(funded)} PLN'
+                    : 'Oczekiwanie na wpłatę kapitału do AI',
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  color: muted,
+                  fontSize: 11,
+                  height: 1.35,
+                ),
+              ),
+              const SizedBox(height: 14),
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 8,
+                ),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF0C2030),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: _pnlMini(
+                        'Otwarty',
+                        unrealized,
+                      ),
+                    ),
+                    Container(
+                      width: 1,
+                      height: 28,
+                      color: const Color(0xFF294152),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: _pnlMini(
+                        'Zrealizowany',
+                        realized,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _pnlMini(String label, double value) {
+    final tone = value > 0.005
+        ? mint
+        : value < -0.005
+        ? Colors.redAccent
+        : muted;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label,
+          style: const TextStyle(
+            color: muted,
+            fontSize: 10,
+          ),
+        ),
+        const SizedBox(height: 2),
+        FittedBox(
+          fit: BoxFit.scaleDown,
+          alignment: Alignment.centerLeft,
+          child: Text(
+            '${signed(value)} PLN',
+            style: TextStyle(
+              color: tone,
+              fontSize: 12,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
   List<Map<String, dynamic>> get opportunities =>
       asList(research?['opportunities'])
           .whereType<Map>()
@@ -350,9 +557,10 @@ class _ProDashboardState extends State<ProDashboard> {
     final aiState = ai ?? const <String, dynamic>{};
     final initial = (aiState['initial_balance'] as num?)?.toDouble() ?? 0.0;
     final equity = (aiState['equity'] as num?)?.toDouble() ?? 0.0;
+    final funded =
+        (aiState['funded_capital'] as num?)?.toDouble() ?? initial;
     final realized = (aiState['realized_pnl'] as num?)?.toDouble() ?? 0.0;
     final unrealized = (aiState['unrealized_pnl'] as num?)?.toDouble() ?? 0.0;
-    final result = realized + unrealized;
     final positions = asMap(aiState['positions']);
     final portfolioBalance =
         (userPortfolio?['balance'] as num?)?.toDouble() ?? 0.0;
@@ -367,13 +575,11 @@ class _ProDashboardState extends State<ProDashboard> {
             ? 'Najpierw przekaż środki z portfela'
             : 'Wpłacony kapitał: ${number(initial)} PLN',
       ),
-      stat(
-        'Wynik AI',
-        '${signed(result)} PLN',
-        Icons.trending_up,
-        color: result >= 0 ? mint : Colors.redAccent,
-        detail:
-            'Zamknięty ${signed(realized)} • otwarty ${signed(unrealized)}',
+      pnlNowCard(
+        funded: funded,
+        equity: equity,
+        realized: realized,
+        unrealized: unrealized,
       ),
       stat(
         'Pozycje AI',
