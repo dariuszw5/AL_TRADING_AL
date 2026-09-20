@@ -774,3 +774,63 @@ def test_controlled_learning_probe_uses_two_percent_position(tmp_path):
     assert result["opened"] == ["TESTUSDT"]
     assert manager.state["positions"]["TESTUSDT"]["allocation_pln"] == 20.0
     assert manager.state["positions"]["TESTUSDT"]["learning_probe"] is True
+
+
+def test_learning_probe_can_collect_sparse_validation_history(tmp_path):
+    manager = AIPaperManager(tmp_path / "ai_paper.json", assets=[])
+
+    row = {
+        "symbol": "TESTUSDT",
+        "strategy": "breakout",
+        "side": "LONG",
+        "eligible": False,
+        "live_signal": True,
+        "validated": False,
+        "exploratory": False,
+        # Conservative full score may still be negative when history is sparse.
+        "score": -0.0004,
+        "expected_net_return": 0.0030,
+        "neighbor_spread": 0.010,
+        "validation_trades": 0,
+        "validation_mean": None,
+        "supervisor_status": "LEARNING",
+    }
+
+    manager._apply_controlled_learning_probe(
+        row,
+        {"strategies": {"breakout": {"status": "LEARNING"}}},
+    )
+
+    assert row["eligible"] is True
+    assert row["learning_probe"] is True
+    assert row["exploratory"] is True
+    assert row["supervisor_exposure"] == CONTROLLED_LEARNING_EXPOSURE
+    assert row["learning_probe_edge"] > 0
+
+
+def test_learning_probe_rejects_materially_negative_validation(tmp_path):
+    manager = AIPaperManager(tmp_path / "ai_paper.json", assets=[])
+
+    row = {
+        "symbol": "TESTUSDT",
+        "strategy": "breakout",
+        "side": "LONG",
+        "eligible": False,
+        "live_signal": True,
+        "validated": False,
+        "exploratory": False,
+        "score": -0.0004,
+        "expected_net_return": 0.0030,
+        "neighbor_spread": 0.010,
+        "validation_trades": 2,
+        "validation_mean": -0.0030,
+        "supervisor_status": "LEARNING",
+    }
+
+    manager._apply_controlled_learning_probe(
+        row,
+        {"strategies": {"breakout": {"status": "LEARNING"}}},
+    )
+
+    assert row["eligible"] is False
+    assert row["learning_probe"] is False
