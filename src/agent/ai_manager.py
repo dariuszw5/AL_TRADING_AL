@@ -1,22 +1,21 @@
-"""Autonomous cross-market paper-trading account.
+"""Autonomous cross-market paper broker.
 
-Real market data, virtual PLN only. The module never sends real orders and has
-no broker/exchange execution credentials.
+Real market data, virtual PLN only. No broker connector, exchange API key or
+real-money order path exists in this module.
 
-The account is deliberately separated from the user's virtual PLN wallet:
-funding arrives through ai_control.json events created by the API after the
-user confirms a transfer.
+The account can hold several independent paper positions at once. Funding is
+received only through user-confirmed virtual PLN events in ai_control.json.
 """
 from __future__ import annotations
 
 from concurrent.futures import ThreadPoolExecutor
 from copy import deepcopy
 from datetime import datetime, timezone
+import json
 from math import isfinite, sqrt
 from pathlib import Path
 from statistics import mean, pstdev
 from time import time
-import json
 
 from src.agent.live_state_store import LiveStateStore
 from src.data.assets import SUPPORTED_ASSETS
@@ -26,17 +25,20 @@ MINUTE = 60_000
 HORIZON = 15
 FEE = 0.0004
 SLIPPAGE = 0.0005
-EXPOSURE = 0.25
+PER_POSITION_EXPOSURE = 0.15
+MAX_TOTAL_EXPOSURE = 0.75
+MAX_OPEN_POSITIONS = 5
 STOP = 0.012
 TAKE = 0.024
 STRATEGIES = ("trend", "mean_reversion", "breakout")
 SIDES = ("LONG", "SHORT")
-LEARNING_WEIGHT = 0.20
+LEARNING_WEIGHT = 0.15
 MAX_DRAWDOWN = 0.08
 MAX_DAILY_LOSS_PCT = 0.03
 MIN_VALIDATION_TRADES = 2
-MIN_MODEL_EDGE = 0.00035
-EXPLORATION_EDGE = 0.00150
+MIN_MODEL_EDGE = 0.00020
+EXPLORATION_EDGE = 0.00200
+MAX_EXPLORATION_SPREAD = 0.018
 
 
 def clean_candles(candles, now_ms):
@@ -107,7 +109,7 @@ def signal_side(strategy, candles, i):
 
 
 def exit_price(candle, entry, side, timed_out=False):
-    """Paper exit using deterministic stop/take/time rules."""
+    """Deterministic paper exit for both LONG and SHORT."""
     if side == "LONG":
         stop = entry * (1 - STOP)
         take = entry * (1 + TAKE)
@@ -139,15 +141,14 @@ def exit_price(candle, entry, side, timed_out=False):
 
 
 def net_return(entry, exit_value, side="LONG"):
-    """Fractional paper return after round-trip fee and slippage estimates."""
+    """Fractional paper return after estimated round-trip fee and slippage."""
     direction = 1.0 if side == "LONG" else -1.0
     gross = direction * (exit_value / entry - 1.0)
-    round_trip_cost = 2.0 * (FEE + SLIPPAGE)
-    return gross - round_trip_cost
+    return gross - 2.0 * (FEE + SLIPPAGE)
 
 
 def outcome(candles, i, side):
-    """Signal at close i; execute next open under the same risk/cost rules."""
+    """Signal at close i; execute at the next open with identical exit rules."""
     entry = candles[i + 1].open
     for j in range(i + 1, i + HORIZON + 1):
         value = exit_price(
@@ -176,7 +177,7 @@ class NearestReturnModel:
 
 
 def rank_asset(symbol, candles):
-    """Rank LONG/SHORT strategy candidates from rolling out-of-sample evidence."""
+    """Rank LONG/SHORT candidates using rolling out-of-sample evidence."""
     if len(candles) < 500:
         return []
 
@@ -225,8 +226,6 @@ def rank_asset(symbol, candles):
                     continue
 
                 estimate, uncertainty = model.predict(features(candles, i))
-                # Validation remains conservative, but no longer requires a
-                # perfect lower confidence bound on every historical entry.
                 if estimate <= -uncertainty:
                     continue
 
@@ -234,17 +233,15 @@ def rank_asset(symbol, candles):
                 next_free = i + HORIZON + 1
 
             validation_mean = mean(validation) if validation else None
-            conservative = prediction - 0.50 * spread
-            score = min(
-                conservative,
-                validation_mean if validation_mean is not None else conservative,
+            conservative = prediction - 0.35 * spread
+            score = (
+                min(conservative, validation_mean)
+                if validation_mean is not None
+                else conservative
             )
-
-            live_signal = signal_side(
-                strategy,
-                candles,
-                len(candles) - 1,
-            ) == side
+            live_signal = (
+                signal_side(strategy, candles, len(candles) - 1) == side
+            )
 
             validated = (
                 len(validation) >= MIN_VALIDATION_TRADES
@@ -255,38 +252,40 @@ def rank_asset(symbol, candles):
             exploration = (
                 live_signal
                 and prediction > EXPLORATION_EDGE
-                and validation_mean is not None
-                and validation_mean > -0.001
-                and len(validation) >= 1
+                and spread <= MAX_EXPLORATION_SPREAD
+                and (
+                    validation_mean is None
+                    or validation_mean > -0.001
+                )
             )
 
             rows.append(
-                dict(
-                    symbol=symbol,
-                    strategy=strategy,
-                    side=side,
-                    eligible=bool(live_signal and (validated or exploration)),
-                    live_signal=bool(live_signal),
-                    validated=bool(validated),
-                    exploratory=bool(exploration and not validated),
-                    score=score,
-                    expected_net_return=prediction,
-                    neighbor_spread=spread,
-                    validation_trades=len(validation),
-                    validation_mean=validation_mean,
-                    train_samples=len(train_indices),
-                    train_label_end=candles[
+                {
+                    "symbol": symbol,
+                    "strategy": strategy,
+                    "side": side,
+                    "eligible": bool(live_signal and (validated or exploration)),
+                    "live_signal": bool(live_signal),
+                    "validated": bool(validated),
+                    "exploratory": bool(exploration and not validated),
+                    "score": score,
+                    "expected_net_return": prediction,
+                    "neighbor_spread": spread,
+                    "validation_trades": len(validation),
+                    "validation_mean": validation_mean,
+                    "train_samples": len(train_indices),
+                    "train_label_end": candles[
                         train_indices[-1] + HORIZON
                     ].timestamp,
-                    validation_start=candles[boundary].timestamp,
-                )
+                    "validation_start": candles[boundary].timestamp,
+                }
             )
 
     return rows
 
 
 class AIPaperManager:
-    """One-account autonomous paper broker selecting across all supplied assets."""
+    """One virtual PLN account with several simultaneous market positions."""
 
     def __init__(self, path, assets=SUPPORTED_ASSETS, control_path=None):
         self.assets = tuple(assets)
@@ -297,120 +296,154 @@ class AIPaperManager:
 
         loaded = self.store.load()
         if (
-            not loaded
-            or loaded.get("version") != 2
-            or loaded.get("mode") != "PAPER_ONLY"
-            or loaded.get("unit") != "PLN"
+            loaded
+            and loaded.get("mode") == "PAPER_ONLY"
+            and loaded.get("unit") == "PLN"
+            and loaded.get("version") in {2, 3}
         ):
-            self.state = self._fresh_state()
+            self.state = self._migrate_pln_state(loaded)
         else:
-            self.state = loaded
-            self._normalize_state()
+            self.state = self._fresh_state()
 
     def _fresh_state(self):
-        return dict(
-            version=2,
-            mode="PAPER_ONLY",
-            model="cross-market k-NN v2 long-short",
-            unit="PLN",
-            initial_balance=0.0,
-            funded_capital=0.0,
-            balance=0.0,
-            equity=0.0,
-            peak=0.0,
-            daily_loss=0.0,
-            day=None,
-            realized_pnl=0.0,
-            unrealized_pnl=0.0,
-            position=None,
-            pending=None,
-            decisions=[],
-            trades=[],
-            last_cycle=0,
-            applied_control_ids=[],
-            funding_received=0.0,
-            strategy_learning={
-                strategy: dict(
-                    trades=0,
-                    wins=0,
-                    total_return=0.0,
-                )
+        return {
+            "version": 3,
+            "mode": "PAPER_ONLY",
+            "model": "cross-market multi-position k-NN v3 long-short",
+            "unit": "PLN",
+            "initial_balance": 0.0,
+            "funded_capital": 0.0,
+            "balance": 0.0,
+            "equity": 0.0,
+            "peak": 0.0,
+            "daily_loss": 0.0,
+            "day": None,
+            "realized_pnl": 0.0,
+            "unrealized_pnl": 0.0,
+            "positions": {},
+            "pending": [],
+            "decisions": [],
+            "trades": [],
+            "last_cycle": 0,
+            "applied_control_ids": [],
+            "funding_received": 0.0,
+            "market_marks": {},
+            "strategy_learning": {
+                strategy: {
+                    "trades": 0,
+                    "wins": 0,
+                    "total_return": 0.0,
+                }
                 for strategy in STRATEGIES
             },
-        )
+        }
 
-    def _normalize_state(self):
-        s = self.state
-        s.setdefault("funded_capital", s.get("initial_balance", 0.0))
-        s.setdefault("realized_pnl", s.get("balance", 0.0) - s.get("initial_balance", 0.0))
-        s.setdefault("unrealized_pnl", s.get("equity", 0.0) - s.get("balance", 0.0))
-        s.setdefault("applied_control_ids", [])
-        s.setdefault("funding_received", s.get("initial_balance", 0.0))
-        s.setdefault("strategy_learning", {})
+    def _migrate_pln_state(self, loaded):
+        if loaded.get("version") == 3:
+            state = loaded
+        else:
+            state = self._fresh_state()
+            for key in (
+                "initial_balance",
+                "funded_capital",
+                "balance",
+                "equity",
+                "peak",
+                "daily_loss",
+                "day",
+                "realized_pnl",
+                "unrealized_pnl",
+                "decisions",
+                "trades",
+                "last_cycle",
+                "applied_control_ids",
+                "funding_received",
+                "strategy_learning",
+            ):
+                if key in loaded:
+                    state[key] = deepcopy(loaded[key])
+
+            old_position = loaded.get("position")
+            if old_position and old_position.get("symbol"):
+                state["positions"] = {
+                    old_position["symbol"]: deepcopy(old_position)
+                }
+            old_pending = loaded.get("pending")
+            if old_pending:
+                state["pending"] = [deepcopy(old_pending)]
+
+        state["version"] = 3
+        state["model"] = "cross-market multi-position k-NN v3 long-short"
+        state.setdefault("positions", {})
+        state.setdefault("pending", [])
+        state.setdefault("market_marks", {})
+        state.setdefault("applied_control_ids", [])
+        state.setdefault("funding_received", state.get("initial_balance", 0.0))
+        state.setdefault("funded_capital", state.get("initial_balance", 0.0))
+        state.setdefault("strategy_learning", {})
         for strategy in STRATEGIES:
-            s["strategy_learning"].setdefault(
+            state["strategy_learning"].setdefault(
                 strategy,
-                dict(trades=0, wins=0, total_return=0.0),
+                {"trades": 0, "wins": 0, "total_return": 0.0},
             )
+        return state
 
     def _record(self, now_ms, action, reason, **extra):
-        decision = dict(
-            timestamp=now_ms,
-            action=action,
-            reason=reason,
+        decision = {
+            "timestamp": now_ms,
+            "action": action,
+            "reason": reason,
             **extra,
-        )
+        }
         self.state["decision"] = decision
         self.state["decisions"] = (
             self.state["decisions"] + [decision]
-        )[-300:]
+        )[-500:]
 
     def _load_control(self):
         try:
             with self.control_path.open(encoding="utf-8-sig") as handle:
                 value = json.load(handle)
-            if not isinstance(value, dict):
-                return {}
-            return value
+            return value if isinstance(value, dict) else {}
         except (OSError, ValueError, TypeError):
             return {}
 
     def _apply_control(self):
-        """Apply API-created funding events exactly once."""
         control = self._load_control()
         events = control.get("funding_events") or []
         applied = set(self.state.get("applied_control_ids") or [])
 
-        changed = False
         for event in events:
             event_id = str(event.get("id") or "")
             if not event_id or event_id in applied:
                 continue
 
             amount = float(event.get("amount") or 0.0)
+            applied.add(event_id)
             if amount <= 0:
-                applied.add(event_id)
-                changed = True
                 continue
 
             self.state["balance"] += amount
-            self.state["equity"] += amount
             self.state["initial_balance"] += amount
             self.state["funded_capital"] += amount
             self.state["funding_received"] += amount
+            self.state["equity"] += amount
             self.state["peak"] = max(
                 self.state["peak"] + amount,
                 self.state["equity"],
             )
-            applied.add(event_id)
-            changed = True
 
-        if changed:
-            self.state["applied_control_ids"] = list(applied)[-500:]
+        self.state["applied_control_ids"] = list(applied)[-500:]
 
     def _daily_loss_limit(self):
         funded = max(float(self.state.get("funded_capital") or 0.0), 0.0)
         return max(1.0, funded * MAX_DAILY_LOSS_PCT)
+
+    def _allocated_principal(self):
+        return sum(
+            float(position.get("allocation_pln") or 0.0)
+            for position in self.state["positions"].values()
+        )
 
     def _blocked(self):
         s = self.state
@@ -421,73 +454,194 @@ class AIPaperManager:
             or s["daily_loss"] >= self._daily_loss_limit()
         )
 
-    def _manage_position(self, markets):
+    def _mark_equity(self):
         s = self.state
-        position = s["position"]
-        bars = markets.get(position["symbol"], [])
+        unrealized = sum(
+            float(position.get("unrealized_pnl") or 0.0)
+            for position in s["positions"].values()
+        )
+        principal = self._allocated_principal()
+        s["unrealized_pnl"] = unrealized
+        s["equity"] = s["balance"] + principal + unrealized
+        s["peak"] = max(s["peak"], s["equity"])
 
-        for candle in bars:
-            if candle.timestamp <= position["last_timestamp"]:
-                continue
+    def _manage_positions(self, markets):
+        s = self.state
+        closed = []
 
-            position["last_timestamp"] = candle.timestamp
-            result = exit_price(
-                candle,
-                position["entry"],
-                position["side"],
-                candle.timestamp >= position["exit_at"],
-            )
-            mark = result[0] if result else candle.close
+        for symbol, position in list(s["positions"].items()):
+            bars = markets.get(symbol, [])
+            for candle in bars:
+                if candle.timestamp <= position["last_timestamp"]:
+                    continue
 
-            open_pnl = position["allocation_pln"] * net_return(
-                position["entry"],
-                mark,
-                position["side"],
-            )
-            s["equity"] = s["balance"] + open_pnl
-            s["unrealized_pnl"] = open_pnl
-            s["peak"] = max(s["peak"], s["equity"])
-
-            if result is None and self._blocked():
-                result = (candle.close, "RISK_LIMIT")
-
-            if result:
-                trade_return = net_return(
+                position["last_timestamp"] = candle.timestamp
+                result = exit_price(
+                    candle,
                     position["entry"],
-                    result[0],
+                    position["side"],
+                    candle.timestamp >= position["exit_at"],
+                )
+                mark = result[0] if result else candle.close
+                position["mark_price"] = mark
+                position["unrealized_pnl"] = position[
+                    "allocation_pln"
+                ] * net_return(
+                    position["entry"],
+                    mark,
                     position["side"],
                 )
-                profit = position["allocation_pln"] * trade_return
 
-                s["balance"] += profit
-                s["equity"] = s["balance"]
-                s["realized_pnl"] = s["balance"] - s["initial_balance"]
-                s["unrealized_pnl"] = 0.0
-                s["daily_loss"] += max(0.0, -profit)
+                if result is None and self._blocked():
+                    result = (candle.close, "RISK_LIMIT")
 
-                learning = s["strategy_learning"].setdefault(
-                    position["strategy"],
-                    dict(trades=0, wins=0, total_return=0.0),
-                )
-                learning["trades"] += 1
-                learning["wins"] += int(profit > 0)
-                learning["total_return"] += trade_return
+                if result:
+                    trade_return = net_return(
+                        position["entry"],
+                        result[0],
+                        position["side"],
+                    )
+                    profit = position["allocation_pln"] * trade_return
+                    s["balance"] += position["allocation_pln"] + profit
+                    s["realized_pnl"] += profit
+                    s["daily_loss"] += max(0.0, -profit)
 
-                s["trades"] = (
-                    s["trades"]
-                    + [
-                        dict(
-                            **position,
-                            exit_price=result[0],
-                            exit_timestamp=candle.timestamp,
-                            profit=profit,
-                            return_fraction=trade_return,
-                            reason=result[1],
-                        )
-                    ]
-                )[-500:]
-                s["position"] = None
+                    learning = s["strategy_learning"].setdefault(
+                        position["strategy"],
+                        {"trades": 0, "wins": 0, "total_return": 0.0},
+                    )
+                    learning["trades"] += 1
+                    learning["wins"] += int(profit > 0)
+                    learning["total_return"] += trade_return
+
+                    s["trades"] = (
+                        s["trades"]
+                        + [
+                            {
+                                **position,
+                                "exit_price": result[0],
+                                "exit_timestamp": candle.timestamp,
+                                "profit": profit,
+                                "return_fraction": trade_return,
+                                "reason": result[1],
+                            }
+                        ]
+                    )[-1000:]
+                    closed.append(symbol)
+                    break
+
+        for symbol in closed:
+            s["positions"].pop(symbol, None)
+
+        self._mark_equity()
+
+    def _execute_pending(self, fresh):
+        s = self.state
+        remaining = []
+
+        for pending in list(s.get("pending") or []):
+            if len(s["positions"]) >= MAX_OPEN_POSITIONS:
+                remaining.append(pending)
+                continue
+
+            symbol = pending["symbol"]
+            if symbol in s["positions"] or self._blocked():
+                continue
+
+            bars = fresh.get(symbol, [])
+            entry_bar = next(
+                (
+                    candle
+                    for candle in bars
+                    if candle.timestamp == pending["entry_at"]
+                ),
+                None,
+            )
+            if entry_bar is None:
+                if bars and bars[-1].timestamp < pending["entry_at"]:
+                    remaining.append(pending)
+                continue
+
+            equity_base = max(s["equity"], s["balance"])
+            target = equity_base * PER_POSITION_EXPOSURE
+            total_cap = equity_base * MAX_TOTAL_EXPOSURE
+            remaining_cap = max(0.0, total_cap - self._allocated_principal())
+            allocation = min(target, remaining_cap, s["balance"])
+            if allocation <= 0:
+                continue
+
+            side = pending["side"]
+            entry = entry_bar.open
+            s["balance"] -= allocation
+            s["positions"][symbol] = {
+                "symbol": symbol,
+                "strategy": pending["strategy"],
+                "side": side,
+                "entry": entry,
+                "allocation_pln": allocation,
+                "entry_timestamp": entry_bar.timestamp,
+                "last_timestamp": entry_bar.timestamp - MINUTE,
+                "exit_at": entry_bar.timestamp + (HORIZON - 1) * MINUTE,
+                "stop_loss": (
+                    entry * (1 - STOP)
+                    if side == "LONG"
+                    else entry * (1 + STOP)
+                ),
+                "take_profit": (
+                    entry * (1 + TAKE)
+                    if side == "LONG"
+                    else entry * (1 - TAKE)
+                ),
+                "mark_price": entry,
+                "unrealized_pnl": -allocation * 2.0 * (FEE + SLIPPAGE),
+                "score": pending.get("score"),
+                "exploratory": pending.get("exploratory", False),
+            }
+
+        s["pending"] = remaining
+        self._mark_equity()
+
+    def _select_new_pending(self, rows, fresh, now_ms):
+        s = self.state
+        occupied = set(s["positions"])
+        occupied.update(
+            pending["symbol"]
+            for pending in s.get("pending") or []
+            if pending.get("symbol")
+        )
+
+        slots = MAX_OPEN_POSITIONS - len(s["positions"]) - len(s["pending"])
+        if slots <= 0 or self._blocked():
+            return []
+
+        eligible = [row for row in rows if row.get("eligible")]
+        selected = []
+
+        for row in eligible:
+            symbol = row["symbol"]
+            if symbol in occupied:
+                continue
+            latest_bar = fresh.get(symbol, [None])[-1]
+            if latest_bar is None:
+                continue
+
+            selected.append(
+                {
+                    "symbol": symbol,
+                    "strategy": row["strategy"],
+                    "side": row["side"],
+                    "timestamp": latest_bar.timestamp,
+                    "entry_at": ((now_ms + MINUTE - 1) // MINUTE) * MINUTE,
+                    "score": row["score"],
+                    "exploratory": row.get("exploratory", False),
+                }
+            )
+            occupied.add(symbol)
+            if len(selected) >= slots:
                 break
+
+        s["pending"].extend(selected)
+        return selected
 
     def step(self, raw_markets, now_ms, errors=None):
         previous = deepcopy(self.state)
@@ -534,24 +688,33 @@ class AIPaperManager:
         for symbol in markets.keys() - fresh.keys():
             issues[symbol] = "Rynek zamknięty, stare dane lub luka w świecach"
 
-        # A confirmed transfer is required before any paper trade can start.
-        if s["balance"] <= 0 and s["position"] is None:
+        s["market_marks"] = {
+            symbol: {
+                "price": float(bars[-1].close),
+                "timestamp": int(bars[-1].timestamp),
+            }
+            for symbol, bars in fresh.items()
+        }
+
+        if s["balance"] <= 0 and not s["positions"]:
             s.update(
                 ranking=[],
                 data_issues=issues,
                 last_cycle=now_ms,
-                limits=dict(
-                    exposure=EXPOSURE,
-                    daily_loss_pct=MAX_DAILY_LOSS_PCT,
-                    drawdown=MAX_DRAWDOWN,
-                    stop=STOP,
-                    take=TAKE,
-                    horizon_minutes=HORIZON,
-                ),
+                pending=[],
+                equity=0.0,
+                unrealized_pnl=0.0,
+                limits={
+                    "per_position_exposure": PER_POSITION_EXPOSURE,
+                    "max_total_exposure": MAX_TOTAL_EXPOSURE,
+                    "max_open_positions": MAX_OPEN_POSITIONS,
+                    "daily_loss_pct": MAX_DAILY_LOSS_PCT,
+                    "drawdown": MAX_DRAWDOWN,
+                    "stop": STOP,
+                    "take": TAKE,
+                    "horizon_minutes": HORIZON,
+                },
             )
-            s["pending"] = None
-            s["equity"] = s["balance"]
-            s["unrealized_pnl"] = 0.0
             self._record(
                 now_ms,
                 "WAIT_FUNDS",
@@ -559,56 +722,8 @@ class AIPaperManager:
             )
             return s
 
-        pending = s.pop("pending", None)
-        s["pending"] = None
-
-        if pending and not s["position"] and not self._blocked():
-            bars = fresh.get(pending["symbol"], [])
-            entry_at = pending["entry_at"]
-            entry_bar = next(
-                (
-                    candle
-                    for candle in bars
-                    if candle.timestamp == entry_at
-                ),
-                None,
-            )
-
-            if entry_bar:
-                allocation = min(
-                    max(0.0, s["balance"] * EXPOSURE),
-                    s["balance"],
-                )
-                side = pending["side"]
-                entry = entry_bar.open
-                s["position"] = dict(
-                    symbol=pending["symbol"],
-                    strategy=pending["strategy"],
-                    side=side,
-                    entry=entry,
-                    allocation_pln=allocation,
-                    entry_timestamp=entry_bar.timestamp,
-                    last_timestamp=entry_bar.timestamp - MINUTE,
-                    exit_at=entry_bar.timestamp + (HORIZON - 1) * MINUTE,
-                    stop_loss=(
-                        entry * (1 - STOP)
-                        if side == "LONG"
-                        else entry * (1 + STOP)
-                    ),
-                    take_profit=(
-                        entry * (1 + TAKE)
-                        if side == "LONG"
-                        else entry * (1 - TAKE)
-                    ),
-                )
-            elif bars and bars[-1].timestamp < entry_at:
-                s["pending"] = pending
-
-        if s["position"]:
-            self._manage_position(markets)
-        else:
-            s["unrealized_pnl"] = 0.0
-            s["equity"] = s["balance"]
+        self._execute_pending(fresh)
+        self._manage_positions(fresh)
 
         rows = []
         for symbol, bars in fresh.items():
@@ -617,13 +732,8 @@ class AIPaperManager:
             if not ranked:
                 issues[symbol] = "Za mało danych do treningu i walidacji"
 
-        rows.sort(key=lambda row: row["score"], reverse=True)
-
         for row in rows:
-            learning = s["strategy_learning"].get(
-                row["strategy"],
-                {},
-            )
+            learning = s["strategy_learning"].get(row["strategy"], {})
             sample_count = int(learning.get("trades", 0))
             observed = (
                 learning.get("total_return", 0.0) / sample_count
@@ -641,87 +751,76 @@ class AIPaperManager:
             )
             row["score"] += row["learning_bonus"]
 
-        rows.sort(key=lambda row: row["score"], reverse=True)
+        rows.sort(
+            key=lambda row: (
+                bool(row.get("eligible")),
+                float(row.get("score") or -999.0),
+                float(row.get("expected_net_return") or -999.0),
+            ),
+            reverse=True,
+        )
+
+        selected = self._select_new_pending(rows, fresh, now_ms)
+        self._mark_equity()
 
         s.update(
             ranking=rows,
             data_issues=issues,
             last_cycle=now_ms,
-            limits=dict(
-                exposure=EXPOSURE,
-                daily_loss_pct=MAX_DAILY_LOSS_PCT,
-                daily_loss_limit_pln=self._daily_loss_limit(),
-                drawdown=MAX_DRAWDOWN,
-                stop=STOP,
-                take=TAKE,
-                horizon_minutes=HORIZON,
-            ),
+            limits={
+                "per_position_exposure": PER_POSITION_EXPOSURE,
+                "max_total_exposure": MAX_TOTAL_EXPOSURE,
+                "max_open_positions": MAX_OPEN_POSITIONS,
+                "daily_loss_pct": MAX_DAILY_LOSS_PCT,
+                "daily_loss_limit_pln": self._daily_loss_limit(),
+                "drawdown": MAX_DRAWDOWN,
+                "stop": STOP,
+                "take": TAKE,
+                "horizon_minutes": HORIZON,
+            },
         )
 
         if self._blocked():
-            s["pending"] = None
+            s["pending"] = []
             self._record(
                 now_ms,
                 "HALT",
                 "Limit dziennej straty lub obsunięcia kapitału",
+                open_positions=len(s["positions"]),
             )
-        elif s["position"]:
+        elif selected:
             self._record(
                 now_ms,
-                "HOLD",
-                "Zarządzanie otwartą pozycją",
-                **{
-                    key: s["position"][key]
-                    for key in ("symbol", "strategy", "side")
-                },
+                "SELECT_MULTI",
+                "Wybrano nowe sygnały na różnych aktywach",
+                symbols=[row["symbol"] for row in selected],
+                sides=[row["side"] for row in selected],
+                open_positions=len(s["positions"]),
+                pending_count=len(s["pending"]),
+            )
+        elif s["positions"]:
+            self._record(
+                now_ms,
+                "HOLD_MULTI",
+                "Zarządzanie otwartymi pozycjami na wielu rynkach",
+                symbols=list(s["positions"]),
+                open_positions=len(s["positions"]),
+                pending_count=len(s["pending"]),
             )
         elif s["pending"]:
             self._record(
                 now_ms,
-                "WAIT",
-                "Oczekiwanie na następną zamkniętą świecę",
-                symbol=s["pending"]["symbol"],
-                strategy=s["pending"]["strategy"],
-                side=s["pending"]["side"],
+                "WAIT_MULTI",
+                "Oczekiwanie na kolejne zamknięte świece dla wybranych rynków",
+                symbols=[row["symbol"] for row in s["pending"]],
+                pending_count=len(s["pending"]),
             )
         else:
-            eligible = [
-                row
-                for row in rows
-                if row["eligible"]
-            ]
-
-            if eligible:
-                best = eligible[0]
-                latest_bar = fresh[best["symbol"]][-1]
-                s["pending"] = dict(
-                    symbol=best["symbol"],
-                    strategy=best["strategy"],
-                    side=best["side"],
-                    timestamp=latest_bar.timestamp,
-                    entry_at=((now_ms + MINUTE - 1) // MINUTE) * MINUTE,
-                    score=best["score"],
-                    exploratory=best.get("exploratory", False),
-                )
-                self._record(
-                    now_ms,
-                    "SELECT",
-                    (
-                        "Wybrano sygnał paper po kosztach i kontroli ryzyka"
-                        if not best.get("exploratory")
-                        else "Wybrano kontrolowany sygnał eksploracyjny paper"
-                    ),
-                    symbol=best["symbol"],
-                    strategy=best["strategy"],
-                    side=best["side"],
-                    score=best["score"],
-                )
-            else:
-                self._record(
-                    now_ms,
-                    "CASH",
-                    "Brak aktywnego sygnału spełniającego warunki paper po kosztach",
-                )
+            self._record(
+                now_ms,
+                "CASH",
+                "Brak aktywnych sygnałów spełniających warunki paper po kosztach",
+            )
 
         return s
 
@@ -740,7 +839,7 @@ class AIPaperManager:
             except Exception as exc:
                 return asset.symbol, [], str(exc)
 
-        workers = min(6, max(1, len(self.assets)))
+        workers = min(8, max(1, len(self.assets)))
         with ThreadPoolExecutor(max_workers=workers) as pool:
             results = list(pool.map(fetch, self.assets))
 
