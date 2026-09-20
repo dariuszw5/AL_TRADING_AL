@@ -3,6 +3,7 @@ from types import SimpleNamespace
 
 from src.agent.ai_manager import (
     AIPaperManager,
+    CONTROLLED_LEARNING_EXPOSURE,
     EXPLORATION_POSITION_EXPOSURE,
     MAX_EXPLORATORY_POSITIONS,
     MAX_DAILY_LOSS_PCT,
@@ -631,3 +632,145 @@ def test_loaded_state_rebuilds_current_day_loss_from_net_trade_history(tmp_path)
     # The old gross-loss counter (65 PLN) is replaced by same-day net PnL.
     assert manager.state["daily_realized_pnl"] == -25.0
     assert manager.state["daily_loss"] == 25.0
+
+
+def test_controlled_learning_probe_accepts_positive_learning_signal(tmp_path):
+    manager = AIPaperManager(tmp_path / "ai_paper.json", assets=[])
+
+    row = {
+        "symbol": "TESTUSDT",
+        "strategy": "breakout",
+        "side": "LONG",
+        "eligible": False,
+        "live_signal": True,
+        "validated": False,
+        "exploratory": False,
+        "score": 0.0008,
+        "expected_net_return": 0.0030,
+        "neighbor_spread": 0.010,
+        "validation_trades": 2,
+        "validation_mean": 0.0002,
+        "supervisor_status": "LEARNING",
+    }
+    supervisor = {
+        "strategies": {
+            "breakout": {
+                "status": "LEARNING",
+                "reason": "collecting live evidence",
+            }
+        }
+    }
+
+    manager._apply_controlled_learning_probe(row, supervisor)
+
+    assert row["eligible"] is True
+    assert row["exploratory"] is True
+    assert row["learning_probe"] is True
+    assert row["supervisor_exposure"] == CONTROLLED_LEARNING_EXPOSURE
+    assert row["eligibility_reason"] == "CONTROLLED_LEARNING_PROBE"
+
+
+def test_controlled_learning_probe_never_revives_negative_model_edge(tmp_path):
+    manager = AIPaperManager(tmp_path / "ai_paper.json", assets=[])
+
+    row = {
+        "symbol": "TESTUSDT",
+        "strategy": "breakout",
+        "side": "LONG",
+        "eligible": False,
+        "live_signal": True,
+        "validated": False,
+        "exploratory": False,
+        "score": -0.001,
+        "expected_net_return": -0.002,
+        "neighbor_spread": 0.010,
+        "validation_trades": 4,
+        "validation_mean": -0.001,
+        "supervisor_status": "LEARNING",
+    }
+
+    manager._apply_controlled_learning_probe(
+        row,
+        {"strategies": {"breakout": {"status": "LEARNING"}}},
+    )
+
+    assert row["eligible"] is False
+    assert row["learning_probe"] is False
+    assert row["eligibility_reason"] == "MODEL_OR_VALIDATION_REJECTED"
+
+
+def test_paused_strategy_needs_stronger_edge_for_learning_probe(tmp_path):
+    manager = AIPaperManager(tmp_path / "ai_paper.json", assets=[])
+    supervisor = {"strategies": {"trend": {"status": "PAUSED"}}}
+
+    weak = {
+        "symbol": "AAAUSDT",
+        "strategy": "trend",
+        "side": "LONG",
+        "eligible": False,
+        "live_signal": True,
+        "validated": False,
+        "exploratory": False,
+        "score": 0.0010,
+        "expected_net_return": 0.0025,
+        "neighbor_spread": 0.010,
+        "validation_trades": 3,
+        "validation_mean": 0.0004,
+        "supervisor_status": "PAUSED",
+    }
+    manager._apply_controlled_learning_probe(weak, supervisor)
+    assert weak["eligible"] is False
+
+    strong = dict(
+        weak,
+        symbol="BBBUSDT",
+        score=0.0018,
+        expected_net_return=0.0035,
+        validation_mean=0.0007,
+        eligibility_reason=None,
+    )
+    manager._apply_controlled_learning_probe(strong, supervisor)
+
+    assert strong["eligible"] is True
+    assert strong["learning_probe"] is True
+    assert strong["supervisor_exposure"] == CONTROLLED_LEARNING_EXPOSURE
+
+
+def test_controlled_learning_probe_uses_two_percent_position(tmp_path):
+    manager = AIPaperManager(tmp_path / "ai_paper.json", assets=[])
+    _fund_manager(manager)
+
+    manager.state["pending"] = [
+        {
+            "symbol": "TESTUSDT",
+            "strategy": "breakout",
+            "side": "LONG",
+            "timestamp": 60_000,
+            "signal_timestamp": 60_000,
+            "score": 0.001,
+            "exploratory": True,
+            "learning_probe": True,
+        }
+    ]
+
+    result = manager._execute_pending(
+        {"TESTUSDT": [_candle(120_000, 100.0), _candle(150_000, 101.0)]},
+        {"TESTUSDT": [_candle(120_000, 100.0)]},
+        [
+            {
+                "symbol": "TESTUSDT",
+                "strategy": "breakout",
+                "side": "LONG",
+                "eligible": True,
+                "score": 0.0012,
+                "exploratory": True,
+                "learning_probe": True,
+                "supervisor_exposure": CONTROLLED_LEARNING_EXPOSURE,
+            }
+        ],
+        150_000,
+    )
+
+    assert result["opened"] == ["TESTUSDT"]
+    assert manager.state["positions"]["TESTUSDT"]["allocation_pln"] == 20.0
+    assert manager.state["positions"]["TESTUSDT"]["learning_probe"] is True
