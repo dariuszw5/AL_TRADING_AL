@@ -1,0 +1,73 @@
+name: Build Android APK
+
+on:
+  push:
+    branches:
+      - feature/mobile-android-v1
+    paths:
+      - "app/frontend/al_trading_dashboard/**"
+      - ".github/workflows/build-mobile-apk.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  android:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Flutter version
+        run: flutter --version
+
+      - name: Dependencies
+        working-directory: app/frontend/al_trading_dashboard
+        run: flutter pub get
+
+      - name: Analyze
+        working-directory: app/frontend/al_trading_dashboard
+        run: flutter analyze
+
+      - name: Tests
+        working-directory: app/frontend/al_trading_dashboard
+        run: flutter test
+
+      - name: Build release APK
+        working-directory: app/frontend/al_trading_dashboard
+        run: >
+          flutter build apk --release
+          --dart-define=AL_TRADING_API_BASE_URL=http://34.45.151.160:8000
+
+      - name: Prepare APK
+        run: |
+          cp app/frontend/al_trading_dashboard/build/app/outputs/flutter-apk/app-release.apk al-trading-agent.apk
+          ls -lh al-trading-agent.apk
+
+      - name: Upload workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: al-trading-agent-android
+          path: al-trading-agent.apk
+          if-no-files-found: error
+
+      - name: Publish GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG="mobile-v1-${GITHUB_RUN_NUMBER}"
+          gh release create "$TAG"             "./al-trading-agent.apk#AL Trading Agent Android APK"             --repo "${GITHUB_REPOSITORY}"             --target "${GITHUB_SHA}"             --title "AL Trading Agent Mobile ${GITHUB_RUN_NUMBER}"             --notes "Android APK. Real market data, virtual money only. API: http://34.45.151.160:8000"
