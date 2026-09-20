@@ -19,6 +19,10 @@ from time import time
 from uuid import uuid4
 
 from src.agent.live_state_store import LiveStateStore
+from src.agent.strategy_supervisor import (
+    build_strategy_supervisor,
+    supervise_candidate,
+)
 from src.data.assets import SUPPORTED_ASSETS
 from src.data.data_provider import DataProvider
 
@@ -313,7 +317,7 @@ class AIPaperManager:
         return {
             "version": 3,
             "mode": "PAPER_ONLY",
-            "model": "cross-market multi-position k-NN v3.1 guarded long-short",
+            "model": "cross-market multi-position k-NN v3.2 supervised long-short",
             "unit": "PLN",
             "initial_balance": 0.0,
             "funded_capital": 0.0,
@@ -336,6 +340,7 @@ class AIPaperManager:
             "accounting_gap": 0.0,
             "accounting_error": False,
             "market_marks": {},
+            "strategy_supervisor": {},
             "strategy_learning": {
                 strategy: {
                     "trades": 0,
@@ -398,7 +403,7 @@ class AIPaperManager:
                 state["pending"] = [deepcopy(old_pending)]
 
         state["version"] = 3
-        state["model"] = "cross-market multi-position k-NN v3.1 guarded long-short"
+        state["model"] = "cross-market multi-position k-NN v3.2 supervised long-short"
         state.setdefault("positions", {})
         state.setdefault("pending", [])
         state.setdefault("market_marks", {})
@@ -409,6 +414,7 @@ class AIPaperManager:
         state.setdefault("profit_transfers", [])
         state.setdefault("accounting_gap", 0.0)
         state.setdefault("accounting_error", False)
+        state.setdefault("strategy_supervisor", {})
         state.setdefault("strategy_learning", {})
         for strategy in STRATEGIES:
             state["strategy_learning"].setdefault(
@@ -765,8 +771,11 @@ class AIPaperManager:
                     float(s.get("equity") or 0.0),
                 ),
             )
+            supervisor_exposure = confirmed.get("supervisor_exposure")
             exposure = (
-                EXPLORATION_POSITION_EXPOSURE
+                float(supervisor_exposure)
+                if supervisor_exposure is not None
+                else EXPLORATION_POSITION_EXPOSURE
                 if confirmed.get("exploratory")
                 else PER_POSITION_EXPOSURE
             )
@@ -814,6 +823,11 @@ class AIPaperManager:
                 "selected_score": pending.get("score"),
                 "confirmed_timestamp": bars[-1].timestamp,
                 "exploratory": confirmed.get("exploratory", False),
+                "supervisor_status": confirmed.get("supervisor_status"),
+                "supervisor_probation": confirmed.get(
+                    "supervisor_probation",
+                    False,
+                ),
             }
             opened.append(symbol)
 
@@ -868,6 +882,12 @@ class AIPaperManager:
                     "selected_at": now_ms,
                     "score": row["score"],
                     "exploratory": row.get("exploratory", False),
+                    "supervisor_status": row.get("supervisor_status"),
+                    "supervisor_probation": row.get(
+                        "supervisor_probation",
+                        False,
+                    ),
+                    "supervisor_exposure": row.get("supervisor_exposure"),
                 }
             )
             if row.get("exploratory"):
@@ -968,6 +988,10 @@ class AIPaperManager:
         for row in rows:
             self._apply_live_learning(row)
 
+        supervisor = build_strategy_supervisor(s["trades"], STRATEGIES)
+        for row in rows:
+            supervise_candidate(row, supervisor)
+
         rows.sort(
             key=lambda row: (
                 bool(row.get("eligible")),
@@ -995,6 +1019,7 @@ class AIPaperManager:
             last_cycle=now_ms,
             last_pending_opened=pending_result["opened"],
             last_pending_cancelled=pending_result["cancelled"],
+            strategy_supervisor=supervisor,
             limits={
                 "per_position_exposure": PER_POSITION_EXPOSURE,
                 "exploration_position_exposure": EXPLORATION_POSITION_EXPOSURE,
