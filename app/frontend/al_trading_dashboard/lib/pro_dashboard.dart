@@ -29,7 +29,8 @@ class ProDashboard extends StatefulWidget {
   State<ProDashboard> createState() => _ProDashboardState();
 }
 
-class _ProDashboardState extends State<ProDashboard> {
+class _ProDashboardState extends State<ProDashboard>
+    with SingleTickerProviderStateMixin {
   List<Map<String, dynamic>> assets = [];
   Map<String, dynamic>? research;
   Map<String, dynamic>? ai;
@@ -37,6 +38,7 @@ class _ProDashboardState extends State<ProDashboard> {
   String? failure;
   DateTime? received;
   Timer? timer;
+  late final AnimationController activityPulse;
   bool busy = false;
   Future<void>? refreshInFlight;
   int page = 0;
@@ -63,6 +65,12 @@ class _ProDashboardState extends State<ProDashboard> {
   @override
   void initState() {
     super.initState();
+    activityPulse = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1100),
+      lowerBound: 0.0,
+      upperBound: 1.0,
+    )..repeat(reverse: true);
     refresh();
     timer = Timer.periodic(const Duration(seconds: 5), (_) => refresh());
   }
@@ -70,6 +78,7 @@ class _ProDashboardState extends State<ProDashboard> {
   @override
   void dispose() {
     timer?.cancel();
+    activityPulse.dispose();
     super.dispose();
   }
 
@@ -486,27 +495,33 @@ class _ProDashboardState extends State<ProDashboard> {
         realized: realized,
         unrealized: unrealized,
       ),
-      stat(
-        'Pozycje otwarte',
-        positions.isEmpty ? 'BRAK' : '${positions.length} OTWARTE',
-        Icons.workspaces_outline,
-        color: positions.isEmpty ? muted : mint,
+      positionStatusCard(
+        title: 'Pozycje otwarte',
+        value: positions.isEmpty ? 'BRAK' : '${positions.length} OTWARTE',
+        icon: Icons.play_circle_outline_rounded,
+        color: mint,
+        active: positions.isNotEmpty,
+        status: positions.isEmpty ? 'BRAK AKCJI' : 'AKTYWNE',
         detail: positions.isEmpty
             ? 'Brak aktywnych pozycji'
             : positions.entries.take(4).map((entry) {
                 final p = asMap(entry.value);
-                return '${entry.key} ${p['side'] ?? ''}';
+                final pnl =
+                    (p['unrealized_pnl'] as num?)?.toDouble() ?? 0.0;
+                return '${entry.key} ${p['side'] ?? ''} ${signed(pnl)} PLN';
               }).join(' • '),
       ),
-      stat(
-        'Pozycje oczekujące',
-        pending.isEmpty ? 'BRAK' : '${pending.length} OCZEKUJE',
-        Icons.hourglass_top_rounded,
-        color: pending.isEmpty ? muted : cyan,
+      positionStatusCard(
+        title: 'Pozycje oczekujące',
+        value: pending.isEmpty ? 'BRAK' : '${pending.length} OCZEKUJE',
+        icon: Icons.hourglass_top_rounded,
+        color: cyan,
+        active: pending.isNotEmpty,
+        status: pending.isEmpty ? 'BRAK AKCJI' : 'POTWIERDZANIE',
         detail: pending.isEmpty
             ? 'Brak sygnałów oczekujących na potwierdzenie'
             : pending.take(4).map((row) {
-                return '${row['symbol'] ?? '—'} ${row['side'] ?? ''}';
+                return '${row['symbol'] ?? '—'} ${row['side'] ?? ''} • weryfikacja sygnału';
               }).join(' • '),
       ),
       stat(
@@ -560,6 +575,231 @@ class _ProDashboardState extends State<ProDashboard> {
       'QQQ': 'Q',
     };
     return badges[symbol] ?? (symbol.isEmpty ? '?' : symbol.substring(0, 1));
+  }
+
+  String? assetLogoUrl(String symbol) {
+    final upper = symbol.toUpperCase();
+
+    if (upper.endsWith('USDT') && upper.length > 4) {
+      final base = upper.substring(0, upper.length - 4).toLowerCase();
+      return 'https://assets.coincap.io/assets/icons/${base}@2x.png';
+    }
+
+    const companyDomains = <String, String>{
+      'AAPL': 'apple.com',
+      'MSFT': 'microsoft.com',
+      'NVDA': 'nvidia.com',
+      'AMZN': 'amazon.com',
+      'META': 'meta.com',
+      'GOOGL': 'google.com',
+      'TSLA': 'tesla.com',
+      'JPM': 'jpmorganchase.com',
+      'XOM': 'exxonmobil.com',
+      'SPY': 'ssga.com',
+      'QQQ': 'invesco.com',
+      'IWM': 'ishares.com',
+      'DIA': 'ssga.com',
+      'XLK': 'ssga.com',
+      'XLF': 'ssga.com',
+    };
+
+    final domain = companyDomains[upper];
+    if (domain != null) {
+      return 'https://www.google.com/s2/favicons?domain=$domain&sz=128';
+    }
+
+    return null;
+  }
+
+  Widget assetLogo(String symbol, {double size = 28}) {
+    final upper = symbol.toUpperCase();
+    final url = assetLogoUrl(upper);
+
+    Widget fallback() {
+      if (upper == 'EURUSD') {
+        return const Text('🇪🇺', style: TextStyle(fontSize: 17));
+      }
+      if (upper == 'GBPUSD') {
+        return const Text('🇬🇧', style: TextStyle(fontSize: 17));
+      }
+      if (upper == 'USDJPY') {
+        return const Text('🇯🇵', style: TextStyle(fontSize: 17));
+      }
+      if (upper == 'AUDUSD') {
+        return const Text('🇦🇺', style: TextStyle(fontSize: 17));
+      }
+      if (upper == 'USDCAD') {
+        return const Text('🇨🇦', style: TextStyle(fontSize: 17));
+      }
+      if (upper == 'USDCHF') {
+        return const Text('🇨🇭', style: TextStyle(fontSize: 17));
+      }
+      if (upper == 'NZDUSD') {
+        return const Text('🇳🇿', style: TextStyle(fontSize: 17));
+      }
+
+      final icon = upper.contains('GOLD') || upper.contains('SILVER')
+          ? Icons.diamond_outlined
+          : upper.contains('WTI') ||
+                upper.contains('BRENT') ||
+                upper.contains('NATGAS')
+          ? Icons.local_gas_station_outlined
+          : upper.contains('COPPER')
+          ? Icons.hardware_outlined
+          : upper.contains('INDEX') ||
+                upper.contains('SP500') ||
+                upper.contains('NASDAQ') ||
+                upper.contains('DOW') ||
+                upper.contains('RUSSELL') ||
+                upper.contains('VIX')
+          ? Icons.show_chart_rounded
+          : Icons.currency_exchange_rounded;
+
+      return Icon(icon, size: size * 0.62, color: cyan);
+    }
+
+    return Container(
+      width: size,
+      height: size,
+      padding: EdgeInsets.all(size * 0.14),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF4F7F9),
+        shape: BoxShape.circle,
+        border: Border.all(
+          color: const Color(0xFF355267),
+          width: 0.8,
+        ),
+      ),
+      child: url == null
+          ? Center(child: fallback())
+          : ClipOval(
+              child: Image.network(
+                url,
+                width: size,
+                height: size,
+                fit: BoxFit.contain,
+                filterQuality: FilterQuality.high,
+                errorBuilder: (_, __, ___) => Center(child: fallback()),
+              ),
+            ),
+    );
+  }
+
+  Widget activityPulseDot(Color color, {required bool active}) {
+    if (!active) {
+      return Container(
+        width: 8,
+        height: 8,
+        decoration: const BoxDecoration(
+          color: muted,
+          shape: BoxShape.circle,
+        ),
+      );
+    }
+
+    return AnimatedBuilder(
+      animation: activityPulse,
+      builder: (context, child) {
+        final scale = 0.82 + activityPulse.value * 0.30;
+        final opacity = 0.55 + activityPulse.value * 0.45;
+        return Transform.scale(
+          scale: scale,
+          child: Opacity(
+            opacity: opacity,
+            child: Container(
+              width: 9,
+              height: 9,
+              decoration: BoxDecoration(
+                color: color,
+                shape: BoxShape.circle,
+                boxShadow: [
+                  BoxShadow(
+                    color: color.withValues(alpha: 0.32),
+                    blurRadius: 8,
+                    spreadRadius: 2,
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget positionStatusCard({
+    required String title,
+    required String value,
+    required IconData icon,
+    required Color color,
+    required bool active,
+    required String status,
+    required String detail,
+  }) {
+    return box(
+      Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(icon, color: active ? color : cyan, size: 23),
+              const Spacer(),
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 8,
+                  vertical: 5,
+                ),
+                decoration: BoxDecoration(
+                  color: (active ? color : muted).withValues(alpha: 0.08),
+                  borderRadius: BorderRadius.circular(999),
+                  border: Border.all(
+                    color: (active ? color : muted).withValues(alpha: 0.22),
+                  ),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    activityPulseDot(color, active: active),
+                    const SizedBox(width: 6),
+                    Text(
+                      status,
+                      style: TextStyle(
+                        color: active ? color : muted,
+                        fontSize: 10,
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: 0.5,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          Text(title, style: const TextStyle(color: muted)),
+          const SizedBox(height: 8),
+          Text(
+            value,
+            style: TextStyle(
+              fontSize: 24,
+              fontWeight: FontWeight.w600,
+              color: active ? color : muted,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            detail,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(
+              color: muted,
+              fontSize: 11,
+              height: 1.35,
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   Widget fundsDonut() {
@@ -794,18 +1034,7 @@ class _ProDashboardState extends State<ProDashboard> {
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          CircleAvatar(
-                            radius: 13,
-                            backgroundColor: const Color(0xFF23485F),
-                            child: Text(
-                              assetBadge(symbol),
-                              style: const TextStyle(
-                                color: cyan,
-                                fontSize: 12,
-                                fontWeight: FontWeight.w700,
-                              ),
-                            ),
-                          ),
+                          assetLogo(symbol, size: 28),
                           const SizedBox(width: 8),
                           Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
