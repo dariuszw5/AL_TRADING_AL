@@ -80,6 +80,14 @@ class OpportunityScanner:
             symbol = str(row["symbol"]).upper()
             if not symbol.endswith("USDT"):
                 return None
+            base = symbol[:-4]
+            if (
+                not base
+                or len(base) > 20
+                or not base.isascii()
+                or not base.isalnum()
+            ):
+                return None
             last_price = float(row["lastPrice"])
             change = float(row["priceChangePercent"])
             high = float(row["highPrice"])
