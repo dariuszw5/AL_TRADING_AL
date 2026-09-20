@@ -51,11 +51,11 @@ class _ProDashboardState extends State<ProDashboard> {
   ];
 
   final icons = const [
-    Icons.account_balance_wallet_outlined,
-    Icons.bar_chart,
+    Icons.account_balance_wallet,
+    Icons.candlestick_chart,
     Icons.travel_explore,
-    Icons.psychology_outlined,
-    Icons.public,
+    Icons.psychology,
+    Icons.newspaper,
     Icons.history,
   ];
 
@@ -1489,7 +1489,27 @@ class _ProDashboardState extends State<ProDashboard> {
                           selected: page == i,
                           selectedTileColor: panel,
                           selectedColor: cyan,
-                          leading: Icon(icons[i], size: 20),
+                          leading: AnimatedContainer(
+                            duration: const Duration(milliseconds: 180),
+                            width: 34,
+                            height: 34,
+                            decoration: BoxDecoration(
+                              color: page == i
+                                  ? cyan.withValues(alpha: 0.14)
+                                  : const Color(0xFF142B3D),
+                              borderRadius: BorderRadius.circular(10),
+                              border: Border.all(
+                                color: page == i
+                                    ? cyan.withValues(alpha: 0.45)
+                                    : const Color(0xFF294152),
+                              ),
+                            ),
+                            child: Icon(
+                              icons[i],
+                              size: 19,
+                              color: page == i ? cyan : muted,
+                            ),
+                          ),
                           title: Text(
                             labels[i],
                             maxLines: 2,
@@ -1506,7 +1526,7 @@ class _ProDashboardState extends State<ProDashboard> {
                         padding: const EdgeInsets.only(top: 8),
                         child: OutlinedButton.icon(
                           onPressed: openLegacy,
-                          icon: const Icon(Icons.candlestick_chart, size: 18),
+                          icon: const Icon(Icons.analytics_outlined, size: 18),
                           label: const Text('Szczegóły rynku'),
                         ),
                       ),
