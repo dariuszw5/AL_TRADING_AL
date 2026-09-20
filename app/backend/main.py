@@ -138,9 +138,26 @@ def load_ai_state_raw() -> dict[str, Any]:
 
 
 def dashboard_asset_universe() -> tuple:
-    """Curated app/research assets plus current dynamic research opportunities."""
+    """Every market the dashboard may need to display right now.
+
+    Includes the curated app/research universe, current research opportunities,
+    and any symbols currently open or pending in the autonomous AI account.
+    This prevents an active position from disappearing when it drops out of
+    the latest TOP 10 research snapshot.
+    """
     result = []
     seen = set()
+
+    def add_symbol(symbol: str) -> None:
+        symbol = str(symbol or "").strip()
+        if not symbol or symbol in seen:
+            return
+        try:
+            asset = get_asset(symbol, allow_dynamic_binance=True)
+        except ValueError:
+            return
+        result.append(asset)
+        seen.add(asset.symbol)
 
     for asset in (*SUPPORTED_ASSETS, *RESEARCH_ASSETS):
         if asset.symbol in seen:
@@ -150,15 +167,16 @@ def dashboard_asset_universe() -> tuple:
 
     research_state = load_research_state()
     for row in research_state.get("opportunities", []):
-        symbol = str(row.get("symbol") or "").strip()
-        if not symbol or symbol in seen:
-            continue
-        try:
-            asset = get_asset(symbol, allow_dynamic_binance=True)
-        except ValueError:
-            continue
-        result.append(asset)
-        seen.add(asset.symbol)
+        add_symbol(row.get("symbol"))
+
+    ai_state = load_ai_state_raw()
+
+    for symbol in (ai_state.get("positions") or {}):
+        add_symbol(symbol)
+
+    for row in ai_state.get("pending") or []:
+        if isinstance(row, dict):
+            add_symbol(row.get("symbol"))
 
     return tuple(result)
 
