@@ -449,7 +449,10 @@ class AIPaperManager:
                 state["pending"] = [deepcopy(old_pending)]
 
         state["version"] = 3
-        state["model"] = "cross-market multi-position k-NN v3.2 supervised long-short"
+        state["model"] = (
+            "cross-market multi-position k-NN v3.3 "
+            "supervised controlled-learning long-short"
+        )
         state.setdefault("positions", {})
         state.setdefault("pending", [])
         state.setdefault("market_marks", {})
