@@ -12,7 +12,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
-from src.data.assets import SUPPORTED_ASSETS, asset_payload, get_asset
+from src.data.assets import RESEARCH_ASSETS, SUPPORTED_ASSETS, asset_payload, get_asset
 from src.data.data_provider import DataProvider
 from src.data.fx_provider import FxRateProvider, PlnRate
 
@@ -532,15 +532,52 @@ def dashboard_live_prices() -> dict[str, dict[str, Any]]:
 def assets() -> list[dict[str, Any]]:
     result = []
     fx_by_quote: dict[str, tuple[PlnRate | None, dict[str, Any]]] = {}
-    live_prices = dashboard_live_prices()
 
-    for asset in SUPPORTED_ASSETS:
-        state = load_state(asset.symbol)
-        paper_market_price = float(state.get("market_price") or 0.0)
+    live_prices = dashboard_live_prices()
+    ai_state = load_ai_state_raw()
+    ai_positions = ai_state.get("positions") or {}
+    ai_marks = ai_state.get("market_marks") or {}
+    now_ms = int(time.time() * 1000)
+
+    for asset in dashboard_asset_universe():
+        legacy_state = (
+            load_state(asset.symbol)
+            if asset.symbol in {row.symbol for row in SUPPORTED_ASSETS}
+            else {"available": False}
+        )
+
+        paper_market_price = float(legacy_state.get("market_price") or 0.0)
         live = live_prices.get(asset.symbol) or {}
-        market_price = float(live.get("price", paper_market_price))
-        balance = float(state.get("balance") or 0.0)
-        initial_balance = 1000.0
+        mark = ai_marks.get(asset.symbol) or {}
+
+        if live.get("price") is not None:
+            market_price = float(live["price"])
+            market_timestamp = live.get("timestamp")
+            market_stale = bool(live.get("stale", False))
+            market_provider = live.get("provider", asset.provider)
+            market_live = True
+        elif mark.get("price") is not None:
+            market_price = float(mark["price"])
+            market_timestamp = mark.get("timestamp")
+            age_ms = (
+                now_ms - int(market_timestamp)
+                if market_timestamp is not None
+                else 10**12
+            )
+            freshness_ms = 180_000 if asset.asset_type == "crypto" else 1_800_000
+            market_stale = age_ms > freshness_ms
+            market_provider = asset.provider
+            market_live = not market_stale
+        else:
+            market_price = paper_market_price
+            market_timestamp = None
+            market_stale = True
+            market_provider = asset.provider
+            market_live = False
+
+        position = ai_positions.get(asset.symbol) or {}
+        position_side = position.get("side") or "FLAT"
+        ai_pnl_pln = float(position.get("unrealized_pnl") or 0.0)
 
         if asset.quote not in fx_by_quote:
             fx_by_quote[asset.quote] = _fx_payload(asset)
@@ -549,47 +586,53 @@ def assets() -> list[dict[str, Any]]:
         result.append(
             {
                 **asset_payload(asset),
-                "state_available": state.get("available", False),
+                "state_available": legacy_state.get("available", False),
                 "market_price": market_price,
                 "market_price_pln": _to_pln(market_price, rate),
                 "paper_market_price": paper_market_price,
-                "market_timestamp": live.get("timestamp"),
-                "market_live": live.get("price") is not None,
-                "market_stale": live.get("stale", True),
-                "market_provider": live.get("provider", asset.provider),
-                "balance": balance,
-                "balance_pln": _to_pln(balance, rate),
-                "net_profit": balance - initial_balance,
-                "net_profit_pln": _to_pln(balance - initial_balance, rate),
-                "position": (
-                    state.get("position", {}).get("side")
-                    if state.get("position")
+                "market_timestamp": market_timestamp,
+                "market_live": market_live,
+                "market_stale": market_stale,
+                "market_provider": market_provider,
+
+                # Primary dashboard trading state = autonomous AI paper account.
+                "position": position_side,
+                "ai_position": position if position else None,
+                "ai_pnl_pln": ai_pnl_pln,
+                "ai_allocation_pln": float(position.get("allocation_pln") or 0.0),
+                "net_profit_pln": ai_pnl_pln,
+
+                # Legacy per-symbol paper worker remains visible only as metadata.
+                "legacy_position": (
+                    legacy_state.get("position", {}).get("side")
+                    if legacy_state.get("position")
                     else "FLAT"
                 ),
+                "legacy_balance": float(legacy_state.get("balance") or 0.0),
                 "pln": fx,
             }
         )
+
     return result
 
 
 @app.get("/api/ai")
 def ai_status() -> dict[str, Any]:
-    path = LIVE_STATE_DIR / "ai_paper.json"
+    state = load_ai_state_raw()
     try:
-        with path.open(encoding="utf-8-sig") as handle:
-            state = json.load(handle)
-        age = time.time() - state["last_cycle"] / 1000
+        last_cycle = int(state["last_cycle"])
+        age = time.time() - last_cycle / 1000
         return {
             **state,
             "available": True,
             "stale": age > 180,
             "age_seconds": max(0, age),
         }
-    except (OSError, ValueError, KeyError, TypeError):
+    except (ValueError, KeyError, TypeError):
         return {
             "available": False,
             "mode": "PAPER_ONLY",
-            "reason": "Opcjonalny moduł AI nie zapisał jeszcze poprawnego cyklu",
+            "reason": "Moduł AI nie zapisał jeszcze poprawnego cyklu",
         }
 
 
