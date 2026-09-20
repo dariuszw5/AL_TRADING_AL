@@ -16,6 +16,7 @@ from math import isfinite, sqrt
 from pathlib import Path
 from statistics import mean, pstdev
 from time import time
+from uuid import uuid4
 
 from src.agent.live_state_store import LiveStateStore
 from src.data.assets import SUPPORTED_ASSETS
@@ -327,6 +328,8 @@ class AIPaperManager:
             "last_cycle": 0,
             "applied_control_ids": [],
             "funding_received": 0.0,
+            "profit_swept": 0.0,
+            "profit_transfers": [],
             "market_marks": {},
             "strategy_learning": {
                 strategy: {
@@ -380,6 +383,8 @@ class AIPaperManager:
         state.setdefault("applied_control_ids", [])
         state.setdefault("funding_received", state.get("initial_balance", 0.0))
         state.setdefault("funded_capital", state.get("initial_balance", 0.0))
+        state.setdefault("profit_swept", 0.0)
+        state.setdefault("profit_transfers", [])
         state.setdefault("strategy_learning", {})
         for strategy in STRATEGIES:
             state["strategy_learning"].setdefault(
@@ -464,6 +469,51 @@ class AIPaperManager:
         s["unrealized_pnl"] = unrealized
         s["equity"] = s["balance"] + principal + unrealized
         s["peak"] = max(s["peak"], s["equity"])
+
+    def _sweep_realized_profit(self, now_ms):
+        """Move realized account value above funded capital into an outbox.
+
+        Unrealized gains are never swept. The paper account therefore does not
+        compound above the amount explicitly transferred in by the user.
+        """
+        s = self.state
+        target = max(float(s.get("funded_capital") or 0.0), 0.0)
+        principal = self._allocated_principal()
+        realized_account_value = float(s["balance"]) + principal
+        equity_surplus = max(0.0, float(s["equity"]) - target)
+        realized_surplus = max(0.0, realized_account_value - target)
+
+        amount = min(
+            float(s["balance"]),
+            equity_surplus,
+            realized_surplus,
+        )
+        if amount <= 0.000001:
+            return None
+
+        event = {
+            "id": str(uuid4()),
+            "amount": amount,
+            "currency": "PLN",
+            "created_at_unix": now_ms / 1000.0,
+            "paper_only": True,
+            "type": "AI_REALIZED_PROFIT_SWEEP",
+        }
+
+        s["balance"] -= amount
+        s["profit_swept"] = float(s.get("profit_swept") or 0.0) + amount
+        s["profit_transfers"] = (
+            list(s.get("profit_transfers") or []) + [event]
+        )[-1000:]
+        self._mark_equity()
+
+        # A payout is not a trading drawdown. Shift the reference peak by the
+        # paid-out amount so risk controls compare like with like.
+        s["peak"] = max(
+            s["equity"],
+            max(0.0, float(s.get("peak") or 0.0) - amount),
+        )
+        return event
 
     def _manage_positions(self, markets):
         s = self.state
@@ -562,7 +612,13 @@ class AIPaperManager:
                     remaining.append(pending)
                 continue
 
-            equity_base = max(s["equity"], s["balance"])
+            equity_base = max(
+                0.0,
+                min(
+                    float(s.get("funded_capital") or 0.0),
+                    float(s.get("equity") or 0.0),
+                ),
+            )
             target = equity_base * PER_POSITION_EXPOSURE
             total_cap = equity_base * MAX_TOTAL_EXPOSURE
             remaining_cap = max(0.0, total_cap - self._allocated_principal())
@@ -724,6 +780,7 @@ class AIPaperManager:
 
         self._execute_pending(fresh)
         self._manage_positions(fresh)
+        swept = self._sweep_realized_profit(now_ms)
 
         rows = []
         for symbol, bars in fresh.items():
@@ -777,10 +834,21 @@ class AIPaperManager:
                 "stop": STOP,
                 "take": TAKE,
                 "horizon_minutes": HORIZON,
+                "capital_target_pln": float(s.get("funded_capital") or 0.0),
+                "profit_swept_pln": float(s.get("profit_swept") or 0.0),
             },
         )
 
-        if self._blocked():
+        if swept is not None:
+            self._record(
+                now_ms,
+                "PROFIT_SWEEP",
+                "Zrealizowana nadwyżka ponad wpłacony kapitał została przekazana do portfela użytkownika",
+                amount_pln=swept["amount"],
+                transfer_id=swept["id"],
+                open_positions=len(s["positions"]),
+            )
+        elif self._blocked():
             s["pending"] = []
             self._record(
                 now_ms,
