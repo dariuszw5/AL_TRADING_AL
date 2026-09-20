@@ -136,8 +136,10 @@ def test_ai_manager_migrates_v2_pln_state_and_keeps_funds(tmp_path):
 
     assert manager.state["version"] == 3
     assert manager.state["unit"] == "PLN"
-    assert manager.state["balance"] == 2500.0
+    assert manager.state["balance"] == 2000.0
     assert manager.state["positions"]["ETHUSDT"]["side"] == "LONG"
+    assert manager.state["positions"]["ETHUSDT"]["unrealized_pnl"] == 10.0
+    assert manager.state["equity"] == 2510.0
     assert manager.state["funding_received"] == 3000.0
 
 
@@ -483,3 +485,67 @@ def test_only_one_exploratory_candidate_can_be_pending(tmp_path):
     assert len(selected) == 1
     assert selected[0]["symbol"] == "AAAUSDT"
     assert selected[0]["exploratory"] is True
+
+
+
+def test_v2_migration_does_not_double_count_open_position_principal(tmp_path):
+    path = tmp_path / "ai_paper.json"
+    path.write_text(
+        json.dumps(
+            {
+                "version": 2,
+                "mode": "PAPER_ONLY",
+                "unit": "PLN",
+                "initial_balance": 1000.0,
+                "funded_capital": 1000.0,
+                "balance": 990.0,
+                "equity": 995.0,
+                "peak": 1010.0,
+                "daily_loss": 10.0,
+                "day": "2026-09-20",
+                "realized_pnl": -10.0,
+                "unrealized_pnl": 5.0,
+                "position": {
+                    "symbol": "TESTUSDT",
+                    "side": "LONG",
+                    "strategy": "trend",
+                    "entry": 100.0,
+                    "allocation_pln": 250.0,
+                    "last_timestamp": 60_000,
+                    "exit_at": 900_000,
+                },
+                "pending": None,
+                "decisions": [],
+                "trades": [],
+                "last_cycle": 60_000,
+                "applied_control_ids": ["fund-1"],
+                "funding_received": 1000.0,
+                "strategy_learning": {},
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    manager = AIPaperManager(path, assets=[])
+
+    assert manager.state["balance"] == 740.0
+    assert manager.state["positions"]["TESTUSDT"]["allocation_pln"] == 250.0
+    assert manager.state["positions"]["TESTUSDT"]["unrealized_pnl"] == 5.0
+
+    manager._mark_equity()
+
+    assert manager.state["equity"] == 995.0
+    assert abs(manager.state["accounting_gap"]) < 0.000001
+    assert manager.state["accounting_error"] is False
+
+
+def test_accounting_gap_guard_blocks_corrupted_state(tmp_path):
+    manager = AIPaperManager(tmp_path / "ai_paper.json", assets=[])
+    _fund_manager(manager)
+
+    manager.state["balance"] = 1250.0
+    manager._mark_equity()
+
+    assert manager.state["accounting_error"] is True
+    assert round(manager.state["accounting_gap"], 6) == 250.0
+    assert manager._blocked() is True
