@@ -175,3 +175,72 @@ def test_ai_manager_real_money_state_is_never_reused(tmp_path):
     assert manager.state["mode"] == "PAPER_ONLY"
     assert manager.state["version"] == 3
     assert manager.state["balance"] == 0.0
+
+
+def test_ai_manager_sweeps_only_realized_surplus(tmp_path):
+    path = tmp_path / "ai_paper.json"
+    manager = AIPaperManager(path, assets=[])
+
+    s = manager.state
+    s["funded_capital"] = 1000.0
+    s["initial_balance"] = 1000.0
+    s["balance"] = 1100.0
+    s["equity"] = 1100.0
+    s["peak"] = 1100.0
+
+    event = manager._sweep_realized_profit(1_800_000_000_000)
+
+    assert event is not None
+    assert event["amount"] == 100.0
+    assert s["balance"] == 1000.0
+    assert s["equity"] == 1000.0
+    assert s["profit_swept"] == 100.0
+    assert len(s["profit_transfers"]) == 1
+
+
+def test_ai_manager_does_not_sweep_when_account_is_below_funded_capital(tmp_path):
+    path = tmp_path / "ai_paper.json"
+    manager = AIPaperManager(path, assets=[])
+
+    s = manager.state
+    s["funded_capital"] = 1000.0
+    s["initial_balance"] = 1000.0
+    s["balance"] = 900.0
+    s["equity"] = 900.0
+    s["peak"] = 1000.0
+
+    event = manager._sweep_realized_profit(1_800_000_000_000)
+
+    assert event is None
+    assert s["balance"] == 900.0
+    assert s["equity"] == 900.0
+    assert s["profit_swept"] == 0.0
+
+
+def test_ai_manager_does_not_sweep_unrealized_profit(tmp_path):
+    path = tmp_path / "ai_paper.json"
+    manager = AIPaperManager(path, assets=[])
+
+    s = manager.state
+    s["funded_capital"] = 1000.0
+    s["initial_balance"] = 1000.0
+    s["balance"] = 900.0
+    s["positions"] = {
+        "ETHUSDT": {
+            "symbol": "ETHUSDT",
+            "strategy": "trend",
+            "side": "LONG",
+            "entry": 2500.0,
+            "allocation_pln": 100.0,
+            "unrealized_pnl": 50.0,
+        }
+    }
+    manager._mark_equity()
+
+    assert s["equity"] == 1050.0
+
+    event = manager._sweep_realized_profit(1_800_000_000_000)
+
+    assert event is None
+    assert s["balance"] == 900.0
+    assert s["equity"] == 1050.0
