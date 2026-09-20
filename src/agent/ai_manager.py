@@ -585,9 +585,27 @@ class AIPaperManager:
 
         self._mark_equity()
 
-    def _execute_pending(self, fresh):
+    def _execute_pending(self, raw_markets, fresh, ranked_rows, now_ms):
+        """Confirm a pending signal on a newer closed candle before entry.
+
+        A pending candidate is never executed only because it was eligible in
+        the previous cycle. At least one newer closed candle must exist and the
+        exact symbol/strategy/side must still be eligible. If confirmation
+        fails, the pending order is cancelled.
+
+        Entry uses the latest observed market price from the raw feed rather
+        than retrospectively filling the historical next-candle open.
+        """
         s = self.state
         remaining = []
+        opened = []
+        cancelled = []
+
+        eligible = {
+            (row.get("symbol"), row.get("strategy"), row.get("side")): row
+            for row in ranked_rows
+            if row.get("eligible")
+        }
 
         for pending in list(s.get("pending") or []):
             if len(s["positions"]) >= MAX_OPEN_POSITIONS:
@@ -595,21 +613,70 @@ class AIPaperManager:
                 continue
 
             symbol = pending["symbol"]
-            if symbol in s["positions"] or self._blocked():
+            if symbol in s["positions"]:
+                cancelled.append(
+                    {
+                        **pending,
+                        "cancel_reason": "POSITION_ALREADY_OPEN",
+                    }
+                )
+                continue
+
+            if self._blocked():
+                cancelled.append(
+                    {
+                        **pending,
+                        "cancel_reason": "RISK_BLOCK",
+                    }
+                )
                 continue
 
             bars = fresh.get(symbol, [])
-            entry_bar = next(
+            if not bars:
+                remaining.append(pending)
+                continue
+
+            signal_timestamp = int(
+                pending.get("signal_timestamp")
+                or pending.get("timestamp")
+                or 0
+            )
+
+            # Wait until at least one completely closed candle newer than the
+            # candle that generated the original signal is available.
+            if bars[-1].timestamp <= signal_timestamp:
+                remaining.append(pending)
+                continue
+
+            key = (
+                symbol,
+                pending.get("strategy"),
+                pending.get("side"),
+            )
+            confirmed = eligible.get(key)
+            if confirmed is None:
+                cancelled.append(
+                    {
+                        **pending,
+                        "cancel_reason": "SIGNAL_NOT_CONFIRMED",
+                        "checked_timestamp": bars[-1].timestamp,
+                    }
+                )
+                continue
+
+            raw_bars = raw_markets.get(symbol, [])
+            current_bar = next(
                 (
                     candle
-                    for candle in bars
-                    if candle.timestamp == pending["entry_at"]
+                    for candle in reversed(raw_bars)
+                    if candle.timestamp <= now_ms
+                    and isfinite(candle.close)
+                    and candle.close > 0
                 ),
                 None,
             )
-            if entry_bar is None:
-                if bars and bars[-1].timestamp < pending["entry_at"]:
-                    remaining.append(pending)
+            if current_bar is None:
+                remaining.append(pending)
                 continue
 
             equity_base = max(
@@ -621,13 +688,22 @@ class AIPaperManager:
             )
             target = equity_base * PER_POSITION_EXPOSURE
             total_cap = equity_base * MAX_TOTAL_EXPOSURE
-            remaining_cap = max(0.0, total_cap - self._allocated_principal())
+            remaining_cap = max(
+                0.0,
+                total_cap - self._allocated_principal(),
+            )
             allocation = min(target, remaining_cap, s["balance"])
             if allocation <= 0:
+                cancelled.append(
+                    {
+                        **pending,
+                        "cancel_reason": "NO_AVAILABLE_CAPITAL",
+                    }
+                )
                 continue
 
             side = pending["side"]
-            entry = entry_bar.open
+            entry = float(current_bar.close)
             s["balance"] -= allocation
             s["positions"][symbol] = {
                 "symbol": symbol,
@@ -635,9 +711,9 @@ class AIPaperManager:
                 "side": side,
                 "entry": entry,
                 "allocation_pln": allocation,
-                "entry_timestamp": entry_bar.timestamp,
-                "last_timestamp": entry_bar.timestamp - MINUTE,
-                "exit_at": entry_bar.timestamp + (HORIZON - 1) * MINUTE,
+                "entry_timestamp": now_ms,
+                "last_timestamp": bars[-1].timestamp,
+                "exit_at": now_ms + HORIZON * MINUTE,
                 "stop_loss": (
                     entry * (1 - STOP)
                     if side == "LONG"
@@ -650,12 +726,22 @@ class AIPaperManager:
                 ),
                 "mark_price": entry,
                 "unrealized_pnl": -allocation * 2.0 * (FEE + SLIPPAGE),
-                "score": pending.get("score"),
-                "exploratory": pending.get("exploratory", False),
+                "score": confirmed.get("score"),
+                "selected_score": pending.get("score"),
+                "confirmed_timestamp": bars[-1].timestamp,
+                "exploratory": confirmed.get("exploratory", False),
             }
+            opened.append(symbol)
 
         s["pending"] = remaining
+        s["pending_cancelled"] = (
+            list(s.get("pending_cancelled") or []) + cancelled
+        )[-500:]
         self._mark_equity()
+        return {
+            "opened": opened,
+            "cancelled": cancelled,
+        }
 
     def _select_new_pending(self, rows, fresh, now_ms):
         s = self.state
@@ -687,7 +773,8 @@ class AIPaperManager:
                     "strategy": row["strategy"],
                     "side": row["side"],
                     "timestamp": latest_bar.timestamp,
-                    "entry_at": ((now_ms + MINUTE - 1) // MINUTE) * MINUTE,
+                    "signal_timestamp": latest_bar.timestamp,
+                    "selected_at": now_ms,
                     "score": row["score"],
                     "exploratory": row.get("exploratory", False),
                 }
@@ -778,10 +865,6 @@ class AIPaperManager:
             )
             return s
 
-        self._execute_pending(fresh)
-        self._manage_positions(fresh)
-        swept = self._sweep_realized_profit(now_ms)
-
         rows = []
         for symbol, bars in fresh.items():
             ranked = rank_asset(symbol, bars)
@@ -817,6 +900,15 @@ class AIPaperManager:
             reverse=True,
         )
 
+        pending_result = self._execute_pending(
+            raw_markets,
+            fresh,
+            rows,
+            now_ms,
+        )
+        self._manage_positions(fresh)
+        swept = self._sweep_realized_profit(now_ms)
+
         selected = self._select_new_pending(rows, fresh, now_ms)
         self._mark_equity()
 
@@ -824,6 +916,8 @@ class AIPaperManager:
             ranking=rows,
             data_issues=issues,
             last_cycle=now_ms,
+            last_pending_opened=pending_result["opened"],
+            last_pending_cancelled=pending_result["cancelled"],
             limits={
                 "per_position_exposure": PER_POSITION_EXPOSURE,
                 "max_total_exposure": MAX_TOTAL_EXPOSURE,
@@ -865,6 +959,11 @@ class AIPaperManager:
                 sides=[row["side"] for row in selected],
                 open_positions=len(s["positions"]),
                 pending_count=len(s["pending"]),
+                confirmed_opened=pending_result["opened"],
+                cancelled_pending=[
+                    row.get("symbol")
+                    for row in pending_result["cancelled"]
+                ],
             )
         elif s["positions"]:
             self._record(
@@ -874,6 +973,11 @@ class AIPaperManager:
                 symbols=list(s["positions"]),
                 open_positions=len(s["positions"]),
                 pending_count=len(s["pending"]),
+                confirmed_opened=pending_result["opened"],
+                cancelled_pending=[
+                    row.get("symbol")
+                    for row in pending_result["cancelled"]
+                ],
             )
         elif s["pending"]:
             self._record(
