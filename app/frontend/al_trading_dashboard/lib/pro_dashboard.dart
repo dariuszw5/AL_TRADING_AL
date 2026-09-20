@@ -496,13 +496,6 @@ class _ProDashboardState extends State<ProDashboard> {
         Icons.travel_explore,
         detail: '$classes aktywnych klas w TOP 10',
       ),
-      stat(
-        'Status',
-        stale ? 'STALE' : 'LIVE',
-        stale ? Icons.cloud_off : Icons.cloud_done,
-        color: stale ? Colors.amber : mint,
-        detail: 'Realne dane • wyłącznie wirtualne zlecenia',
-      ),
     ];
 
     return LayoutBuilder(
@@ -1668,6 +1661,49 @@ class _ProDashboardState extends State<ProDashboard> {
                               color: cyan,
                             ),
                           ),
+                        Tooltip(
+                          message: stale
+                              ? 'Status danych: STALE'
+                              : 'Status danych: LIVE',
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 9,
+                              vertical: 6,
+                            ),
+                            decoration: BoxDecoration(
+                              color: (stale ? Colors.amber : mint)
+                                  .withValues(alpha: 0.10),
+                              borderRadius: BorderRadius.circular(10),
+                              border: Border.all(
+                                color: (stale ? Colors.amber : mint)
+                                    .withValues(alpha: 0.35),
+                              ),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(
+                                  stale
+                                      ? Icons.cloud_off_rounded
+                                      : Icons.cloud_done_rounded,
+                                  size: 18,
+                                  color: stale ? Colors.amber : mint,
+                                ),
+                                const SizedBox(width: 6),
+                                Text(
+                                  stale ? 'STALE' : 'LIVE',
+                                  style: TextStyle(
+                                    color: stale ? Colors.amber : mint,
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w700,
+                                    letterSpacing: 0.5,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 6),
                         IconButton(
                           tooltip: 'Odśwież',
                           onPressed: refresh,
