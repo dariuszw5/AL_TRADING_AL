@@ -343,194 +343,70 @@ class _ProDashboardState extends State<ProDashboard> {
         ? Colors.redAccent
         : muted;
     final arrow = positive
-        ? Icons.arrow_upward_rounded
+        ? Icons.trending_up_rounded
         : negative
-        ? Icons.arrow_downward_rounded
-        : Icons.remove_rounded;
-    final status = positive
-        ? 'ZYSK TERAZ'
-        : negative
-        ? 'STRATA TERAZ'
-        : 'NA ZERO';
+        ? Icons.trending_down_rounded
+        : Icons.trending_flat_rounded;
 
-    return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: panel,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(
-          color: tone.withValues(alpha: 0.55),
-          width: 1.2,
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: tone.withValues(alpha: 0.06),
-            blurRadius: 18,
-            spreadRadius: 1,
-          ),
-        ],
-      ),
-      child: LayoutBuilder(
-        builder: (context, constraints) {
-          final compact = constraints.maxWidth < 300;
-
-          return Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+    return box(
+      Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
             children: [
-              Row(
-                children: [
-                  Container(
-                    width: 38,
-                    height: 38,
-                    decoration: BoxDecoration(
-                      color: tone.withValues(alpha: 0.12),
-                      borderRadius: BorderRadius.circular(11),
-                    ),
-                    child: Icon(arrow, color: tone, size: 22),
-                  ),
-                  const SizedBox(width: 11),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text(
-                          'Zysk / strata teraz',
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                        Text(
-                          status,
-                          style: TextStyle(
-                            color: tone,
-                            fontSize: 11,
-                            fontWeight: FontWeight.w700,
-                            letterSpacing: 0.7,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 9,
-                      vertical: 5,
-                    ),
-                    decoration: BoxDecoration(
-                      color: tone.withValues(alpha: 0.10),
-                      borderRadius: BorderRadius.circular(999),
-                    ),
-                    child: Text(
-                      '${pct >= 0 ? '+' : ''}${pct.toStringAsFixed(2)}%',
-                      style: TextStyle(
-                        color: tone,
-                        fontSize: 11,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 16),
-              FittedBox(
-                fit: BoxFit.scaleDown,
-                alignment: Alignment.centerLeft,
-                child: Text(
-                  '${signed(delta)} PLN',
-                  style: TextStyle(
-                    color: tone,
-                    fontSize: compact ? 24 : 28,
-                    fontWeight: FontWeight.w800,
-                    letterSpacing: -0.4,
-                  ),
-                ),
-              ),
-              const SizedBox(height: 5),
-              Text(
-                funded > 0
-                    ? 'Equity ${number(equity)} PLN • cel ${number(funded)} PLN'
-                    : 'Oczekiwanie na wpłatę kapitału do AI',
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
-                  color: muted,
-                  fontSize: 11,
-                  height: 1.35,
-                ),
-              ),
-              const SizedBox(height: 14),
+              Icon(arrow, color: tone, size: 23),
+              const Spacer(),
               Container(
                 padding: const EdgeInsets.symmetric(
-                  horizontal: 10,
-                  vertical: 8,
+                  horizontal: 8,
+                  vertical: 4,
                 ),
                 decoration: BoxDecoration(
-                  color: const Color(0xFF0C2030),
-                  borderRadius: BorderRadius.circular(10),
+                  color: tone.withValues(alpha: 0.10),
+                  borderRadius: BorderRadius.circular(999),
                 ),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: _pnlMini(
-                        'Otwarty',
-                        unrealized,
-                      ),
-                    ),
-                    Container(
-                      width: 1,
-                      height: 28,
-                      color: const Color(0xFF294152),
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: _pnlMini(
-                        'Zrealizowany',
-                        realized,
-                      ),
-                    ),
-                  ],
+                child: Text(
+                  '${pct >= 0 ? '+' : ''}${pct.toStringAsFixed(2)}%',
+                  style: TextStyle(
+                    color: tone,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                  ),
                 ),
               ),
             ],
-          );
-        },
-      ),
-    );
-  }
-
-  Widget _pnlMini(String label, double value) {
-    final tone = value > 0.005
-        ? mint
-        : value < -0.005
-        ? Colors.redAccent
-        : muted;
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          label,
-          style: const TextStyle(
-            color: muted,
-            fontSize: 10,
           ),
-        ),
-        const SizedBox(height: 2),
-        FittedBox(
-          fit: BoxFit.scaleDown,
-          alignment: Alignment.centerLeft,
-          child: Text(
-            '${signed(value)} PLN',
-            style: TextStyle(
-              color: tone,
-              fontSize: 12,
-              fontWeight: FontWeight.w700,
+          const SizedBox(height: 14),
+          const Text(
+            'Zysk / strata teraz',
+            style: TextStyle(color: muted),
+          ),
+          const SizedBox(height: 8),
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            alignment: Alignment.centerLeft,
+            child: Text(
+              '${signed(delta)} PLN',
+              style: TextStyle(
+                fontSize: 24,
+                fontWeight: FontWeight.w600,
+                color: tone,
+              ),
             ),
           ),
-        ),
-      ],
+          const SizedBox(height: 6),
+          Text(
+            'Otwarty ${signed(unrealized)} • zrealizowany ${signed(realized)}',
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(
+              color: muted,
+              fontSize: 11,
+              height: 1.35,
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -562,6 +438,10 @@ class _ProDashboardState extends State<ProDashboard> {
     final realized = (aiState['realized_pnl'] as num?)?.toDouble() ?? 0.0;
     final unrealized = (aiState['unrealized_pnl'] as num?)?.toDouble() ?? 0.0;
     final positions = asMap(aiState['positions']);
+    final pending = asList(aiState['pending'])
+        .whereType<Map>()
+        .map((row) => Map<String, dynamic>.from(row))
+        .toList();
     final portfolioBalance =
         (userPortfolio?['balance'] as num?)?.toDouble() ?? 0.0;
     final classes = asMap(research?['selected_by_class']).length;
@@ -582,15 +462,27 @@ class _ProDashboardState extends State<ProDashboard> {
         unrealized: unrealized,
       ),
       stat(
-        'Pozycje AI',
-        positions.isEmpty ? 'FLAT' : '${positions.length} OTWARTE',
-        Icons.layers_outlined,
-        color: positions.isEmpty ? muted : cyan,
+        'Pozycje otwarte',
+        positions.isEmpty ? 'BRAK' : '${positions.length} OTWARTE',
+        Icons.workspaces_outline,
+        color: positions.isEmpty ? muted : mint,
         detail: positions.isEmpty
-            ? (aiState['decision'] is Map
-                  ? asMap(aiState['decision'])['action']?.toString()
-                  : 'Brak otwartych pozycji')
-            : positions.keys.take(4).join(' • '),
+            ? 'Brak aktywnych pozycji'
+            : positions.entries.take(4).map((entry) {
+                final p = asMap(entry.value);
+                return '${entry.key} ${p['side'] ?? ''}';
+              }).join(' • '),
+      ),
+      stat(
+        'Pozycje oczekujące',
+        pending.isEmpty ? 'BRAK' : '${pending.length} OCZEKUJE',
+        Icons.hourglass_top_rounded,
+        color: pending.isEmpty ? muted : cyan,
+        detail: pending.isEmpty
+            ? 'Brak sygnałów oczekujących na potwierdzenie'
+            : pending.take(4).map((row) {
+                return '${row['symbol'] ?? '—'} ${row['side'] ?? ''}';
+              }).join(' • '),
       ),
       stat(
         'Mój portfel',
