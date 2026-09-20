@@ -46,6 +46,16 @@ MIN_VALIDATION_TRADES = 4
 MIN_MODEL_EDGE = 0.00100
 EXPLORATION_EDGE = 0.00200
 MAX_EXPLORATION_SPREAD = 0.018
+CONTROLLED_LEARNING_EXPOSURE = 0.02
+CONTROLLED_LEARNING_MIN_EXPECTED_RETURN = 0.0020
+CONTROLLED_LEARNING_MIN_SCORE = 0.0005
+CONTROLLED_LEARNING_MAX_SPREAD = 0.015
+CONTROLLED_LEARNING_MIN_VALIDATION_TRADES = 2
+CONTROLLED_LEARNING_MIN_VALIDATION_MEAN = 0.0
+PAUSED_RECOVERY_MIN_EXPECTED_RETURN = 0.0030
+PAUSED_RECOVERY_MIN_SCORE = 0.0015
+PAUSED_RECOVERY_MIN_VALIDATION_TRADES = 3
+PAUSED_RECOVERY_MIN_VALIDATION_MEAN = 0.0005
 
 
 def clean_candles(candles, now_ms):
@@ -292,6 +302,36 @@ def rank_asset(symbol, candles):
     return rows
 
 
+def ranking_summary(rows):
+    """Compact explanation of why the current cycle did or did not trade."""
+    rows = list(rows or [])
+    reasons = {}
+
+    for row in rows:
+        if row.get("eligible"):
+            continue
+        if not row.get("live_signal"):
+            reason = "NO_LIVE_SIGNAL"
+        else:
+            reason = (
+                row.get("eligibility_reason")
+                or "MODEL_OR_VALIDATION_REJECTED"
+            )
+        reasons[reason] = reasons.get(reason, 0) + 1
+
+    return {
+        "rows": len(rows),
+        "live_signals": sum(bool(row.get("live_signal")) for row in rows),
+        "validated": sum(bool(row.get("validated")) for row in rows),
+        "exploratory": sum(bool(row.get("exploratory")) for row in rows),
+        "learning_probes": sum(
+            bool(row.get("learning_probe")) for row in rows
+        ),
+        "eligible": sum(bool(row.get("eligible")) for row in rows),
+        "rejection_reasons": reasons,
+    }
+
+
 class AIPaperManager:
     """One virtual PLN account with several simultaneous market positions."""
 
@@ -322,7 +362,7 @@ class AIPaperManager:
         return {
             "version": 3,
             "mode": "PAPER_ONLY",
-            "model": "cross-market multi-position k-NN v3.2 supervised long-short",
+            "model": "cross-market multi-position k-NN v3.3 supervised controlled-learning long-short",
             "unit": "PLN",
             "initial_balance": 0.0,
             "funded_capital": 0.0,
@@ -577,6 +617,70 @@ class AIPaperManager:
             row["eligible"] = False
             row["eligibility_reason"] = "LIVE_LEARNING_EDGE_REJECTED"
 
+        return row
+
+    def _apply_controlled_learning_probe(self, row, supervisor):
+        """Allow one tiny learning trade only when the model edge stays positive.
+
+        This path exists to prevent a supervised strategy from becoming unable
+        to collect any new live evidence. It never revives a negative expected
+        return, negative validation mean, wide-spread prediction or a row that
+        live learning already rejected.
+        """
+        row["learning_probe"] = False
+
+        if row.get("eligible") or not row.get("live_signal"):
+            return row
+
+        if row.get("eligibility_reason") == "LIVE_LEARNING_EDGE_REJECTED":
+            return row
+
+        health = (
+            (supervisor.get("strategies") or {}).get(row.get("strategy"))
+            or {"status": "LEARNING"}
+        )
+        status = row.get("supervisor_status") or health.get("status", "LEARNING")
+        row["supervisor_status"] = status
+
+        if status not in {"LEARNING", "WATCH", "PAUSED"}:
+            if row.get("eligibility_reason") is None:
+                row["eligibility_reason"] = "MODEL_OR_VALIDATION_REJECTED"
+            return row
+
+        expected = float(row.get("expected_net_return") or 0.0)
+        score = float(row.get("score") or 0.0)
+        spread = float(row.get("neighbor_spread") or float("inf"))
+        validation_trades = int(row.get("validation_trades") or 0)
+        validation_mean = row.get("validation_mean")
+
+        base_ok = bool(
+            expected >= CONTROLLED_LEARNING_MIN_EXPECTED_RETURN
+            and score >= CONTROLLED_LEARNING_MIN_SCORE
+            and spread <= CONTROLLED_LEARNING_MAX_SPREAD
+            and validation_trades >= CONTROLLED_LEARNING_MIN_VALIDATION_TRADES
+            and validation_mean is not None
+            and float(validation_mean) >= CONTROLLED_LEARNING_MIN_VALIDATION_MEAN
+        )
+
+        if status == "PAUSED":
+            base_ok = bool(
+                base_ok
+                and expected >= PAUSED_RECOVERY_MIN_EXPECTED_RETURN
+                and score >= PAUSED_RECOVERY_MIN_SCORE
+                and validation_trades >= PAUSED_RECOVERY_MIN_VALIDATION_TRADES
+                and float(validation_mean) >= PAUSED_RECOVERY_MIN_VALIDATION_MEAN
+            )
+
+        if not base_ok:
+            if row.get("eligibility_reason") is None:
+                row["eligibility_reason"] = "MODEL_OR_VALIDATION_REJECTED"
+            return row
+
+        row["eligible"] = True
+        row["exploratory"] = True
+        row["learning_probe"] = True
+        row["supervisor_exposure"] = CONTROLLED_LEARNING_EXPOSURE
+        row["eligibility_reason"] = "CONTROLLED_LEARNING_PROBE"
         return row
 
     def _blocked(self):
@@ -887,6 +991,7 @@ class AIPaperManager:
                 "selected_score": pending.get("score"),
                 "confirmed_timestamp": bars[-1].timestamp,
                 "exploratory": confirmed.get("exploratory", False),
+                "learning_probe": confirmed.get("learning_probe", False),
                 "supervisor_status": confirmed.get("supervisor_status"),
                 "supervisor_probation": confirmed.get(
                     "supervisor_probation",
@@ -946,6 +1051,7 @@ class AIPaperManager:
                     "selected_at": now_ms,
                     "score": row["score"],
                     "exploratory": row.get("exploratory", False),
+                    "learning_probe": row.get("learning_probe", False),
                     "supervisor_status": row.get("supervisor_status"),
                     "supervisor_probation": row.get(
                         "supervisor_probation",
@@ -1024,6 +1130,7 @@ class AIPaperManager:
         if s["balance"] <= 0 and not s["positions"]:
             s.update(
                 ranking=[],
+                ranking_summary=ranking_summary([]),
                 data_issues=issues,
                 last_cycle=now_ms,
                 pending=[],
@@ -1060,6 +1167,7 @@ class AIPaperManager:
         supervisor = build_strategy_supervisor(s["trades"], STRATEGIES)
         for row in rows:
             supervise_candidate(row, supervisor)
+            self._apply_controlled_learning_probe(row, supervisor)
 
         rows.sort(
             key=lambda row: (
@@ -1084,6 +1192,7 @@ class AIPaperManager:
 
         s.update(
             ranking=rows,
+            ranking_summary=ranking_summary(rows),
             data_issues=issues,
             last_cycle=now_ms,
             last_pending_opened=pending_result["opened"],
@@ -1092,6 +1201,7 @@ class AIPaperManager:
             limits={
                 "per_position_exposure": PER_POSITION_EXPOSURE,
                 "exploration_position_exposure": EXPLORATION_POSITION_EXPOSURE,
+                "controlled_learning_exposure": CONTROLLED_LEARNING_EXPOSURE,
                 "max_exploratory_positions": MAX_EXPLORATORY_POSITIONS,
                 "max_total_exposure": MAX_TOTAL_EXPOSURE,
                 "max_open_positions": MAX_OPEN_POSITIONS,
