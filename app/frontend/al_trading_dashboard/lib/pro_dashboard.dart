@@ -185,21 +185,40 @@ class _ProDashboardState extends State<ProDashboard>
           lastAssetsRefresh == null ||
           now.difference(lastAssetsRefresh!).inSeconds >= 20;
 
+      final snapshotRow = await safeGet(
+        'snapshot',
+        '/api/dashboard-snapshot',
+      );
+
       final requests = <Future<Map<String, dynamic>>>[
-        safeGet('research', '/api/research'),
-        safeGet('ai', '/api/ai'),
-        safeGet('portfolio', '/api/user-portfolio'),
+        if (snapshotRow['ok'] != true) ...[
+          safeGet('research', '/api/research'),
+          safeGet('ai', '/api/ai'),
+          safeGet('portfolio', '/api/user-portfolio'),
+        ],
         if (refreshAssets) safeGet('assets', '/api/assets'),
       ];
 
-      final results = await Future.wait(requests);
+      final results = <Map<String, dynamic>>[
+        snapshotRow,
+        ...await Future.wait(requests),
+      ];
 
       final byKey = {
         for (final row in results) row['key'].toString(): row,
       };
-      final errors = results.where((row) => row['ok'] != true).toList();
+      final snapshotOk = snapshotRow['ok'] == true;
+      final relevantRows = snapshotOk
+          ? results.where(
+              (row) =>
+                  row['key'] == 'snapshot' ||
+                  row['key'] == 'assets',
+            )
+          : results.where((row) => row['key'] != 'snapshot');
+      final errors =
+          relevantRows.where((row) => row['ok'] != true).toList();
       final successCount =
-          results.where((row) => row['ok'] == true).length;
+          relevantRows.where((row) => row['ok'] == true).length;
 
       if (!mounted) return;
       setState(() {
@@ -212,19 +231,27 @@ class _ProDashboardState extends State<ProDashboard>
           lastAssetsRefresh = DateTime.now();
         }
 
-        final researchRow = byKey['research'];
-        if (researchRow?['ok'] == true) {
-          research = asMap(researchRow?['value']);
-        }
+        final snapshot = byKey['snapshot'];
+        if (snapshot?['ok'] == true) {
+          final value = asMap(snapshot?['value']);
+          research = asMap(value['research']);
+          ai = asMap(value['ai']);
+          userPortfolio = asMap(value['user_portfolio']);
+        } else {
+          final researchRow = byKey['research'];
+          if (researchRow?['ok'] == true) {
+            research = asMap(researchRow?['value']);
+          }
 
-        final aiRow = byKey['ai'];
-        if (aiRow?['ok'] == true) {
-          ai = asMap(aiRow?['value']);
-        }
+          final aiRow = byKey['ai'];
+          if (aiRow?['ok'] == true) {
+            ai = asMap(aiRow?['value']);
+          }
 
-        final portfolioRow = byKey['portfolio'];
-        if (portfolioRow?['ok'] == true) {
-          userPortfolio = asMap(portfolioRow?['value']);
+          final portfolioRow = byKey['portfolio'];
+          if (portfolioRow?['ok'] == true) {
+            userPortfolio = asMap(portfolioRow?['value']);
+          }
         }
 
         if (successCount > 0) {
