@@ -35,6 +35,7 @@ RESEARCH_STATE_FILE = LIVE_STATE_DIR / "research_state.json"
 FX_PROVIDER = FxRateProvider(ttl_seconds=60.0)
 MARKET_CACHE: dict[str, dict[str, Any]] = {}
 ASSET_LIVE_CACHE: dict[str, Any] = {"timestamp": 0.0, "prices": {}}
+MARKET_QUOTE_CACHE: dict[str, dict[str, Any]] = {}
 USER_PORTFOLIO_LOCK = Lock()
 
 
@@ -543,46 +544,111 @@ def load_market_candles(symbol: str = "BTCUSDT", limit: int = 120) -> dict[str, 
     }
 
 
+def dashboard_quote_universe() -> tuple:
+    """Markets shown in the exchange-style quotes area.
+
+    Always includes configured forex pairs and core app markets, then adds the
+    current research opportunities plus any open/pending AI markets.
+    """
+    result = []
+    seen = set()
+
+    def add(asset) -> None:
+        if asset.symbol in seen:
+            return
+        result.append(asset)
+        seen.add(asset.symbol)
+
+    for asset in (*SUPPORTED_ASSETS, *RESEARCH_ASSETS):
+        if asset.asset_type == "forex":
+            add(asset)
+
+    for asset in SUPPORTED_ASSETS:
+        add(asset)
+
+    research_state = load_research_state()
+    for row in research_state.get("opportunities", []):
+        try:
+            add(
+                get_asset(
+                    str(row.get("symbol") or ""),
+                    allow_dynamic_binance=True,
+                )
+            )
+        except ValueError:
+            continue
+
+    ai_state = load_ai_state_raw()
+    for symbol in (ai_state.get("positions") or {}):
+        try:
+            add(get_asset(symbol, allow_dynamic_binance=True))
+        except ValueError:
+            pass
+    for row in ai_state.get("pending") or []:
+        if not isinstance(row, dict):
+            continue
+        try:
+            add(
+                get_asset(
+                    str(row.get("symbol") or ""),
+                    allow_dynamic_binance=True,
+                )
+            )
+        except ValueError:
+            pass
+
+    return tuple(result)
+
+
 def dashboard_live_prices() -> dict[str, dict[str, Any]]:
-    """Fresh prices for display only; paper execution still uses closed candles."""
-    global ASSET_LIVE_CACHE
+    """Exchange-style quotes with per-symbol caching.
 
+    Crypto quotes refresh more frequently because those markets trade 24/7.
+    Traditional-market references use a longer cache to avoid hammering Yahoo.
+    """
     now = time.time()
-    cached_prices = ASSET_LIVE_CACHE.get("prices") or {}
-    cached_at = float(ASSET_LIVE_CACHE.get("timestamp") or 0.0)
-
-    if cached_prices and now - cached_at < 15.0:
-        return cached_prices
+    targets = dashboard_quote_universe()
+    provider = DataProvider()
 
     def fetch(asset):
+        cached = MARKET_QUOTE_CACHE.get(asset.symbol)
+        ttl = 15.0 if asset.asset_type == "crypto" else 60.0
+
+        if cached and now - float(cached.get("_cached_at") or 0.0) < ttl:
+            return asset.symbol, dict(cached)
+
         try:
-            market = load_market_candles(symbol=asset.symbol, limit=2)
-            points = market.get("points") or []
-            if not points:
-                return asset.symbol, None
-            latest = points[-1]
-            return asset.symbol, {
-                "price": float(latest["close"]),
-                "timestamp": int(latest["timestamp"]),
-                "stale": bool(market.get("stale", False)),
-                "provider": asset.provider,
+            quote = provider.get_market_quote(asset.symbol)
+            payload = {
+                **quote,
+                "_cached_at": now,
+                "stale": False,
             }
+            MARKET_QUOTE_CACHE[asset.symbol] = payload
+            return asset.symbol, dict(payload)
         except Exception as exc:
-            return asset.symbol, {"error": f"{type(exc).__name__}: {exc}"}
+            if cached:
+                fallback = dict(cached)
+                fallback["stale"] = True
+                fallback["error"] = f"{type(exc).__name__}: {exc}"
+                return asset.symbol, fallback
+            return asset.symbol, {
+                "stale": True,
+                "error": f"{type(exc).__name__}: {exc}",
+            }
 
-    workers = min(6, max(1, len(SUPPORTED_ASSETS)))
+    workers = min(6, max(1, len(targets)))
     with ThreadPoolExecutor(max_workers=workers) as pool:
-        rows = list(pool.map(fetch, SUPPORTED_ASSETS))
+        rows = list(pool.map(fetch, targets))
 
-    fresh_prices = {
-        symbol: payload
+    return {
+        symbol: {
+            key: value
+            for key, value in payload.items()
+            if key != "_cached_at"
+        }
         for symbol, payload in rows
-        if payload is not None and payload.get("price") is not None
     }
-    merged = dict(cached_prices)
-    merged.update(fresh_prices)
-    ASSET_LIVE_CACHE = {"timestamp": now, "prices": merged}
-    return merged
 
 
 @app.get("/api/assets")
@@ -612,7 +678,7 @@ def assets() -> list[dict[str, Any]]:
             market_timestamp = live.get("timestamp")
             market_stale = bool(live.get("stale", False))
             market_provider = live.get("provider", asset.provider)
-            market_live = True
+            market_live = not market_stale
         elif mark.get("price") is not None:
             market_price = float(mark["price"])
             market_timestamp = mark.get("timestamp")
@@ -651,6 +717,14 @@ def assets() -> list[dict[str, Any]]:
                 "market_live": market_live,
                 "market_stale": market_stale,
                 "market_provider": market_provider,
+                "market_change": live.get("change"),
+                "market_change_pct": live.get("change_pct"),
+                "market_previous_close": live.get("previous_close"),
+                "market_day_high": live.get("day_high"),
+                "market_day_low": live.get("day_low"),
+                "market_volume": live.get("volume"),
+                "market_quote_volume": live.get("quote_volume"),
+                "market_change_period": live.get("change_period"),
 
                 # Primary dashboard trading state = autonomous AI paper account.
                 "position": position_side,
