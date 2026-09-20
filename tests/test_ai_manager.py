@@ -1,7 +1,14 @@
 import json
 from types import SimpleNamespace
 
-from src.agent.ai_manager import AIPaperManager, STRATEGIES
+from src.agent.ai_manager import (
+    AIPaperManager,
+    EXPLORATION_POSITION_EXPOSURE,
+    MAX_EXPLORATORY_POSITIONS,
+    MIN_MODEL_EDGE,
+    MIN_VALIDATION_TRADES,
+    STRATEGIES,
+)
 
 
 def test_ai_manager_initializes_zero_pln_multi_position_account(tmp_path):
@@ -374,3 +381,105 @@ def test_pending_signal_opens_only_after_reconfirmation(tmp_path):
     assert position["score"] == 0.025
     assert position["confirmed_timestamp"] == 120_000
     assert position["allocation_pln"] == 150.0
+
+
+
+def test_guardrails_require_stronger_validation():
+    assert MIN_VALIDATION_TRADES >= 4
+    assert MIN_MODEL_EDGE >= 0.001
+    assert EXPLORATION_POSITION_EXPOSURE < 0.15
+    assert MAX_EXPLORATORY_POSITIONS == 1
+
+
+def test_live_learning_can_reject_previously_eligible_signal(tmp_path):
+    manager = AIPaperManager(tmp_path / "ai_paper.json", assets=[])
+    manager.state["strategy_learning"]["trend"] = {
+        "trades": 4,
+        "wins": 1,
+        "total_return": -0.04,
+    }
+
+    row = {
+        "symbol": "TESTUSDT",
+        "strategy": "trend",
+        "side": "LONG",
+        "eligible": True,
+        "score": 0.0020,
+    }
+
+    manager._apply_live_learning(row)
+
+    assert row["learning_bonus"] < 0
+    assert row["score"] < MIN_MODEL_EDGE
+    assert row["eligible"] is False
+    assert row["eligibility_reason"] == "LIVE_LEARNING_EDGE_REJECTED"
+
+
+def test_exploratory_entry_uses_smaller_position(tmp_path):
+    manager = AIPaperManager(tmp_path / "ai_paper.json", assets=[])
+    _fund_manager(manager)
+
+    manager.state["pending"] = [
+        {
+            "symbol": "TESTUSDT",
+            "strategy": "trend",
+            "side": "LONG",
+            "timestamp": 60_000,
+            "signal_timestamp": 60_000,
+            "score": 0.01,
+            "exploratory": True,
+        }
+    ]
+
+    result = manager._execute_pending(
+        {"TESTUSDT": [_candle(120_000, 103.0), _candle(150_000, 104.0)]},
+        {"TESTUSDT": [_candle(120_000, 103.0)]},
+        [
+            {
+                "symbol": "TESTUSDT",
+                "strategy": "trend",
+                "side": "LONG",
+                "eligible": True,
+                "score": 0.025,
+                "exploratory": True,
+            }
+        ],
+        150_000,
+    )
+
+    assert result["opened"] == ["TESTUSDT"]
+    assert manager.state["positions"]["TESTUSDT"]["allocation_pln"] == 50.0
+
+
+def test_only_one_exploratory_candidate_can_be_pending(tmp_path):
+    manager = AIPaperManager(tmp_path / "ai_paper.json", assets=[])
+    _fund_manager(manager)
+
+    rows = [
+        {
+            "symbol": "AAAUSDT",
+            "strategy": "trend",
+            "side": "LONG",
+            "eligible": True,
+            "score": 0.01,
+            "exploratory": True,
+        },
+        {
+            "symbol": "BBBUSDT",
+            "strategy": "breakout",
+            "side": "SHORT",
+            "eligible": True,
+            "score": 0.009,
+            "exploratory": True,
+        },
+    ]
+    fresh = {
+        "AAAUSDT": [_candle(60_000, 100.0)],
+        "BBBUSDT": [_candle(60_000, 100.0)],
+    }
+
+    selected = manager._select_new_pending(rows, fresh, 90_000)
+
+    assert len(selected) == 1
+    assert selected[0]["symbol"] == "AAAUSDT"
+    assert selected[0]["exploratory"] is True
