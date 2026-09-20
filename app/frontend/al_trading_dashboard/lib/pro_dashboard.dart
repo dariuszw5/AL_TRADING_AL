@@ -46,6 +46,7 @@ class _ProDashboardState extends State<ProDashboard> {
     'Rynki',
     'Research TOP 10',
     'Aktywność AI',
+    'Wydarzenia',
     'Historia',
   ];
 
@@ -54,6 +55,7 @@ class _ProDashboardState extends State<ProDashboard> {
     Icons.bar_chart,
     Icons.travel_explore,
     Icons.psychology_outlined,
+    Icons.public,
     Icons.history,
   ];
 
@@ -1184,7 +1186,6 @@ class _ProDashboardState extends State<ProDashboard> {
 
   Widget activity() {
     final decisions = asList(ai?['decisions']);
-    final macro = asList(research?['macro_events']);
     final errors = asMap(research?['errors']);
     return box(
       Column(
@@ -1210,7 +1211,7 @@ class _ProDashboardState extends State<ProDashboard> {
               style: TextStyle(color: muted),
             )
           else
-            for (final raw in decisions.reversed.take(10))
+            for (final raw in decisions.reversed.take(30))
               if (raw is Map)
                 ListTile(
                   contentPadding: EdgeInsets.zero,
@@ -1220,24 +1221,14 @@ class _ProDashboardState extends State<ProDashboard> {
                   ),
                   subtitle: Text(raw['reason']?.toString() ?? ''),
                 ),
-          if (macro.isNotEmpty) ...[
+          if (errors.values.any((value) => value != null)) ...[
             const Divider(color: Color(0xFF294152)),
             const SizedBox(height: 10),
             const Text(
-              'Ostatnie wydarzenia makro',
+              'Problemy z danymi',
               style: TextStyle(fontWeight: FontWeight.w600),
             ),
-            for (final raw in macro.reversed.take(5))
-              if (raw is Map)
-                ListTile(
-                  contentPadding: EdgeInsets.zero,
-                  leading: const Icon(Icons.public, color: mint, size: 20),
-                  title: Text(raw['title']?.toString() ?? 'Wydarzenie makro'),
-                  subtitle: Text(raw['source']?.toString() ?? ''),
-                ),
-          ],
-          if (errors.values.any((value) => value != null)) ...[
-            const Divider(color: Color(0xFF294152)),
+            const SizedBox(height: 6),
             Text(
               errors.entries
                   .where((entry) => entry.value != null)
@@ -1251,6 +1242,56 @@ class _ProDashboardState extends State<ProDashboard> {
             'Wirtualny broker • brak prawdziwych zleceń • ranking nie jest gwarancją zysku.',
             style: TextStyle(color: mint, height: 1.5),
           ),
+        ],
+      ),
+    );
+  }
+
+  Widget macroEvents() {
+    final macro = asList(research?['macro_events']);
+    return box(
+      Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          heading(
+            'Ostatnie wydarzenia',
+            'Makro i informacje wykorzystywane przez warstwę research',
+          ),
+          const Row(
+            children: [
+              Icon(Icons.public, color: mint, size: 30),
+              SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  'Oddzielny widok wydarzeń, bez zaśmiecania głównego ekranu portfela.',
+                  style: TextStyle(color: muted),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 18),
+          if (macro.isEmpty)
+            const Text(
+              'Brak zapisanych wydarzeń.',
+              style: TextStyle(color: muted),
+            )
+          else
+            for (final raw in macro.reversed.take(30))
+              if (raw is Map)
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: const Icon(Icons.public, color: mint, size: 20),
+                  title: Text(
+                    raw['title']?.toString() ?? 'Wydarzenie makro',
+                  ),
+                  subtitle: Text(
+                    [
+                      if (raw['source'] != null) raw['source'].toString(),
+                      if (raw['published_at'] != null)
+                        raw['published_at'].toString(),
+                    ].join(' • '),
+                  ),
+                ),
         ],
       ),
     );
@@ -1320,6 +1361,8 @@ class _ProDashboardState extends State<ProDashboard> {
                         ? 'TOP 10'
                         : i == 3
                         ? 'AI'
+                        : i == 4
+                        ? 'News'
                         : labels[i],
                   ),
               ],
@@ -1476,13 +1519,7 @@ class _ProDashboardState extends State<ProDashboard> {
                           children: [
                             Expanded(
                               flex: 3,
-                              child: Column(
-                                children: [
-                                  equityChart(),
-                                  const SizedBox(height: 20),
-                                  marketTable(),
-                                ],
-                              ),
+                              child: equityChart(),
                             ),
                             const SizedBox(width: 20),
                             Expanded(
@@ -1492,8 +1529,6 @@ class _ProDashboardState extends State<ProDashboard> {
                                   fundsDonut(),
                                   const SizedBox(height: 20),
                                   portfolioActions(),
-                                  const SizedBox(height: 20),
-                                  activity(),
                                 ],
                               ),
                             ),
@@ -1505,17 +1540,14 @@ class _ProDashboardState extends State<ProDashboard> {
                         portfolioActions(),
                         const SizedBox(height: 20),
                         equityChart(),
-                        const SizedBox(height: 20),
-                        marketTable(),
-                        const SizedBox(height: 20),
-                        activity(),
                       ],
                     ],
                     if (page == 1) marketTable(all: true),
                     if (page == 2)
                       ResearchPanel(data: researchData, error: failure),
                     if (page == 3) activity(),
-                    if (page == 4) history(),
+                    if (page == 4) macroEvents(),
+                    if (page == 5) history(),
                     const SizedBox(height: 24),
                     const Center(
                       child: Text(
