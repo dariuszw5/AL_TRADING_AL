@@ -1653,6 +1653,8 @@ class _ProDashboardState extends State<ProDashboard>
   Widget activity() {
     final decisions = asList(ai?['decisions']);
     final errors = asMap(research?['errors']);
+    final supervisor = asMap(ai?['strategy_supervisor']);
+    final strategyHealth = asMap(supervisor['strategies']);
     return box(
       Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1671,6 +1673,130 @@ class _ProDashboardState extends State<ProDashboard>
             ],
           ),
           const SizedBox(height: 18),
+          if (strategyHealth.isNotEmpty) ...[
+            Row(
+              children: [
+                const Icon(
+                  Icons.health_and_safety_outlined,
+                  color: cyan,
+                  size: 22,
+                ),
+                const SizedBox(width: 8),
+                const Text(
+                  'Nadzorca strategii',
+                  style: TextStyle(
+                    fontWeight: FontWeight.w700,
+                    fontSize: 16,
+                  ),
+                ),
+                const Spacer(),
+                Text(
+                  supervisor['overall_status']?.toString() ?? 'LEARNING',
+                  style: const TextStyle(
+                    color: cyan,
+                    fontWeight: FontWeight.w700,
+                    fontSize: 11,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 10),
+            for (final entry in strategyHealth.entries)
+              Builder(
+                builder: (context) {
+                  final health = asMap(entry.value);
+                  final status =
+                      health['status']?.toString() ?? 'LEARNING';
+                  final tone = status == 'ACTIVE'
+                      ? mint
+                      : status == 'PAUSED'
+                      ? Colors.redAccent
+                      : status == 'WATCH'
+                      ? Colors.amber
+                      : cyan;
+                  final trades = health['trades'] ?? 0;
+                  final winRate =
+                      ((health['win_rate'] as num?)?.toDouble() ?? 0.0) *
+                      100;
+                  final pf = (health['profit_factor'] as num?)?.toDouble();
+                  final avg =
+                      ((health['mean_return'] as num?)?.toDouble() ?? 0.0) *
+                      100;
+                  final stopRate =
+                      ((health['stop_loss_rate'] as num?)?.toDouble() ?? 0.0) *
+                      100;
+                  final pfText = pf == null
+                      ? '—'
+                      : pf.isInfinite
+                      ? 'INF'
+                      : pf.toStringAsFixed(2);
+
+                  return Container(
+                    margin: const EdgeInsets.only(bottom: 8),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 10,
+                    ),
+                    decoration: BoxDecoration(
+                      color: tone.withValues(alpha: 0.06),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                        color: tone.withValues(alpha: 0.20),
+                      ),
+                    ),
+                    child: Row(
+                      children: [
+                        Container(
+                          width: 9,
+                          height: 9,
+                          decoration: BoxDecoration(
+                            color: tone,
+                            shape: BoxShape.circle,
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                entry.key.replaceAll('_', ' '),
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                              const SizedBox(height: 3),
+                              Text(
+                                '$trades transakcji • WR ${winRate.toStringAsFixed(1)}% • '
+                                'PF $pfText • avg ${avg >= 0 ? '+' : ''}${avg.toStringAsFixed(3)}% • '
+                                'SL ${stopRate.toStringAsFixed(0)}%',
+                                style: const TextStyle(
+                                  color: muted,
+                                  fontSize: 11,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        Text(
+                          status,
+                          style: TextStyle(
+                            color: tone,
+                            fontSize: 11,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                },
+              ),
+            const Divider(
+              height: 28,
+              color: Color(0xFF294152),
+            ),
+          ],
           if (decisions.isEmpty)
             const Text(
               'Brak zapisanych decyzji AI.',
