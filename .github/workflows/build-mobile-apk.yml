@@ -51,7 +51,8 @@ jobs:
         working-directory: app/frontend/al_trading_dashboard
         run: >
           flutter build apk --release
-          --dart-define=AL_TRADING_API_BASE_URL=http://34.45.151.160:8000
+          --build-number=${{ github.run_number }}
+          --dart-define=AL_TRADING_API_BASE_URL=https://34-45-151-160.sslip.io
 
       - name: Prepare APK
         run: |
@@ -70,4 +71,4 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           TAG="mobile-v1-${GITHUB_RUN_NUMBER}"
-          gh release create "$TAG"             "./al-trading-agent.apk#AL Trading Agent Android APK"             --repo "${GITHUB_REPOSITORY}"             --target "${GITHUB_SHA}"             --title "AL Trading Agent Mobile ${GITHUB_RUN_NUMBER}"             --notes "Android APK. Real market data, virtual money only. API: http://34.45.151.160:8000"
+          gh release create "$TAG"             "./al-trading-agent.apk#AL Trading Agent Android APK"             --repo "${GITHUB_REPOSITORY}"             --target "${GITHUB_SHA}"             --title "AL Trading Agent Mobile ${GITHUB_RUN_NUMBER}"             --notes "Android APK. Real market data, virtual money only. API: https://34-45-151-160.sslip.io"
