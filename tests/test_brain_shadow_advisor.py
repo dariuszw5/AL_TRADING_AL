@@ -107,6 +107,39 @@ def test_model_rejected_and_paused_candidates_never_become_eligible():
     assert rows[1]["shadow_selection_bonus"] > 0
 
 
+def test_actual_supervisor_pause_cannot_be_reversed_by_shadow_bonus():
+    from src.agent.strategy_supervisor import supervise_candidate
+
+    shadow = make_shadow()
+    row = {
+        **candidate(score=0.005, eligible=True),
+        "validated": False,
+        "exploratory": False,
+        "validation_trades": 0,
+        "validation_mean": None,
+    }
+    supervise_candidate(
+        row,
+        {"strategies": {"trend": {"status": "PAUSED", "reason": "live losses"}}},
+    )
+    assert row["eligible"] is False
+    apply_shadow_advisor([row], shadow)
+    assert row["eligible"] is False
+    assert row["shadow_selection_bonus"] == 0
+    assert row["eligibility_reason"] == "STRATEGY_SUPERVISOR_PAUSED"
+
+
+def test_all_model_rejected_signals_stay_rejected_with_positive_shadow():
+    shadow = make_shadow()
+    rows = [
+        candidate(eligible=False, score=-0.002),
+        candidate(eligible=False, score=-0.001),
+    ]
+    apply_shadow_advisor(rows, shadow)
+    assert not any(row["eligible"] for row in rows)
+    assert all(row["shadow_selection_bonus"] == 0 for row in rows)
+
+
 def test_duplicate_samples_and_unverified_pnl_do_not_inflate_confidence():
     shadow = make_shadow(returns=[0.004])
     one = shadow["trades"][0]
