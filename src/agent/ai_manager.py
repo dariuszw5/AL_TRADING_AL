@@ -19,6 +19,7 @@ from time import time
 from uuid import uuid4
 
 from src.agent.live_state_store import LiveStateStore
+from src.agent.shadow_ledger import empty_shadow_ledger, update_shadow_ledger
 from src.agent.strategy_supervisor import (
     build_strategy_supervisor,
     supervise_candidate,
@@ -422,6 +423,7 @@ class AIPaperManager:
             "accounting_error": False,
             "market_marks": {},
             "strategy_supervisor": {},
+            "shadow": empty_shadow_ledger(),
             "strategy_learning": {
                 strategy: {
                     "trades": 0,
@@ -499,6 +501,7 @@ class AIPaperManager:
         state.setdefault("accounting_gap", 0.0)
         state.setdefault("accounting_error", False)
         state.setdefault("strategy_supervisor", {})
+        state.setdefault("shadow", empty_shadow_ledger())
         state.setdefault("strategy_learning", {})
         for strategy in STRATEGIES:
             state["strategy_learning"].setdefault(
@@ -1226,6 +1229,18 @@ class AIPaperManager:
         for row in rows:
             supervise_candidate(row, supervisor)
             self._apply_controlled_learning_probe(row, supervisor)
+
+        # Passive counterfactual ledger. This never changes row scores,
+        # real positions, strategy_learning or capital/risk controls.
+        update_shadow_ledger(
+            s,
+            fresh,
+            rows,
+            minute=MINUTE,
+            horizon=HORIZON,
+            exit_price=exit_price,
+            net_return=net_return,
+        )
 
         rows.sort(
             key=lambda row: (
