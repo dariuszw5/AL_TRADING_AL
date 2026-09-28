@@ -5,6 +5,7 @@ from math import sqrt
 from pathlib import Path
 from statistics import mean
 
+from src.agent.ai_manager import HORIZON, SIDES, net_return
 from src.agent.live_state_store import LiveStateStore
 from src.research.event_store import DailyJsonlStore
 
@@ -26,7 +27,7 @@ class MemoryAdjustment:
 
 
 class ExperienceMemory:
-    def __init__(self, data_dir: str | Path, horizon_minutes: int = 10):
+    def __init__(self, data_dir: str | Path, horizon_minutes: int = HORIZON):
         root = Path(data_dir)
         root.mkdir(parents=True, exist_ok=True)
         self.horizon_ms = int(horizon_minutes) * 60_000
@@ -36,8 +37,13 @@ class ExperienceMemory:
         if self.pending.get("version") != 1:
             self.pending = {"version": 1, "items": []}
 
-    def observe(self, *, symbol, timestamp, close, features, strategy, macro_tags, model_score):
+    def observe(self, *, symbol, timestamp, close, features, strategy, side, macro_tags, model_score):
+        side = str(side).upper()
+        if side not in SIDES:
+            raise ValueError("Experience direction must be LONG or SHORT")
         item = {
+            "label_version": 2,
+            "side": side,
             "symbol": symbol,
             "timestamp": int(timestamp),
             "close": float(close),
@@ -47,8 +53,11 @@ class ExperienceMemory:
             "model_score": float(model_score),
         }
         items = self.pending.get("items", [])
-        key = (item["symbol"], item["strategy"], item["timestamp"])
-        if not any((r.get("symbol"), r.get("strategy"), r.get("timestamp")) == key for r in items):
+        key = (item["symbol"], item["strategy"], item["side"], item["timestamp"])
+        if not any(
+            (r.get("symbol"), r.get("strategy"), r.get("side"), r.get("timestamp")) == key
+            for r in items
+        ):
             items.append(item)
         self.pending["items"] = items[-2000:]
         self.pending_store.save(self.pending)
@@ -56,6 +65,10 @@ class ExperienceMemory:
     def resolve(self, market_closes: dict[str, tuple[int, float]]) -> int:
         remaining, resolved_rows = [], []
         for row in self.pending.get("items", []):
+            # Old observations had no direction; their outcomes cannot safely
+            # be classified as successful/failed LONG or SHORT experiences.
+            if row.get("label_version") != 2 or row.get("side") not in SIDES:
+                continue
             current = market_closes.get(str(row.get("symbol")))
             if current is None:
                 remaining.append(row)
@@ -71,7 +84,12 @@ class ExperienceMemory:
                 **row,
                 "outcome_timestamp": int(current_timestamp),
                 "outcome_close": float(current_close),
-                "realized_forward_return": float(current_close) / entry - 1.0,
+                # Research label, NOT executed brokerage PnL. Use the same
+                # directional round-trip fee/slippage convention as paper AI.
+                "realized_forward_return": net_return(
+                    entry, float(current_close), str(row["side"])
+                ),
+                "label_type": "DIRECTIONAL_CLOSE_PROXY_AFTER_COSTS",
                 "event_type": "RESOLVED_EXPERIENCE",
             })
         self.pending["items"] = remaining[-2000:]
@@ -86,11 +104,16 @@ class ExperienceMemory:
             return float("inf")
         return sqrt(sum((x - y) ** 2 for x, y in zip(a, b)))
 
-    def adjustment(self, *, features, strategy, macro_tags, k: int = 20) -> MemoryAdjustment:
+    def adjustment(self, *, features, strategy, side, macro_tags, k: int = 20) -> MemoryAdjustment:
+        side = str(side).upper()
+        if side not in SIDES:
+            raise ValueError("Experience direction must be LONG or SHORT")
         target = [float(x) for x in features]
         target_tags = set(str(x) for x in macro_tags)
         rows = [r for r in self.resolved.read_recent(limit=6000, days=120)
                 if r.get("event_type") == "RESOLVED_EXPERIENCE"
+                and r.get("label_version") == 2
+                and r.get("side") == side
                 and r.get("strategy") == strategy]
         ranked = []
         for row in rows:
