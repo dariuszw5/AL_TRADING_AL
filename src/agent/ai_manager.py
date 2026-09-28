@@ -238,14 +238,25 @@ def rank_asset(symbol, candles):
 
         for strategy in STRATEGIES:
             validation = []
+            shadow_validation = []
             next_free = boundary
+            shadow_next_free = boundary
 
             for i in range(boundary, len(candles) - HORIZON):
-                if i < next_free or not contiguous(i):
+                if not contiguous(i):
                     continue
                 if signal_side(strategy, candles, i) != side:
                     continue
 
+                # Passive, non-overlapping OOS evaluation of every historical
+                # strategy signal, even when the model would reject trading it.
+                # This never allocates money, submits orders or changes gating.
+                if i >= shadow_next_free:
+                    shadow_validation.append(outcome(candles, i, side))
+                    shadow_next_free = i + HORIZON + 1
+
+                if i < next_free:
+                    continue
                 estimate, uncertainty = model.predict(features(candles, i))
                 if estimate <= -uncertainty:
                     continue
@@ -254,6 +265,21 @@ def rank_asset(symbol, candles):
                 next_free = i + HORIZON + 1
 
             validation_mean = mean(validation) if validation else None
+            shadow_mean = (
+                mean(shadow_validation) if shadow_validation else None
+            )
+            shadow_wins = sum(value > 0 for value in shadow_validation)
+            shadow_gross_win = sum(
+                value for value in shadow_validation if value > 0
+            )
+            shadow_gross_loss = abs(sum(
+                value for value in shadow_validation if value < 0
+            ))
+            shadow_profit_factor = (
+                shadow_gross_win / shadow_gross_loss
+                if shadow_gross_loss > 0
+                else float("inf") if shadow_gross_win > 0 else 0.0
+            )
             conservative = prediction - 0.35 * spread
             score = (
                 min(conservative, validation_mean)
@@ -295,6 +321,11 @@ def rank_asset(symbol, candles):
                     "neighbor_spread": spread,
                     "validation_trades": len(validation),
                     "validation_mean": validation_mean,
+                    # Observation-only diagnostics. Not a live track record.
+                    "shadow_validation_trades": len(shadow_validation),
+                    "shadow_validation_mean": shadow_mean,
+                    "shadow_validation_wins": shadow_wins,
+                    "shadow_validation_profit_factor": shadow_profit_factor,
                     "train_samples": len(train_indices),
                     "train_label_end": candles[
                         train_indices[-1] + HORIZON
