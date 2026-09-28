@@ -185,14 +185,15 @@ class BrainPanel extends StatelessWidget {
             (count, value) => count + _int(_map(value)['trades']),
           );
 
-    return Container(
-      padding: const EdgeInsets.all(18),
-      decoration: BoxDecoration(
-        color: ink,
-        border: Border.all(color: const Color(0xFF294152)),
+    return Material(
+      color: ink,
+      shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(14),
+        side: const BorderSide(color: Color(0xFF294152)),
       ),
-      child: Column(
+      child: Padding(
+        padding: const EdgeInsets.all(18),
+        child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const Wrap(
@@ -316,6 +317,7 @@ class BrainPanel extends StatelessWidget {
               ),
           ],
         ],
+        ),
       ),
     );
   }
