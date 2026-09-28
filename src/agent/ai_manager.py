@@ -278,7 +278,7 @@ def rank_asset(symbol, candles):
             shadow_profit_factor = (
                 shadow_gross_win / shadow_gross_loss
                 if shadow_gross_loss > 0
-                else float("inf") if shadow_gross_win > 0 else 0.0
+                else None if shadow_gross_win > 0 else 0.0
             )
             conservative = prediction - 0.35 * spread
             score = (
