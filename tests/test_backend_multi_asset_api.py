@@ -3,6 +3,7 @@ import json
 from fastapi.testclient import TestClient
 
 from app.backend import main
+from src.data.assets import RESEARCH_ASSETS, SUPPORTED_ASSETS
 from src.data.candle import Candle
 from src.data.fx_provider import PlnRate
 
@@ -27,16 +28,18 @@ def test_assets_endpoint_matches_supported_registry(tmp_path, monkeypatch):
     assert response.status_code == 200
     payload = response.json()
     symbols = {row["symbol"] for row in payload}
-    assert symbols == {
-        "BTCUSDT",
-        "ETHUSDT",
-        "SOLUSDT",
-        "BNBUSDT",
-        "XRPUSDT",
-        "GOLD_FUT_CONT",
-        "WTI_FUT_CONT",
-        "EURUSD",
-        "AAPL",
+    # /api/assets is a multi-market dashboard endpoint. It must include the
+    # whole curated app + research registry, not only the nine legacy symbols.
+    expected = {
+        asset.symbol for asset in (*SUPPORTED_ASSETS, *RESEARCH_ASSETS)
+    }
+    core = {asset.symbol for asset in SUPPORTED_ASSETS}
+    assert len(core) == 9
+    assert core <= symbols
+    assert symbols == expected
+    assert len(payload) == len(symbols)  # no duplicates (e.g. AAPL/EURUSD)
+    assert {"crypto", "equity", "etf", "forex", "index", "commodity"} <= {
+        row["asset_type"] for row in payload
     }
     gold = next(row for row in payload if row["symbol"] == "GOLD_FUT_CONT")
     assert gold["provider_symbol"] == "GC=F"
