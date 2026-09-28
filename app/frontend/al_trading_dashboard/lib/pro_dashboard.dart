@@ -16,13 +16,11 @@ const muted = Color(0xFF95AABE);
 class ProDashboard extends StatefulWidget {
   final String baseUrl;
   final Future<Map<String, dynamic>> Function()? loader;
-  final WidgetBuilder? legacyBuilder;
 
   const ProDashboard({
     super.key,
     required this.baseUrl,
     this.loader,
-    this.legacyBuilder,
   });
 
   @override
@@ -784,6 +782,86 @@ class _ProDashboardState extends State<ProDashboard>
     final rows = opportunities;
     final index = rows.indexWhere((row) => row['symbol']?.toString() == symbol);
     return index < 0 ? null : index + 1;
+  }
+
+  /// One universe for the current autonomous AI account. It includes quote
+  /// cards, research markets, scanned candidates, and open/historical markets.
+  /// No separate BTCUSDT legacy account contributes position or PnL here.
+  List<Map<String, dynamic>> get marketCatalog {
+    final bySymbol = <String, Map<String, dynamic>>{};
+
+    void add(dynamic rawSymbol, [Map<String, dynamic>? details]) {
+      final symbol = rawSymbol?.toString().trim() ?? '';
+      if (symbol.isEmpty) return;
+      final asset = bySymbol.putIfAbsent(symbol, () {
+        return <String, dynamic>{
+          'symbol': symbol,
+          'name': symbol,
+          'quote': symbol.endsWith('USDT') ? 'USDT' : '',
+          'position': 'FLAT',
+        };
+      });
+      if (details == null) return;
+      for (final entry in details.entries) {
+        final existing = asset[entry.key];
+        if ((existing == null ||
+                existing.toString().isEmpty ||
+                existing == symbol) &&
+            entry.value != null) {
+          asset[entry.key] = entry.value;
+        }
+      }
+    }
+
+    for (final asset in assets) {
+      add(asset['symbol']);
+      bySymbol[asset['symbol'].toString()]!.addAll(asset);
+    }
+    for (final opportunity in opportunities) {
+      add(opportunity['symbol'], {
+        'name': opportunity['name'] ?? opportunity['symbol'],
+        'asset_type': opportunity['asset_class'],
+      });
+    }
+    for (final raw in asList(ai?['ranking']).whereType<Map>()) {
+      add(raw['symbol']);
+    }
+    final positions = asMap(ai?['positions']);
+    for (final symbol in positions.keys) {
+      add(symbol);
+    }
+    for (final raw in asList(ai?['pending']).whereType<Map>()) {
+      add(raw['symbol']);
+    }
+    for (final raw in asList(ai?['trades']).whereType<Map>()) {
+      add(raw['symbol']);
+    }
+    final marks = asMap(ai?['market_marks']);
+    for (final symbol in marks.keys) {
+      add(symbol);
+    }
+
+    for (final item in bySymbol.entries) {
+      final symbol = item.key;
+      final asset = item.value;
+      final position = asMap(positions[symbol]);
+      if (position.isNotEmpty) {
+        asset['position'] = position['side'] ?? 'FLAT';
+        asset['ai_position'] = position;
+        asset['ai_allocation_pln'] = position['allocation_pln'];
+        asset['ai_pnl_pln'] = position['unrealized_pnl'];
+      }
+      if (asset['market_price'] is! num) {
+        final lastMark = asMap(marks[symbol]);
+        if (lastMark['price'] is num) {
+          asset['market_price'] = lastMark['price'];
+          asset['market_provider'] = 'AI_LAST_CLOSED_CANDLE';
+          asset['market_stale'] = true;
+        }
+      }
+    }
+
+    return bySymbol.values.toList();
   }
 
   Widget summary() {
@@ -1978,67 +2056,159 @@ class _ProDashboardState extends State<ProDashboard>
   void assetDetail(Map<String, dynamic> asset) {
     final symbol = asset['symbol']?.toString() ?? '—';
     final opportunity = opportunityFor(symbol);
-    final pln = asMap(asset['pln']);
+    final position = asMap(asMap(ai?['positions'])[symbol]);
+    final pending = asList(ai?['pending'])
+        .whereType<Map>()
+        .where((row) => row['symbol']?.toString() == symbol)
+        .toList();
+    final trades = asList(ai?['trades'])
+        .whereType<Map>()
+        .map((row) => Map<String, dynamic>.from(row))
+        .where((row) => row['symbol']?.toString() == symbol)
+        .toList();
+    final candidates = asList(ai?['ranking'])
+        .whereType<Map>()
+        .map((row) => Map<String, dynamic>.from(row))
+        .where((row) => row['symbol']?.toString() == symbol)
+        .toList();
+    final mark = asMap(asMap(ai?['market_marks'])[symbol]);
+    final quotePrice = asset['market_price'] is num
+        ? asset['market_price']
+        : mark['price'];
+    final realized = trades.fold<double>(
+      0.0,
+      (sum, row) => sum + ((row['profit'] as num?)?.toDouble() ?? 0.0),
+    );
+    final unrealized = (position['unrealized_pnl'] as num?)?.toDouble();
+    final source = asset['market_provider']?.toString() ?? 'brak notowań';
+
     showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
       backgroundColor: panel,
-      builder: (context) => SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
+      builder: (sheetContext) => DraggableScrollableSheet(
+        expand: false,
+        initialChildSize: 0.83,
+        minChildSize: 0.40,
+        maxChildSize: 0.96,
+        builder: (context, scrollController) => SafeArea(
+          child: ListView(
+            controller: scrollController,
+            padding: const EdgeInsets.all(24),
             children: [
               heading(symbol, asset['name']?.toString()),
+              const Text(
+                'Jeden autonomiczny rachunek AI • wszystkie wyniki wirtualne PLN',
+                style: TextStyle(color: mint, fontSize: 12),
+              ),
+              const SizedBox(height: 14),
               Text(
-                'Cena: ${number(asset['market_price'], 5)} ${asset['quote'] ?? ''}',
+                quotePrice is num
+                    ? 'Notowanie: ${number(quotePrice, 5)} ${asset['quote'] ?? ''}'
+                    : 'Notowanie: brak aktualnej ceny',
+              ),
+              Text(
+                'Źródło: $source${asset['market_stale'] == true ? ' • DANE REFERENCYJNE/STALE' : ''}',
+                style: const TextStyle(color: muted, fontSize: 12),
               ),
               if (asset['market_price_pln'] is num)
                 Text(
-                  'Cena referencyjna: ${number(asset['market_price_pln'], 2)} PLN',
+                  'Cena referencyjna: ${number(asset['market_price_pln'])} PLN',
                 ),
-              const SizedBox(height: 10),
-              Text('Pozycja paper-live: ${asset['position'] ?? 'FLAT'}'),
-              Text(
-                'Wynik paper-live: ${signed(asset['net_profit'])} ${asset['quote'] ?? ''}',
+              const Divider(height: 30, color: Color(0xFF294152)),
+              const Text(
+                'POZYCJA AUTONOMICZNEGO AI',
+                style: TextStyle(color: cyan, fontWeight: FontWeight.w700),
               ),
-              if (asset['net_profit_pln'] is num)
+              const SizedBox(height: 8),
+              if (position.isEmpty)
+                const Text('FLAT • brak otwartej pozycji AI na tym rynku')
+              else ...[
                 Text(
-                  'Wynik paper-live: ${signed(asset['net_profit_pln'])} PLN',
+                  '${position['side'] ?? '—'} • ${position['strategy'] ?? '—'}'
+                  '${position['learning_probe'] == true ? ' • LEARNING PROBE' : ''}',
                 ),
-              if (opportunity != null) ...[
-                const SizedBox(height: 14),
+                Text('Ekspozycja: ${number(position['allocation_pln'])} PLN'),
+                Text('Wejście: ${number(position['entry'], 5)}'),
                 Text(
-                  'Research TOP ${opportunityRank(symbol) ?? '—'} • ${classLabel(opportunity['asset_class'])}',
-                  style: const TextStyle(
-                    color: cyan,
-                    fontWeight: FontWeight.w600,
+                  'Niezrealizowany PnL: ${unrealized == null ? '—' : signed(unrealized)} PLN',
+                  style: TextStyle(
+                    color: unrealized == null
+                        ? muted
+                        : unrealized >= 0
+                            ? mint
+                            : Colors.redAccent,
                   ),
-                ),
-                Text('Strategia: ${opportunity['strategy'] ?? '—'}'),
-                if (opportunity['cross_market_score'] is num)
-                  Text(
-                    'Cross score: ${number(opportunity['cross_market_score'], 4)}',
-                  ),
-                if (opportunity['expected_net_return'] is num)
-                  Text(
-                    'Prognoza netto modelu: ${((opportunity['expected_net_return'] as num).toDouble() * 100).toStringAsFixed(3)}%',
-                  ),
-                Text(
-                  'Walidacja: ${opportunity['validation_trades'] ?? 0} prób',
                 ),
               ],
-              const SizedBox(height: 12),
-              Text(
-                pln['available'] == true
-                    ? 'PLN: ${pln['path'] ?? 'realna ścieżka FX'}'
-                    : 'PLN niedostępne dla tego rynku',
-                style: const TextStyle(color: muted, fontSize: 12),
+              const SizedBox(height: 8),
+              Text('Pozycje oczekujące: ${pending.length}'),
+              for (final row in pending)
+                Text(
+                  '${row['side'] ?? '—'} • ${row['strategy'] ?? '—'}'
+                  '${row['learning_probe'] == true ? ' • LEARNING PROBE' : ''}',
+                  style: const TextStyle(color: cyan),
+                ),
+              const Divider(height: 30, color: Color(0xFF294152)),
+              const Text(
+                'HISTORIA TEGO RYNKU — TYLKO AI',
+                style: TextStyle(color: cyan, fontWeight: FontWeight.w700),
               ),
+              const SizedBox(height: 8),
+              Text('Zamknięte pozycje: ${trades.length}'),
+              Text(
+                'Zrealizowany PnL: ${signed(realized)} PLN',
+                style: TextStyle(
+                  color: realized >= 0 ? mint : Colors.redAccent,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              for (final trade in trades.reversed.take(8))
+                Padding(
+                  padding: const EdgeInsets.only(top: 5),
+                  child: Text(
+                    '${trade['strategy'] ?? '—'} • ${trade['side'] ?? '—'} • '
+                    '${trade['reason'] ?? '—'} • ${signed(trade['profit'])} PLN',
+                    style: const TextStyle(color: muted, fontSize: 12),
+                  ),
+                ),
+              const Divider(height: 30, color: Color(0xFF294152)),
+              const Text(
+                'SYGNAŁY BIEŻĄCEGO CYKLU AI',
+                style: TextStyle(color: cyan, fontWeight: FontWeight.w700),
+              ),
+              const SizedBox(height: 8),
+              if (candidates.isEmpty)
+                const Text('Brak bieżącej oceny modelu dla tego rynku')
+              else
+                for (final row in candidates)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 6),
+                    child: Text(
+                      '${row['strategy'] ?? '—'} • ${row['side'] ?? '—'} • '
+                      'expected ${row['expected_net_return'] is num ? ((row['expected_net_return'] as num).toDouble() * 100).toStringAsFixed(3) : '—'}% • '
+                      '${row['eligible'] == true ? 'DOPUSZCZONY' : 'ODRZUCONY'}',
+                      style: TextStyle(
+                        color: row['eligible'] == true ? mint : muted,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ),
+              if (opportunity != null) ...[
+                const Divider(height: 30, color: Color(0xFF294152)),
+                Text(
+                  'RESEARCH TOP ${opportunityRank(symbol) ?? '—'} • '
+                  '${classLabel(opportunity['asset_class'])}',
+                  style: const TextStyle(
+                    color: cyan,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                Text('Strategia Research: ${opportunity['strategy'] ?? '—'}'),
+              ],
               const SizedBox(height: 18),
               TextButton(
-                onPressed: () => Navigator.pop(context),
+                onPressed: () => Navigator.pop(sheetContext),
                 child: const Text('Zamknij'),
               ),
             ],
@@ -2049,7 +2219,7 @@ class _ProDashboardState extends State<ProDashboard>
   }
 
   Widget marketTable({bool all = false}) {
-    final filtered = assets.where((asset) {
+    final filtered = marketCatalog.where((asset) {
       final symbol = asset['symbol']?.toString() ?? '';
       final name = asset['name']?.toString() ?? '';
       return '$symbol $name'.toLowerCase().contains(query.toLowerCase());
@@ -2115,8 +2285,9 @@ class _ProDashboardState extends State<ProDashboard>
             Builder(
               builder: (context) {
                 final symbol = asset['symbol']?.toString() ?? '—';
-                final pnl = (asset['net_profit'] as num?)?.toDouble() ?? 0.0;
-                final pnlPln = (asset['net_profit_pln'] as num?)?.toDouble();
+                final aiPosition = asMap(asMap(ai?['positions'])[symbol]);
+                final pnlPln =
+                    (aiPosition['unrealized_pnl'] as num?)?.toDouble();
                 final opportunity = opportunityFor(symbol);
                 final rank = opportunity == null
                     ? null
@@ -2157,14 +2328,20 @@ class _ProDashboardState extends State<ProDashboard>
                           crossAxisAlignment: CrossAxisAlignment.end,
                           children: [
                             Text(
-                              '${number(price, digits)} ${asset['quote'] ?? ''}',
+                              price is num
+                                  ? '${number(price, digits)} ${asset['quote'] ?? ''}'
+                                  : 'Brak notowania',
                             ),
                             Text(
-                              pnlPln != null
-                                  ? '${signed(pnlPln)} PLN'
-                                  : '${signed(pnl)} ${asset['quote'] ?? ''}',
+                              pnlPln == null
+                                  ? 'AI • brak pozycji'
+                                  : '${signed(pnlPln)} PLN',
                               style: TextStyle(
-                                color: pnl >= 0 ? mint : Colors.redAccent,
+                                color: pnlPln == null
+                                    ? muted
+                                    : pnlPln >= 0
+                                        ? mint
+                                        : Colors.redAccent,
                                 fontSize: 12,
                               ),
                             ),
@@ -2468,10 +2645,76 @@ class _ProDashboardState extends State<ProDashboard>
     );
   }
 
-  void openLegacy() {
-    final builder = widget.legacyBuilder;
-    if (builder == null) return;
-    Navigator.of(context).push(MaterialPageRoute<void>(builder: builder));
+  /// Select any market visible to research or to the autonomous AI account.
+  /// The old BTCUSDT legacy paper account is not part of this navigation.
+  Future<void> openMarketDetails() async {
+    final entries = marketCatalog;
+    final selected = await showModalBottomSheet<Map<String, dynamic>>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: panel,
+      showDragHandle: true,
+      builder: (sheetContext) => SafeArea(
+        child: FractionallySizedBox(
+          heightFactor: 0.80,
+          child: Column(
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 8, 20, 10),
+                child: heading(
+                  'Szczegóły rynku',
+                  'Wybierz instrument z jednego wielorynkowego rachunku AI',
+                ),
+              ),
+              Expanded(
+                child: entries.isEmpty
+                    ? const Center(
+                        child: Text(
+                          'Brak danych o instrumentach AI',
+                          style: TextStyle(color: muted),
+                        ),
+                      )
+                    : ListView.builder(
+                        itemCount: entries.length,
+                        itemBuilder: (context, index) {
+                          final asset = entries[index];
+                          final symbol = asset['symbol']?.toString() ?? '—';
+                          final position =
+                              asMap(asMap(ai?['positions'])[symbol]);
+                          return ListTile(
+                            key: ValueKey('market_$symbol'),
+                            leading: assetLogo(symbol, size: 30),
+                            title: Text(symbol),
+                            subtitle: Text(
+                              asset['name']?.toString() ?? '',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(color: muted),
+                            ),
+                            trailing: Text(
+                              position.isEmpty
+                                  ? 'FLAT'
+                                  : 'AI ${position['side'] ?? '—'}',
+                              style: TextStyle(
+                                color: position.isEmpty ? muted : mint,
+                              ),
+                            ),
+                            onTap: () => Navigator.pop(sheetContext, asset),
+                          );
+                        },
+                      ),
+              ),
+              TextButton(
+                onPressed: () => Navigator.pop(sheetContext),
+                child: const Text('Zamknij'),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+    if (!mounted || selected == null) return;
+    assetDetail(selected);
   }
 
   Future<void> openMobileMoreMenu() async {
@@ -2503,29 +2746,27 @@ class _ProDashboardState extends State<ProDashboard>
                 ),
                 onTap: () => Navigator.pop(context, 5),
               ),
-              if (widget.legacyBuilder != null)
-                ListTile(
-                  leading: const Icon(
-                    Icons.analytics_outlined,
-                    color: cyan,
-                  ),
-                  title: const Text('Szczegóły rynku'),
-                  subtitle: const Text(
-                    'Pełny techniczny widok wybranego instrumentu',
-                    style: TextStyle(color: muted, fontSize: 12),
-                  ),
-                  onTap: () {
-                    Navigator.pop(context);
-                    openLegacy();
-                  },
+              ListTile(
+                leading: const Icon(
+                  Icons.analytics_outlined,
+                  color: cyan,
                 ),
+                title: const Text('Szczegóły rynku'),
+                subtitle: const Text(
+                  'Wszystkie rynki • wspólne konto autonomicznego AI',
+                  style: TextStyle(color: muted, fontSize: 12),
+                ),
+                onTap: () => Navigator.pop(context, 6),
+              ),
             ],
           ),
         ),
       ),
     );
 
-    if (selected != null && mounted) {
+    if (selected == 6 && mounted) {
+      await openMarketDetails();
+    } else if (selected != null && mounted) {
       setState(() => page = selected);
     }
   }
@@ -2645,15 +2886,14 @@ class _ProDashboardState extends State<ProDashboard>
                           onTap: () => setState(() => page = i),
                         ),
                       ),
-                    if (widget.legacyBuilder != null)
-                      Padding(
-                        padding: const EdgeInsets.only(top: 8),
-                        child: OutlinedButton.icon(
-                          onPressed: openLegacy,
-                          icon: const Icon(Icons.analytics_outlined, size: 18),
-                          label: const Text('Szczegóły rynku'),
-                        ),
+                    Padding(
+                      padding: const EdgeInsets.only(top: 8),
+                      child: OutlinedButton.icon(
+                        onPressed: openMarketDetails,
+                        icon: const Icon(Icons.analytics_outlined, size: 18),
+                        label: const Text('Szczegóły rynku'),
                       ),
+                    ),
                     const Spacer(),
                     const Text(
                       'Realne dane rynkowe.\nWirtualny kapitał.',
@@ -2685,10 +2925,10 @@ class _ProDashboardState extends State<ProDashboard>
                             ),
                           ),
                         ),
-                        if (!wide && widget.legacyBuilder != null)
+                        if (!wide)
                           IconButton(
                             tooltip: 'Szczegóły rynku',
-                            onPressed: openLegacy,
+                            onPressed: openMarketDetails,
                             icon: const Icon(
                               Icons.candlestick_chart,
                               color: cyan,
