@@ -19,6 +19,7 @@ from time import time
 from uuid import uuid4
 
 from src.agent.live_state_store import LiveStateStore
+from src.agent.shadow_advisor import apply_shadow_advisor
 from src.agent.shadow_ledger import empty_shadow_ledger, update_shadow_ledger
 from src.agent.strategy_supervisor import (
     build_strategy_supervisor,
@@ -1111,6 +1112,12 @@ class AIPaperManager:
                     "signal_timestamp": latest_bar.timestamp,
                     "selected_at": now_ms,
                     "score": row["score"],
+                    "shadow_selection_score": row.get(
+                        "shadow_selection_score", row["score"]
+                    ),
+                    "shadow_selection_bonus": row.get(
+                        "shadow_selection_bonus", 0.0
+                    ),
                     "exploratory": row.get("exploratory", False),
                     "learning_probe": row.get("learning_probe", False),
                     "supervisor_status": row.get("supervisor_status"),
@@ -1242,10 +1249,15 @@ class AIPaperManager:
             net_return=net_return,
         )
 
+        # Rank only candidates already eligible under all original rules.
+        # Observation-only evidence never changes row['score']/['eligible']
+        # or the supervisor's PAUSED/WATCH/ACTIVE determination.
+        s["shadow_advisor"] = apply_shadow_advisor(rows, s["shadow"])
+
         rows.sort(
             key=lambda row: (
                 bool(row.get("eligible")),
-                float(row.get("score") or -999.0),
+                float(row.get("shadow_selection_score") or -999.0),
                 float(row.get("expected_net_return") or -999.0),
             ),
             reverse=True,
