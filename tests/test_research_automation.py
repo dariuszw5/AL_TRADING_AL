@@ -81,6 +81,7 @@ def test_experience_memory_learns_only_after_horizon(tmp_path):
         close=100.0,
         features=[1.0, 0.5, 0.1, -0.2],
         strategy="trend",
+        side="LONG",
         macro_tags=["fed", "rates"],
         model_score=0.01,
     )
@@ -94,6 +95,7 @@ def test_experience_memory_learns_only_after_horizon(tmp_path):
             close=100.0,
             features=[1.0 + i * 0.01, 0.5, 0.1, -0.2],
             strategy="trend",
+            side="LONG",
             macro_tags=["fed", "rates"],
             model_score=0.01,
         )
@@ -106,6 +108,7 @@ def test_experience_memory_learns_only_after_horizon(tmp_path):
     adjustment = memory.adjustment(
         features=[1.0, 0.5, 0.1, -0.2],
         strategy="trend",
+        side="LONG",
         macro_tags=["fed", "rates"],
     )
     assert adjustment.samples >= 5
