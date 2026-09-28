@@ -16,22 +16,19 @@ const muted = Color(0xFF95AABE);
 class ProDashboard extends StatefulWidget {
   final String baseUrl;
   final Future<Map<String, dynamic>> Function()? loader;
-  final WidgetBuilder? legacyBuilder;
 
   const ProDashboard({
     super.key,
     required this.baseUrl,
     this.loader,
-    this.legacyBuilder,
   });
 
   @override
   State<ProDashboard> createState() => _ProDashboardState();
 }
 
-class _ProDashboardState extends State<ProDashboard> {
-  final http.Client client = http.Client();
-
+class _ProDashboardState extends State<ProDashboard>
+    with SingleTickerProviderStateMixin {
   List<Map<String, dynamic>> assets = [];
   Map<String, dynamic>? research;
   Map<String, dynamic>? ai;
@@ -39,7 +36,11 @@ class _ProDashboardState extends State<ProDashboard> {
   String? failure;
   DateTime? received;
   Timer? timer;
+  final http.Client httpClient = http.Client();
+  DateTime? lastAssetsRefresh;
+  late final AnimationController activityPulse;
   bool busy = false;
+  Future<void>? refreshInFlight;
   int page = 0;
   String query = '';
 
@@ -48,28 +49,37 @@ class _ProDashboardState extends State<ProDashboard> {
     'Rynki',
     'Research TOP 10',
     'Aktywność AI',
+    'Wydarzenia',
     'Historia',
   ];
 
   final icons = const [
-    Icons.account_balance_wallet_outlined,
-    Icons.bar_chart,
+    Icons.account_balance_wallet,
+    Icons.candlestick_chart,
     Icons.travel_explore,
-    Icons.psychology_outlined,
+    Icons.psychology,
+    Icons.newspaper,
     Icons.history,
   ];
 
   @override
   void initState() {
     super.initState();
+    activityPulse = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1100),
+      lowerBound: 0.0,
+      upperBound: 1.0,
+    )..repeat(reverse: true);
     refresh();
-    timer = Timer.periodic(const Duration(seconds: 5), (_) => refresh());
+    timer = Timer.periodic(const Duration(seconds: 10), (_) => refresh());
   }
 
   @override
   void dispose() {
     timer?.cancel();
-    client.close();
+    httpClient.close();
+    activityPulse.dispose();
     super.dispose();
   }
 
@@ -84,12 +94,20 @@ class _ProDashboardState extends State<ProDashboard> {
   }
 
   Future<dynamic> getJson(String path) async {
-    final response = await client
+    final original = Uri.parse('${widget.baseUrl}$path');
+    final params = Map<String, String>.from(original.queryParameters);
+    params['_ts'] = DateTime.now().millisecondsSinceEpoch.toString();
+    final uri = original.replace(queryParameters: params);
+
+    final response = await httpClient
         .get(
-          Uri.parse('${widget.baseUrl}$path'),
-          headers: const {'Cache-Control': 'no-cache'},
+          uri,
+          headers: const {
+            'Cache-Control': 'no-cache, max-age=0',
+            'Pragma': 'no-cache',
+          },
         )
-        .timeout(const Duration(seconds: 15));
+        .timeout(const Duration(seconds: 30));
 
     if (response.statusCode != 200) {
       throw Exception('HTTP ${response.statusCode} dla $path');
@@ -97,54 +115,440 @@ class _ProDashboardState extends State<ProDashboard> {
     return jsonDecode(response.body);
   }
 
-  Future<void> refresh() async {
-    if (busy) return;
-    busy = true;
+  Future<Map<String, dynamic>> safeGet(String key, String path) async {
     try {
-      Map<String, dynamic> combined;
+      return {
+        'key': key,
+        'ok': true,
+        'value': await getJson(path),
+      };
+    } catch (error) {
+      return {
+        'key': key,
+        'ok': false,
+        'error': error.toString(),
+      };
+    }
+  }
+
+  Future<void> refresh() {
+    final active = refreshInFlight;
+    if (active != null) return active;
+
+    late Future<void> future;
+    future = _refreshOnce().whenComplete(() {
+      if (identical(refreshInFlight, future)) {
+        refreshInFlight = null;
+      }
+    });
+    refreshInFlight = future;
+    return future;
+  }
+
+  Future<void> manualRefresh() async {
+    final active = refreshInFlight;
+    if (active != null) {
+      await active;
+    }
+    if (!mounted) return;
+    await refresh();
+  }
+
+  Future<void> _refreshOnce() async {
+    busy = true;
+    if (mounted) setState(() {});
+
+    try {
       if (widget.loader != null) {
-        combined = await widget.loader!();
-      } else {
-        final results = await Future.wait([
-          getJson('/api/assets'),
-          getJson('/api/research'),
-          getJson('/api/ai'),
-          getJson('/api/user-portfolio'),
-        ]);
-        combined = {
-          'assets': results[0],
-          'research': results[1],
-          'ai': results[2],
-          'user_portfolio': results[3],
-        };
+        final combined = await widget.loader!();
+        final rawAssets = asList(combined['assets']);
+        if (!mounted) return;
+        setState(() {
+          assets = rawAssets
+              .whereType<Map>()
+              .map((row) => Map<String, dynamic>.from(row))
+              .toList();
+          research = asMap(combined['research']);
+          ai = asMap(combined['ai']);
+          userPortfolio = asMap(combined['user_portfolio']);
+          received = DateTime.now();
+          failure = null;
+        });
+        return;
       }
 
-      final rawAssets = asList(combined['assets']);
+      final now = DateTime.now();
+      final refreshAssets =
+          assets.isEmpty ||
+          lastAssetsRefresh == null ||
+          now.difference(lastAssetsRefresh!).inSeconds >= 20;
+
+      final snapshotRow = await safeGet(
+        'snapshot',
+        '/api/dashboard-snapshot',
+      );
+
+      final requests = <Future<Map<String, dynamic>>>[
+        if (snapshotRow['ok'] != true) ...[
+          safeGet('research', '/api/research'),
+          safeGet('ai', '/api/ai'),
+          safeGet('portfolio', '/api/user-portfolio'),
+        ],
+        if (refreshAssets) safeGet('assets', '/api/assets'),
+      ];
+
+      final results = <Map<String, dynamic>>[
+        snapshotRow,
+        ...await Future.wait(requests),
+      ];
+
+      final byKey = {
+        for (final row in results) row['key'].toString(): row,
+      };
+      final snapshotOk = snapshotRow['ok'] == true;
+      final relevantRows = snapshotOk
+          ? results.where(
+              (row) =>
+                  row['key'] == 'snapshot' ||
+                  row['key'] == 'assets',
+            )
+          : results.where((row) => row['key'] != 'snapshot');
+      final errors =
+          relevantRows.where((row) => row['ok'] != true).toList();
+      final successCount =
+          relevantRows.where((row) => row['ok'] == true).length;
+
       if (!mounted) return;
       setState(() {
-        assets = rawAssets
-            .whereType<Map>()
-            .map((row) => Map<String, dynamic>.from(row))
-            .toList();
-        research = asMap(combined['research']);
-        ai = asMap(combined['ai']);
-        userPortfolio = asMap(combined['user_portfolio']);
-        received = DateTime.now();
-        failure = null;
+        final assetsRow = byKey['assets'];
+        if (assetsRow?['ok'] == true) {
+          assets = asList(assetsRow?['value'])
+              .whereType<Map>()
+              .map((row) => Map<String, dynamic>.from(row))
+              .toList();
+          lastAssetsRefresh = DateTime.now();
+        }
+
+        final snapshot = byKey['snapshot'];
+        if (snapshot?['ok'] == true) {
+          final value = asMap(snapshot?['value']);
+          research = asMap(value['research']);
+          ai = asMap(value['ai']);
+          userPortfolio = asMap(value['user_portfolio']);
+        } else {
+          final researchRow = byKey['research'];
+          if (researchRow?['ok'] == true) {
+            research = asMap(researchRow?['value']);
+          }
+
+          final aiRow = byKey['ai'];
+          if (aiRow?['ok'] == true) {
+            ai = asMap(aiRow?['value']);
+          }
+
+          final portfolioRow = byKey['portfolio'];
+          if (portfolioRow?['ok'] == true) {
+            userPortfolio = asMap(portfolioRow?['value']);
+          }
+        }
+
+        if (successCount > 0) {
+          received = DateTime.now();
+        }
+        if (errors.isEmpty) {
+          failure = null;
+        } else if (successCount == 0) {
+          failure =
+              'Brak odpowiedzi API. Zachowano ostatnie poprawne dane i aplikacja spróbuje ponownie automatycznie.';
+        } else {
+          failure =
+              'Część danych chwilowo niedostępna. Zachowano ostatnie poprawne dane.';
+        }
       });
-    } catch (error) {
-      if (mounted) {
-        setState(() => failure = 'Połączenie API: $error');
-      }
     } finally {
       busy = false;
+      if (mounted) setState(() {});
     }
   }
 
   bool get stale {
-    return failure != null ||
-        research?['stale'] == true ||
-        (ai?['available'] == true && ai?['stale'] == true);
+    return research?['stale'] == true;
+  }
+
+  String get aiDecisionAction {
+    final decision = asMap(ai?['decision']);
+    return decision['action']?.toString() ?? '';
+  }
+
+  bool get aiRiskBlocked => aiDecisionAction == 'HALT';
+
+  bool get aiScanning =>
+      !aiRiskBlocked &&
+      (aiDecisionAction == 'CASH' ||
+          aiDecisionAction == 'WAIT_MULTI' ||
+          aiDecisionAction == 'SELECT_MULTI' ||
+          aiDecisionAction == 'HOLD_MULTI' ||
+          aiDecisionAction == 'PROFIT_SWEEP');
+
+  String aiRiskMessage() {
+    final state = ai ?? const <String, dynamic>{};
+    final decision = asMap(state['decision']);
+    final limits = asMap(state['limits']);
+    final dailyLoss = (state['daily_loss'] as num?)?.toDouble() ?? 0.0;
+    final dailyLimit =
+        (limits['daily_loss_limit_pln'] as num?)?.toDouble() ?? 0.0;
+
+    if (dailyLimit > 0 && dailyLoss >= dailyLimit) {
+      return 'Dzienny limit straty: ${number(dailyLoss)} / '
+          '${number(dailyLimit)} PLN. Nowe wejścia są zablokowane '
+          'do resetu kolejnej doby UTC.';
+    }
+
+    if (state['halted'] == true) {
+      return 'Limit obsunięcia kapitału został aktywowany. '
+          'Nowe wejścia są zablokowane przez kontrolę ryzyka.';
+    }
+
+    return decision['reason']?.toString() ??
+        'Kontrola ryzyka zablokowała nowe wejścia.';
+  }
+
+  Widget riskHaltBanner() {
+    if (!aiRiskBlocked) return const SizedBox.shrink();
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 18),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Colors.redAccent.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: Colors.redAccent.withValues(alpha: 0.45),
+        ),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Icon(
+            Icons.gpp_bad_rounded,
+            color: Colors.redAccent,
+            size: 24,
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'AI ZATRZYMANE • LIMIT RYZYKA',
+                  style: TextStyle(
+                    color: Colors.redAccent,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  aiRiskMessage(),
+                  style: const TextStyle(
+                    color: muted,
+                    fontSize: 12,
+                    height: 1.4,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Map<String, dynamic> aiScanSummary() {
+    final state = ai ?? const <String, dynamic>{};
+    final supplied = asMap(state['ranking_summary']);
+    if (supplied.isNotEmpty) return supplied;
+
+    final ranking = asList(state['ranking']).whereType<Map>().toList();
+    final reasons = <String, int>{};
+    var liveSignals = 0;
+    var validated = 0;
+    var exploratory = 0;
+    var learningProbes = 0;
+    var eligible = 0;
+
+    for (final raw in ranking) {
+      final row = Map<String, dynamic>.from(raw);
+      if (row['live_signal'] == true) liveSignals += 1;
+      if (row['validated'] == true) validated += 1;
+      if (row['exploratory'] == true) exploratory += 1;
+      if (row['learning_probe'] == true) learningProbes += 1;
+      if (row['eligible'] == true) {
+        eligible += 1;
+        continue;
+      }
+
+      final reason = row['live_signal'] != true
+          ? 'NO_LIVE_SIGNAL'
+          : row['eligibility_reason']?.toString() ??
+                'MODEL_OR_VALIDATION_REJECTED';
+      reasons[reason] = (reasons[reason] ?? 0) + 1;
+    }
+
+    return {
+      'rows': ranking.length,
+      'live_signals': liveSignals,
+      'validated': validated,
+      'exploratory': exploratory,
+      'learning_probes': learningProbes,
+      'eligible': eligible,
+      'rejection_reasons': reasons,
+    };
+  }
+
+  String rejectionLabel(String value) {
+    switch (value) {
+      case 'NO_LIVE_SIGNAL':
+        return 'brak sygnału live';
+      case 'MODEL_OR_VALIDATION_REJECTED':
+        return 'model / walidacja';
+      case 'LIVE_LEARNING_EDGE_REJECTED':
+        return 'live-learning';
+      case 'STRATEGY_SUPERVISOR_PAUSED':
+        return 'Supervisor PAUSED';
+      case 'STRATEGY_SUPERVISOR_WATCH_NO_EXPLORATION':
+        return 'Supervisor WATCH';
+      default:
+        return value;
+    }
+  }
+
+  String aiScanMetrics() {
+    final summary = aiScanSummary();
+    final rows = (summary['rows'] as num?)?.toInt() ?? 0;
+    final live = (summary['live_signals'] as num?)?.toInt() ?? 0;
+    final validated = (summary['validated'] as num?)?.toInt() ?? 0;
+    final eligible = (summary['eligible'] as num?)?.toInt() ?? 0;
+    final probes = (summary['learning_probes'] as num?)?.toInt() ?? 0;
+    final reasons = asMap(summary['rejection_reasons']);
+
+    String? topReason;
+    var topCount = 0;
+    for (final entry in reasons.entries) {
+      final count = (entry.value as num?)?.toInt() ?? 0;
+      if (count > topCount) {
+        topCount = count;
+        topReason = entry.key;
+      }
+    }
+
+    final base =
+        'Oceniono: $rows • sygnały live: $live • walidowane: $validated • '
+        'dopuszczone: $eligible • learning probe: $probes';
+
+    if (topReason == null || topCount <= 0) return base;
+    return '$base\nNajczęściej odrzucone: ${rejectionLabel(topReason)} ($topCount)';
+  }
+
+  Widget aiActivityBanner() {
+    if (aiRiskBlocked || !aiScanning) return const SizedBox.shrink();
+
+    final decision = asMap(ai?['decision']);
+    final action = aiDecisionAction;
+
+    String title;
+    String detail;
+    IconData icon;
+    Color tone;
+
+    switch (action) {
+      case 'HOLD_MULTI':
+        title = 'AI AKTYWNE • ZARZĄDZANIE POZYCJAMI';
+        detail = decision['reason']?.toString() ??
+            'Agent monitoruje otwarte pozycje i kontroluje ryzyko.';
+        icon = Icons.monitor_heart_outlined;
+        tone = mint;
+        break;
+      case 'WAIT_MULTI':
+        title = 'AI AKTYWNE • POTWIERDZANIE SYGNAŁÓW';
+        detail = decision['reason']?.toString() ??
+            'Agent oczekuje na kolejną zamkniętą świecę przed wejściem.';
+        icon = Icons.hourglass_top_rounded;
+        tone = cyan;
+        break;
+      case 'SELECT_MULTI':
+        title = 'AI AKTYWNE • WYBRANO SYGNAŁY';
+        detail = decision['reason']?.toString() ??
+            'Agent znalazł kandydatów i rozpoczął ich potwierdzanie.';
+        icon = Icons.bolt_rounded;
+        tone = cyan;
+        break;
+      case 'PROFIT_SWEEP':
+        title = 'AI AKTYWNE • ZYSK PRZEKAZANY';
+        detail = decision['reason']?.toString() ??
+            'Zrealizowana nadwyżka została przekazana do portfela.';
+        icon = Icons.savings_outlined;
+        tone = mint;
+        break;
+      case 'CASH':
+      default:
+        title = 'AI AKTYWNE • SKANOWANIE RYNKÓW';
+        final reason = decision['reason']?.toString() ??
+            'Brak kwalifikowanego sygnału. Agent nadal analizuje rynki automatycznie.';
+        detail = '$reason\n${aiScanMetrics()}';
+        icon = Icons.radar_rounded;
+        tone = mint;
+        break;
+    }
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 18),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: tone.withValues(alpha: 0.07),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: tone.withValues(alpha: 0.35)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(icon, color: tone, size: 24),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    activityPulseDot(tone, active: true),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        title,
+                        style: TextStyle(
+                          color: tone,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 5),
+                Text(
+                  detail,
+                  style: const TextStyle(
+                    color: muted,
+                    fontSize: 12,
+                    height: 1.4,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   String number(dynamic value, [int digits = 2]) {
@@ -188,17 +592,63 @@ class _ProDashboardState extends State<ProDashboard> {
 
   Widget heading(String title, [String? detail]) => Padding(
     padding: const EdgeInsets.only(bottom: 18),
-    child: Row(
-      children: [
-        Expanded(
-          child: Text(
-            title,
-            style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+    child: LayoutBuilder(
+      builder: (context, constraints) {
+        final compact = constraints.maxWidth < 560 && detail != null;
+
+        final titleWidget = Text(
+          title,
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
+          style: const TextStyle(
+            fontSize: 18,
+            fontWeight: FontWeight.w600,
           ),
-        ),
-        if (detail != null)
-          Text(detail, style: const TextStyle(color: muted, fontSize: 12)),
-      ],
+        );
+
+        if (compact) {
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              titleWidget,
+              const SizedBox(height: 5),
+              Text(
+                detail,
+                maxLines: 3,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  color: muted,
+                  fontSize: 12,
+                  height: 1.35,
+                ),
+              ),
+            ],
+          );
+        }
+
+        return Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(child: titleWidget),
+            if (detail != null) ...[
+              const SizedBox(width: 14),
+              Flexible(
+                child: Text(
+                  detail,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  textAlign: TextAlign.right,
+                  style: const TextStyle(
+                    color: muted,
+                    fontSize: 12,
+                    height: 1.35,
+                  ),
+                ),
+              ),
+            ],
+          ],
+        );
+      },
     ),
   );
 
@@ -232,6 +682,89 @@ class _ProDashboardState extends State<ProDashboard> {
     ),
   );
 
+  Widget pnlNowCard({
+    required double funded,
+    required double equity,
+    required double realized,
+    required double unrealized,
+  }) {
+    final delta = equity - funded;
+    final pct = funded > 0 ? delta / funded * 100 : 0.0;
+    final positive = delta > 0.005;
+    final negative = delta < -0.005;
+    final tone = positive
+        ? mint
+        : negative
+        ? Colors.redAccent
+        : muted;
+    final arrow = positive
+        ? Icons.trending_up_rounded
+        : negative
+        ? Icons.trending_down_rounded
+        : Icons.trending_flat_rounded;
+
+    return box(
+      Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(arrow, color: tone, size: 23),
+              const Spacer(),
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 8,
+                  vertical: 4,
+                ),
+                decoration: BoxDecoration(
+                  color: tone.withValues(alpha: 0.10),
+                  borderRadius: BorderRadius.circular(999),
+                ),
+                child: Text(
+                  '${pct >= 0 ? '+' : ''}${pct.toStringAsFixed(2)}%',
+                  style: TextStyle(
+                    color: tone,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          const Text(
+            'Zysk / strata teraz',
+            style: TextStyle(color: muted),
+          ),
+          const SizedBox(height: 8),
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            alignment: Alignment.centerLeft,
+            child: Text(
+              '${signed(delta)} PLN',
+              style: TextStyle(
+                fontSize: 24,
+                fontWeight: FontWeight.w600,
+                color: tone,
+              ),
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            'Otwarty ${signed(unrealized)} • zrealizowany ${signed(realized)}',
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(
+              color: muted,
+              fontSize: 11,
+              height: 1.35,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   List<Map<String, dynamic>> get opportunities =>
       asList(research?['opportunities'])
           .whereType<Map>()
@@ -251,58 +784,190 @@ class _ProDashboardState extends State<ProDashboard> {
     return index < 0 ? null : index + 1;
   }
 
+  /// One universe for the current autonomous AI account. It includes quote
+  /// cards, research markets, scanned candidates, and open/historical markets.
+  /// No separate BTCUSDT legacy account contributes position or PnL here.
+  List<Map<String, dynamic>> get marketCatalog {
+    final bySymbol = <String, Map<String, dynamic>>{};
+
+    void add(dynamic rawSymbol, [Map<String, dynamic>? details]) {
+      final symbol = rawSymbol?.toString().trim() ?? '';
+      if (symbol.isEmpty) return;
+      final asset = bySymbol.putIfAbsent(symbol, () {
+        return <String, dynamic>{
+          'symbol': symbol,
+          'name': symbol,
+          'quote': symbol.endsWith('USDT') ? 'USDT' : '',
+          'position': 'FLAT',
+        };
+      });
+      if (details == null) return;
+      for (final entry in details.entries) {
+        final existing = asset[entry.key];
+        if ((existing == null ||
+                existing.toString().isEmpty ||
+                existing == symbol) &&
+            entry.value != null) {
+          asset[entry.key] = entry.value;
+        }
+      }
+    }
+
+    for (final asset in assets) {
+      add(asset['symbol']);
+      bySymbol[asset['symbol'].toString()]!.addAll(asset);
+    }
+    for (final opportunity in opportunities) {
+      add(opportunity['symbol'], {
+        'name': opportunity['name'] ?? opportunity['symbol'],
+        'asset_type': opportunity['asset_class'],
+      });
+    }
+    for (final raw in asList(ai?['ranking']).whereType<Map>()) {
+      add(raw['symbol']);
+    }
+    final positions = asMap(ai?['positions']);
+    for (final symbol in positions.keys) {
+      add(symbol);
+    }
+    for (final raw in asList(ai?['pending']).whereType<Map>()) {
+      add(raw['symbol']);
+    }
+    for (final raw in asList(ai?['trades']).whereType<Map>()) {
+      add(raw['symbol']);
+    }
+    final marks = asMap(ai?['market_marks']);
+    for (final symbol in marks.keys) {
+      add(symbol);
+    }
+
+    for (final item in bySymbol.entries) {
+      final symbol = item.key;
+      final asset = item.value;
+      final position = asMap(positions[symbol]);
+      if (position.isNotEmpty) {
+        asset['position'] = position['side'] ?? 'FLAT';
+        asset['ai_position'] = position;
+        asset['ai_allocation_pln'] = position['allocation_pln'];
+        asset['ai_pnl_pln'] = position['unrealized_pnl'];
+      }
+      if (asset['market_price'] is! num) {
+        final lastMark = asMap(marks[symbol]);
+        if (lastMark['price'] is num) {
+          asset['market_price'] = lastMark['price'];
+          asset['market_provider'] = 'AI_LAST_CLOSED_CANDLE';
+          asset['market_stale'] = true;
+        }
+      }
+    }
+
+    return bySymbol.values.toList();
+  }
+
   Widget summary() {
     final aiState = ai ?? const <String, dynamic>{};
-    final initial = (aiState['initial_balance'] as num?)?.toDouble() ?? 1000.0;
-    final equity = (aiState['equity'] as num?)?.toDouble() ?? initial;
+    final initial = (aiState['initial_balance'] as num?)?.toDouble() ?? 0.0;
+    final equity = (aiState['equity'] as num?)?.toDouble() ?? 0.0;
+    final funded =
+        (aiState['funded_capital'] as num?)?.toDouble() ?? initial;
     final realized = (aiState['realized_pnl'] as num?)?.toDouble() ?? 0.0;
     final unrealized = (aiState['unrealized_pnl'] as num?)?.toDouble() ?? 0.0;
-    final result = equity - initial;
-    final position = asMap(aiState['position']);
+    final positions = asMap(aiState['positions']);
+    final pending = asList(aiState['pending'])
+        .whereType<Map>()
+        .map((row) => Map<String, dynamic>.from(row))
+        .toList();
     final portfolioBalance =
         (userPortfolio?['balance'] as num?)?.toDouble() ?? 0.0;
     final classes = asMap(research?['selected_by_class']).length;
+
     final cards = <Widget>[
       stat(
         'Kapitał AI',
-        '${number(equity)} jedn.',
+        '${number(equity)} PLN',
         Icons.account_balance_wallet_outlined,
-        detail: 'Kapitał wyłącznie wirtualny',
+        detail: initial <= 0
+            ? 'Najpierw przekaż środki z portfela'
+            : 'Wpłacony kapitał: ${number(initial)} PLN',
       ),
-      stat(
-        'Wynik AI',
-        '${signed(result)} jedn.',
-        Icons.trending_up,
-        color: result >= 0 ? mint : Colors.redAccent,
-        detail: 'Real. ${signed(realized)} • otw. ${signed(unrealized)}',
+      pnlNowCard(
+        funded: funded,
+        equity: equity,
+        realized: realized,
+        unrealized: unrealized,
       ),
-      stat(
-        'Pozycja AI',
-        position.isEmpty ? 'FLAT' : position['symbol']?.toString() ?? 'OPEN',
-        Icons.layers_outlined,
-        color: position.isEmpty ? muted : cyan,
-        detail: position.isEmpty
-            ? 'Brak otwartej pozycji'
-            : position['strategy']?.toString(),
+      positionStatusCard(
+        title: 'Pozycje otwarte',
+        value: positions.isEmpty
+            ? (aiRiskBlocked ? 'HALT' : 'BRAK')
+            : '${positions.length} OTWARTE',
+        icon: Icons.play_circle_outline_rounded,
+        color: aiRiskBlocked && positions.isEmpty
+            ? Colors.redAccent
+            : mint,
+        active: positions.isNotEmpty || aiRiskBlocked || aiScanning,
+        status: positions.isEmpty
+            ? (aiRiskBlocked
+                  ? 'LIMIT RYZYKA'
+                  : aiScanning
+                  ? 'AI AKTYWNE'
+                  : 'OCZEKIWANIE')
+            : 'AKTYWNE',
+        detail: positions.isEmpty
+            ? (aiRiskBlocked
+                  ? aiRiskMessage()
+                  : aiScanning
+                  ? 'Brak otwartych pozycji • agent analizuje rynki i czeka na kwalifikowany sygnał.'
+                  : 'Oczekiwanie na aktywny cykl AI')
+            : positions.entries.take(4).map((entry) {
+                final p = asMap(entry.value);
+                final pnl =
+                    (p['unrealized_pnl'] as num?)?.toDouble() ?? 0.0;
+                final probe = p['learning_probe'] == true ? ' • LEARNING' : '';
+                return '${entry.key} ${p['side'] ?? ''}$probe ${signed(pnl)} PLN';
+              }).join(' • '),
+      ),
+      positionStatusCard(
+        title: 'Pozycje oczekujące',
+        value: pending.isEmpty
+            ? (aiRiskBlocked ? 'WSTRZYMANE' : 'BRAK')
+            : '${pending.length} OCZEKUJE',
+        icon: Icons.hourglass_top_rounded,
+        color: aiRiskBlocked && pending.isEmpty
+            ? Colors.redAccent
+            : cyan,
+        active: pending.isNotEmpty || aiRiskBlocked || aiScanning,
+        status: pending.isEmpty
+            ? (aiRiskBlocked
+                  ? 'AI HALT'
+                  : aiScanning
+                  ? 'SKANOWANIE'
+                  : 'OCZEKIWANIE')
+            : 'POTWIERDZANIE',
+        detail: pending.isEmpty
+            ? (aiRiskBlocked
+                  ? 'Nowe sygnały nie będą dodawane, dopóki aktywny jest limit ryzyka.'
+                  : aiScanning
+                  ? 'Brak sygnałów oczekujących • agent wykonuje kolejne cykle analizy automatycznie.'
+                  : 'Oczekiwanie na aktywny cykl AI')
+            : pending.take(4).map((row) {
+                final probe = row['learning_probe'] == true
+                    ? ' • LEARNING PROBE 2%'
+                    : '';
+                return '${row['symbol'] ?? '—'} ${row['side'] ?? ''}$probe • weryfikacja sygnału';
+              }).join(' • '),
       ),
       stat(
         'Mój portfel',
         '${number(portfolioBalance)} PLN',
         Icons.savings_outlined,
-        detail: 'Oddzielny od kapitału AI',
+        detail: 'Wirtualne środki oczekujące na decyzję użytkownika',
       ),
       stat(
         'Research TOP 10',
         '${opportunities.length}/10',
         Icons.travel_explore,
         detail: '$classes aktywnych klas w TOP 10',
-      ),
-      stat(
-        'Status',
-        stale ? 'STALE' : 'LIVE',
-        stale ? Icons.cloud_off : Icons.cloud_done,
-        color: stale ? Colors.amber : mint,
-        detail: 'Realne dane • zero realnych zleceń',
       ),
     ];
 
@@ -325,9 +990,759 @@ class _ProDashboardState extends State<ProDashboard> {
     );
   }
 
+  String assetBadge(String symbol) {
+    const badges = <String, String>{
+      'BTCUSDT': '₿',
+      'ETHUSDT': 'Ξ',
+      'SOLUSDT': '◎',
+      'BNBUSDT': '◈',
+      'XRPUSDT': '✕',
+      'EURUSD': '€',
+      'GBPUSD': '£',
+      'USDJPY': '¥',
+      'AAPL': 'A',
+      'MSFT': 'M',
+      'NVDA': 'N',
+      'TSLA': 'T',
+      'SPY': 'S',
+      'QQQ': 'Q',
+    };
+    return badges[symbol] ?? (symbol.isEmpty ? '?' : symbol.substring(0, 1));
+  }
+
+  String? assetLogoUrl(String symbol) {
+    final upper = symbol.toUpperCase();
+
+    if (upper.endsWith('USDT') && upper.length > 4) {
+      final base = upper.substring(0, upper.length - 4).toLowerCase();
+      return 'https://assets.coincap.io/assets/icons/$base@2x.png';
+    }
+
+    const companyDomains = <String, String>{
+      'AAPL': 'apple.com',
+      'MSFT': 'microsoft.com',
+      'NVDA': 'nvidia.com',
+      'AMZN': 'amazon.com',
+      'META': 'meta.com',
+      'GOOGL': 'google.com',
+      'TSLA': 'tesla.com',
+      'JPM': 'jpmorganchase.com',
+      'XOM': 'exxonmobil.com',
+      'SPY': 'ssga.com',
+      'QQQ': 'invesco.com',
+      'IWM': 'ishares.com',
+      'DIA': 'ssga.com',
+      'XLK': 'ssga.com',
+      'XLF': 'ssga.com',
+    };
+
+    final domain = companyDomains[upper];
+    if (domain != null) {
+      return 'https://www.google.com/s2/favicons?domain=$domain&sz=128';
+    }
+
+    return null;
+  }
+
+  Widget assetLogo(String symbol, {double size = 28}) {
+    final upper = symbol.toUpperCase();
+    final url = assetLogoUrl(upper);
+
+    Widget fallback() {
+      if (upper == 'EURUSD') {
+        return const Text('🇪🇺', style: TextStyle(fontSize: 17));
+      }
+      if (upper == 'GBPUSD') {
+        return const Text('🇬🇧', style: TextStyle(fontSize: 17));
+      }
+      if (upper == 'USDJPY') {
+        return const Text('🇯🇵', style: TextStyle(fontSize: 17));
+      }
+      if (upper == 'AUDUSD') {
+        return const Text('🇦🇺', style: TextStyle(fontSize: 17));
+      }
+      if (upper == 'USDCAD') {
+        return const Text('🇨🇦', style: TextStyle(fontSize: 17));
+      }
+      if (upper == 'USDCHF') {
+        return const Text('🇨🇭', style: TextStyle(fontSize: 17));
+      }
+      if (upper == 'NZDUSD') {
+        return const Text('🇳🇿', style: TextStyle(fontSize: 17));
+      }
+
+      final icon = upper.contains('GOLD') || upper.contains('SILVER')
+          ? Icons.diamond_outlined
+          : upper.contains('WTI') ||
+                upper.contains('BRENT') ||
+                upper.contains('NATGAS')
+          ? Icons.local_gas_station_outlined
+          : upper.contains('COPPER')
+          ? Icons.hardware_outlined
+          : upper.contains('INDEX') ||
+                upper.contains('SP500') ||
+                upper.contains('NASDAQ') ||
+                upper.contains('DOW') ||
+                upper.contains('RUSSELL') ||
+                upper.contains('VIX')
+          ? Icons.show_chart_rounded
+          : Icons.currency_exchange_rounded;
+
+      return Icon(icon, size: size * 0.62, color: cyan);
+    }
+
+    return Container(
+      width: size,
+      height: size,
+      padding: EdgeInsets.all(size * 0.14),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF4F7F9),
+        shape: BoxShape.circle,
+        border: Border.all(
+          color: const Color(0xFF355267),
+          width: 0.8,
+        ),
+      ),
+      child: url == null
+          ? Center(child: fallback())
+          : ClipOval(
+              child: Image.network(
+                url,
+                width: size,
+                height: size,
+                fit: BoxFit.contain,
+                filterQuality: FilterQuality.high,
+                errorBuilder: (_, _, _) => Center(child: fallback()),
+              ),
+            ),
+    );
+  }
+
+  Widget activityPulseDot(Color color, {required bool active}) {
+    if (!active) {
+      return Container(
+        width: 8,
+        height: 8,
+        decoration: const BoxDecoration(
+          color: muted,
+          shape: BoxShape.circle,
+        ),
+      );
+    }
+
+    return AnimatedBuilder(
+      animation: activityPulse,
+      builder: (context, child) {
+        final scale = 0.82 + activityPulse.value * 0.30;
+        final opacity = 0.55 + activityPulse.value * 0.45;
+        return Transform.scale(
+          scale: scale,
+          child: Opacity(
+            opacity: opacity,
+            child: Container(
+              width: 9,
+              height: 9,
+              decoration: BoxDecoration(
+                color: color,
+                shape: BoxShape.circle,
+                boxShadow: [
+                  BoxShadow(
+                    color: color.withValues(alpha: 0.32),
+                    blurRadius: 8,
+                    spreadRadius: 2,
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget positionStatusCard({
+    required String title,
+    required String value,
+    required IconData icon,
+    required Color color,
+    required bool active,
+    required String status,
+    required String detail,
+  }) {
+    return box(
+      Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(icon, color: active ? color : cyan, size: 23),
+              const Spacer(),
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 8,
+                  vertical: 5,
+                ),
+                decoration: BoxDecoration(
+                  color: (active ? color : muted).withValues(alpha: 0.08),
+                  borderRadius: BorderRadius.circular(999),
+                  border: Border.all(
+                    color: (active ? color : muted).withValues(alpha: 0.22),
+                  ),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    activityPulseDot(color, active: active),
+                    const SizedBox(width: 6),
+                    Text(
+                      status,
+                      style: TextStyle(
+                        color: active ? color : muted,
+                        fontSize: 10,
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: 0.5,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          Text(title, style: const TextStyle(color: muted)),
+          const SizedBox(height: 8),
+          Text(
+            value,
+            style: TextStyle(
+              fontSize: 24,
+              fontWeight: FontWeight.w600,
+              color: active ? color : muted,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            detail,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(
+              color: muted,
+              fontSize: 11,
+              height: 1.35,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget fundsDonut() {
+    final aiState = ai ?? const <String, dynamic>{};
+    final positions = asMap(aiState['positions']);
+    final wallet =
+        (userPortfolio?['balance'] as num?)?.toDouble() ?? 0.0;
+    final aiCash = (aiState['balance'] as num?)?.toDouble() ?? 0.0;
+    final funded =
+        (aiState['funded_capital'] as num?)?.toDouble() ?? 0.0;
+    final equity = (aiState['equity'] as num?)?.toDouble() ?? 0.0;
+    final swept =
+        (userPortfolio?['profit_transferred'] as num?)?.toDouble() ?? 0.0;
+
+    var positionsValue = 0.0;
+    for (final raw in positions.values) {
+      final p = asMap(raw);
+      final allocation =
+          (p['allocation_pln'] as num?)?.toDouble() ?? 0.0;
+      final unrealized =
+          (p['unrealized_pnl'] as num?)?.toDouble() ?? 0.0;
+      positionsValue += math.max(0.0, allocation + unrealized);
+    }
+
+    final values = <double>[
+      math.max(0.0, wallet),
+      math.max(0.0, aiCash),
+      math.max(0.0, positionsValue),
+    ];
+    final total = values.fold<double>(0.0, (sum, value) => sum + value);
+    final loss = math.max(0.0, funded - equity);
+
+    final labels = <String>[
+      'Mój portfel',
+      'Wolne AI',
+      'Pozycje AI',
+    ];
+    final colors = <Color>[
+      cyan,
+      mint,
+      const Color(0xFF9C7CFF),
+    ];
+
+    Widget legendRow(int index) {
+      final value = values[index];
+      final pct = total <= 0 ? 0.0 : value / total * 100;
+      return Padding(
+        padding: const EdgeInsets.only(bottom: 8),
+        child: Row(
+          children: [
+            Container(
+              width: 10,
+              height: 10,
+              decoration: BoxDecoration(
+                color: colors[index],
+                shape: BoxShape.circle,
+              ),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                labels[index],
+                style: const TextStyle(color: muted, fontSize: 12),
+              ),
+            ),
+            const SizedBox(width: 8),
+            Flexible(
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                alignment: Alignment.centerRight,
+                child: Text(
+                  '${number(value)} PLN • ${pct.toStringAsFixed(1)}%',
+                  style: const TextStyle(fontSize: 12),
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return box(
+      Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          heading(
+            'Podział środków',
+            'Portfel użytkownika • wolna gotówka AI • aktywne pozycje',
+          ),
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final compact = constraints.maxWidth < 500;
+
+              final chart = SizedBox(
+                width: compact ? 150 : 170,
+                height: compact ? 150 : 170,
+                child: CustomPaint(
+                  painter: FundsDonutPainter(
+                    values: values,
+                    colors: colors,
+                  ),
+                  child: Center(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        FittedBox(
+                          fit: BoxFit.scaleDown,
+                          child: Text(
+                            '${number(total)} PLN',
+                            style: const TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ),
+                        const Text(
+                          'łącznie',
+                          style: TextStyle(color: muted, fontSize: 11),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              );
+
+              final details = Column(
+                children: [
+                  for (int i = 0; i < values.length; i++) legendRow(i),
+                  const Divider(color: Color(0xFF294152)),
+                  _miniMetric('Wpłacono do AI', funded),
+                  _miniMetric('Zysk przelany', swept),
+                  _miniMetric('Strata AI', loss),
+                ],
+              );
+
+              if (compact) {
+                return Column(
+                  children: [
+                    Center(child: chart),
+                    const SizedBox(height: 18),
+                    details,
+                  ],
+                );
+              }
+
+              return Row(
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  chart,
+                  const SizedBox(width: 20),
+                  Expanded(child: details),
+                ],
+              );
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _miniMetric(String label, double value) {
+    return Padding(
+      padding: const EdgeInsets.only(top: 6),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(
+              label,
+              style: const TextStyle(color: muted, fontSize: 12),
+            ),
+          ),
+          Text(
+            '${number(value)} PLN',
+            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget marketTickerStrip() {
+    final pendingSymbols = asList(ai?['pending'])
+        .whereType<Map>()
+        .map((row) => row['symbol']?.toString())
+        .whereType<String>()
+        .toSet();
+
+    int priority(Map<String, dynamic> asset) {
+      final symbol = asset['symbol']?.toString() ?? '';
+      final isOpen = (asset['position']?.toString() ?? 'FLAT') != 'FLAT';
+      final isPending = pendingSymbols.contains(symbol);
+      if (isOpen) return 0;
+      if (isPending) return 1;
+      if (opportunityRank(symbol) != null) return 2;
+      return 3;
+    }
+
+    final quoted = assets
+        .where(
+          (asset) =>
+              asset['market_price'] is num &&
+              (asset['market_price'] as num).toDouble() > 0,
+        )
+        .toList();
+
+    const currencyOrder = <String>[
+      'EURUSD',
+      'GBPUSD',
+      'USDJPY',
+      'USDCHF',
+      'USDCAD',
+      'AUDUSD',
+      'NZDUSD',
+    ];
+
+    final currencies = quoted
+        .where((asset) => asset['asset_type']?.toString() == 'forex')
+        .toList()
+      ..sort((a, b) {
+        final aSymbol = a['symbol']?.toString() ?? '';
+        final bSymbol = b['symbol']?.toString() ?? '';
+        final ai = currencyOrder.indexOf(aSymbol);
+        final bi = currencyOrder.indexOf(bSymbol);
+        final av = ai < 0 ? 999 : ai;
+        final bv = bi < 0 ? 999 : bi;
+        if (av != bv) return av.compareTo(bv);
+        return aSymbol.compareTo(bSymbol);
+      });
+
+    final ourAssets = quoted
+        .where((asset) => asset['asset_type']?.toString() != 'forex')
+        .toList()
+      ..sort((a, b) {
+        final ap = priority(a);
+        final bp = priority(b);
+        if (ap != bp) return ap.compareTo(bp);
+
+        final aSymbol = a['symbol']?.toString() ?? '';
+        final bSymbol = b['symbol']?.toString() ?? '';
+        final ar = opportunityRank(aSymbol) ?? 9999;
+        final br = opportunityRank(bSymbol) ?? 9999;
+        if (ar != br) return ar.compareTo(br);
+        return aSymbol.compareTo(bSymbol);
+      });
+
+    Widget tickerTile(Map<String, dynamic> asset, {required bool currency}) {
+      final symbol = asset['symbol']?.toString() ?? '';
+      final price = (asset['market_price'] as num?)?.toDouble();
+      final pricePln = (asset['market_price_pln'] as num?)?.toDouble();
+      final change = (asset['market_change'] as num?)?.toDouble();
+      final changePct = (asset['market_change_pct'] as num?)?.toDouble();
+      final dayHigh = (asset['market_day_high'] as num?)?.toDouble();
+      final dayLow = (asset['market_day_low'] as num?)?.toDouble();
+      final changePeriod =
+          asset['market_change_period']?.toString() ??
+          (currency ? 'sesja' : '24h');
+      final quote = asset['quote']?.toString() ?? '';
+      final position = asset['position']?.toString() ?? 'FLAT';
+      final isOpen = position != 'FLAT';
+      final isPending = pendingSymbols.contains(symbol);
+      final isStale = asset['market_stale'] == true;
+
+      final accent = isOpen
+          ? mint
+          : isPending
+          ? Colors.amberAccent
+          : const Color(0xFF294152);
+      final tileColor = isOpen
+          ? mint.withValues(alpha: 0.08)
+          : isPending
+          ? Colors.amberAccent.withValues(alpha: 0.07)
+          : const Color(0xFF102534);
+
+      final moveColor = changePct == null || changePct == 0
+          ? muted
+          : changePct > 0
+          ? mint
+          : Colors.redAccent;
+
+      final digits = currency
+          ? (symbol == 'USDJPY' ? 3 : 5)
+          : price != null && price.abs() < 10
+          ? 5
+          : 2;
+
+      String displaySymbol = symbol;
+      if (currency && symbol.length == 6) {
+        displaySymbol =
+            '${symbol.substring(0, 3)}/${symbol.substring(3)}';
+      } else if (symbol.endsWith('USDT') && symbol.length > 4) {
+        displaySymbol = '${symbol.substring(0, symbol.length - 4)}/USDT';
+      }
+
+      String currencyRateText() {
+        if (!currency || price == null || symbol.length != 6) return '';
+        final base = symbol.substring(0, 3);
+        final counter = symbol.substring(3);
+        return '1 $base = ${number(price, digits)} $counter';
+      }
+
+      return ConstrainedBox(
+        constraints: BoxConstraints(
+          minWidth: currency ? 210 : 220,
+          maxWidth: currency ? 260 : 285,
+        ),
+        child: Container(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: tileColor,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: accent,
+              width: isOpen || isPending ? 1.35 : 1.0,
+            ),
+          ),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              assetLogo(symbol, size: 32),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            displaySymbol,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                        ),
+                        if (isOpen || isPending)
+                          Container(
+                            width: 7,
+                            height: 7,
+                            decoration: BoxDecoration(
+                              color: accent,
+                              shape: BoxShape.circle,
+                            ),
+                          ),
+                      ],
+                    ),
+                    const SizedBox(height: 5),
+                    Text(
+                      currency
+                          ? currencyRateText()
+                          : price == null
+                          ? '—'
+                          : '${number(price, digits)} $quote',
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Row(
+                      children: [
+                        Icon(
+                          changePct == null || changePct == 0
+                              ? Icons.remove
+                              : changePct > 0
+                              ? Icons.arrow_drop_up
+                              : Icons.arrow_drop_down,
+                          color: moveColor,
+                          size: 19,
+                        ),
+                        Text(
+                          changePct == null
+                              ? 'brak zmiany'
+                              : '${changePct >= 0 ? '+' : ''}${changePct.toStringAsFixed(2)}%',
+                          style: TextStyle(
+                            color: moveColor,
+                            fontSize: 12,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                        if (change != null && !currency) ...[
+                          const SizedBox(width: 6),
+                          Expanded(
+                            child: Text(
+                              '(${change >= 0 ? '+' : ''}${number(change, digits)})',
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                color: moveColor,
+                                fontSize: 10,
+                              ),
+                            ),
+                          ),
+                        ],
+                        const Spacer(),
+                        Text(
+                          changePeriod,
+                          style: const TextStyle(
+                            color: muted,
+                            fontSize: 9,
+                          ),
+                        ),
+                      ],
+                    ),
+                    if (pricePln != null) ...[
+                      const SizedBox(height: 3),
+                      Text(
+                        currency
+                            ? '≈ ${number(pricePln, 4)} PLN za 1 ${symbol.substring(0, 3)}'
+                            : '≈ ${number(pricePln, 2)} PLN',
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          color: muted,
+                          fontSize: 10,
+                        ),
+                      ),
+                    ],
+                    if (dayHigh != null && dayLow != null) ...[
+                      const SizedBox(height: 4),
+                      Text(
+                        'H ${number(dayHigh, digits)}  •  L ${number(dayLow, digits)}',
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          color: muted,
+                          fontSize: 9,
+                        ),
+                      ),
+                    ],
+                    if (isStale)
+                      const Padding(
+                        padding: EdgeInsets.only(top: 4),
+                        child: Text(
+                          'RYNEK ZAMKNIĘTY / DANE REFERENCYJNE',
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            color: Colors.amber,
+                            fontSize: 8,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    return box(
+      Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          heading(
+            'Notowania',
+            'Waluty oraz aktywa obserwowane i handlowane przez AI',
+          ),
+          if (currencies.isNotEmpty) ...[
+            const Text(
+              'Waluty',
+              style: TextStyle(
+                color: cyan,
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                for (final asset in currencies)
+                  tickerTile(asset, currency: true),
+              ],
+            ),
+            const SizedBox(height: 16),
+          ],
+          const Text(
+            'Nasze aktywa',
+            style: TextStyle(
+              color: cyan,
+              fontSize: 12,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          const SizedBox(height: 8),
+          if (ourAssets.isEmpty)
+            const Text(
+              'Brak aktualnych notowań aktywów.',
+              style: TextStyle(color: muted, fontSize: 12),
+            )
+          else
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                for (final asset in ourAssets.take(16))
+                  tickerTile(asset, currency: false),
+              ],
+            ),
+        ],
+      ),
+    );
+  }
+
   List<double> aiEquityValues() {
     final aiState = ai ?? const <String, dynamic>{};
-    final initial = (aiState['initial_balance'] as num?)?.toDouble() ?? 1000.0;
+    final initial = (aiState['initial_balance'] as num?)?.toDouble() ?? 0.0;
     final values = <double>[initial];
     var running = initial;
     for (final raw in asList(aiState['trades'])) {
@@ -383,7 +1798,7 @@ class _ProDashboardState extends State<ProDashboard> {
             ),
             const SizedBox(height: 10),
             const Text(
-              'Jednostki symulacyjne. PLN pozostaje warstwą raportową tam, gdzie API ma realną ścieżkę FX.',
+              'Kapitał i PnL konta AI są prowadzone w wirtualnych PLN. Notowania pozostają realne.',
               style: TextStyle(color: muted, fontSize: 12),
             ),
           ],
@@ -426,10 +1841,13 @@ class _ProDashboardState extends State<ProDashboard> {
         ? '/api/user-portfolio/deposit'
         : '/api/user-portfolio/withdraw';
     try {
-      final response = await client
+      final response = await http
           .post(
             Uri.parse('${widget.baseUrl}$path'),
-            headers: const {'content-type': 'application/json'},
+            headers: const {
+              'content-type': 'application/json',
+              'Connection': 'close',
+            },
             body: jsonEncode({'amount': amount}),
           )
           .timeout(const Duration(seconds: 15));
@@ -443,7 +1861,84 @@ class _ProDashboardState extends State<ProDashboard> {
     }
   }
 
+  Future<void> fundAi() async {
+    final controller = TextEditingController();
+    final amount = await showDialog<double>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Przekaż wirtualne PLN do AI'),
+        content: TextField(
+          controller: controller,
+          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+          autofocus: true,
+          decoration: InputDecoration(
+            labelText: 'Kwota PLN',
+            helperText:
+                'Dostępne: ${number(userPortfolio?['balance'])} PLN',
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Anuluj'),
+          ),
+          FilledButton.icon(
+            onPressed: () => Navigator.pop(
+              context,
+              double.tryParse(controller.text.replaceAll(',', '.')),
+            ),
+            icon: const Icon(Icons.play_arrow),
+            label: const Text('WYKONAJ'),
+          ),
+        ],
+      ),
+    );
+    controller.dispose();
+    if (amount == null || amount <= 0) return;
+
+    try {
+      final response = await http
+          .post(
+            Uri.parse('${widget.baseUrl}/api/ai/fund'),
+            headers: const {
+              'content-type': 'application/json',
+              'Connection': 'close',
+            },
+            body: jsonEncode({'amount': amount}),
+          )
+          .timeout(const Duration(seconds: 15));
+
+      if (response.statusCode < 200 || response.statusCode >= 300) {
+        throw Exception('HTTP ${response.statusCode}: ${response.body}');
+      }
+
+      await refresh();
+
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Przekazano ${amount.toStringAsFixed(2)} PLN do konta AI. '
+            'Agent zastosuje środki w najbliższym cyklu.',
+          ),
+        ),
+      );
+    } catch (error) {
+      if (!mounted) return;
+      setState(() => failure = 'Transfer do AI: $error');
+    }
+  }
+
   Widget portfolioActions() {
+    final aiState = ai ?? const <String, dynamic>{};
+    final aiBalance = (aiState['balance'] as num?)?.toDouble() ?? 0.0;
+    final aiEquity = (aiState['equity'] as num?)?.toDouble() ?? 0.0;
+    final aiRealized = (aiState['realized_pnl'] as num?)?.toDouble() ?? 0.0;
+    final aiUnrealized =
+        (aiState['unrealized_pnl'] as num?)?.toDouble() ?? 0.0;
+    final positions = asMap(aiState['positions']);
+    final decision = asMap(aiState['decision']);
+
     return box(
       Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -456,12 +1951,14 @@ class _ProDashboardState extends State<ProDashboard> {
           const SizedBox(height: 6),
           Text(
             'Wpłaty: ${number(userPortfolio?['total_deposited'])} PLN • '
-            'Wypłaty: ${number(userPortfolio?['total_withdrawn'])} PLN',
+            'Wypłaty: ${number(userPortfolio?['total_withdrawn'])} PLN • '
+            'Do AI: ${number(userPortfolio?['transferred_to_ai'])} PLN',
             style: const TextStyle(color: muted),
           ),
           const SizedBox(height: 14),
           Wrap(
             spacing: 10,
+            runSpacing: 10,
             children: [
               FilledButton.icon(
                 onPressed: () => changeUserFunds(deposit: true),
@@ -473,11 +1970,82 @@ class _ProDashboardState extends State<ProDashboard> {
                 icon: const Icon(Icons.remove),
                 label: const Text('Wypłać'),
               ),
+              FilledButton.icon(
+                onPressed:
+                    ((userPortfolio?['balance'] as num?)?.toDouble() ?? 0.0) > 0
+                    ? fundAi
+                    : null,
+                icon: const Icon(Icons.play_arrow),
+                label: const Text('WYKONAJ • PRZEKAŻ DO AI'),
+              ),
             ],
           ),
-          const SizedBox(height: 10),
+          const Divider(height: 34, color: Color(0xFF294152)),
+          heading('Konto AI', 'Autonomiczny paper trading'),
+          Text(
+            'Gotówka: ${number(aiBalance)} PLN',
+            style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'Equity: ${number(aiEquity)} PLN • '
+            'PnL otwarty: ${signed(aiUnrealized)} PLN • '
+            'PnL zamknięty: ${signed(aiRealized)} PLN',
+            style: const TextStyle(color: muted),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            positions.isEmpty
+                ? 'Pozycje: FLAT • ${decision['action'] ?? 'WAIT'}'
+                : 'Otwarte pozycje: ${positions.length}',
+            style: TextStyle(
+              color: positions.isEmpty ? muted : mint,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          if (positions.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            for (final entry in positions.entries)
+              Builder(
+                builder: (context) {
+                  final p = asMap(entry.value);
+                  final pnl =
+                      (p['unrealized_pnl'] as num?)?.toDouble() ?? 0.0;
+                  return Padding(
+                    padding: const EdgeInsets.only(bottom: 6),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            '${entry.key} • ${p['side'] ?? ''} • ${p['strategy'] ?? ''}',
+                            style: const TextStyle(fontSize: 12),
+                          ),
+                        ),
+                        Text(
+                          '${signed(pnl)} PLN',
+                          style: TextStyle(
+                            color: pnl >= 0 ? mint : Colors.redAccent,
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                },
+              ),
+          ],
+          if (decision['reason'] != null) ...[
+            const SizedBox(height: 6),
+            Text(
+              decision['reason'].toString(),
+              style: const TextStyle(color: muted, fontSize: 12),
+            ),
+          ],
+          const SizedBox(height: 12),
           const Text(
-            'To wyłącznie wirtualny portfel. Nie wykonuje przelewów ani zleceń giełdowych.',
+            'WYKONAJ oznacza wyłącznie transfer wirtualnych PLN do autonomicznego konta paper. '
+            'Nie są wysyłane żadne prawdziwe zlecenia.',
             style: TextStyle(color: muted, fontSize: 12),
           ),
         ],
@@ -488,67 +2056,159 @@ class _ProDashboardState extends State<ProDashboard> {
   void assetDetail(Map<String, dynamic> asset) {
     final symbol = asset['symbol']?.toString() ?? '—';
     final opportunity = opportunityFor(symbol);
-    final pln = asMap(asset['pln']);
+    final position = asMap(asMap(ai?['positions'])[symbol]);
+    final pending = asList(ai?['pending'])
+        .whereType<Map>()
+        .where((row) => row['symbol']?.toString() == symbol)
+        .toList();
+    final trades = asList(ai?['trades'])
+        .whereType<Map>()
+        .map((row) => Map<String, dynamic>.from(row))
+        .where((row) => row['symbol']?.toString() == symbol)
+        .toList();
+    final candidates = asList(ai?['ranking'])
+        .whereType<Map>()
+        .map((row) => Map<String, dynamic>.from(row))
+        .where((row) => row['symbol']?.toString() == symbol)
+        .toList();
+    final mark = asMap(asMap(ai?['market_marks'])[symbol]);
+    final quotePrice = asset['market_price'] is num
+        ? asset['market_price']
+        : mark['price'];
+    final realized = trades.fold<double>(
+      0.0,
+      (sum, row) => sum + ((row['profit'] as num?)?.toDouble() ?? 0.0),
+    );
+    final unrealized = (position['unrealized_pnl'] as num?)?.toDouble();
+    final source = asset['market_provider']?.toString() ?? 'brak notowań';
+
     showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
       backgroundColor: panel,
-      builder: (context) => SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
+      builder: (sheetContext) => DraggableScrollableSheet(
+        expand: false,
+        initialChildSize: 0.83,
+        minChildSize: 0.40,
+        maxChildSize: 0.96,
+        builder: (context, scrollController) => SafeArea(
+          child: ListView(
+            controller: scrollController,
+            padding: const EdgeInsets.all(24),
             children: [
               heading(symbol, asset['name']?.toString()),
+              const Text(
+                'Jeden autonomiczny rachunek AI • wszystkie wyniki wirtualne PLN',
+                style: TextStyle(color: mint, fontSize: 12),
+              ),
+              const SizedBox(height: 14),
               Text(
-                'Cena: ${number(asset['market_price'], 5)} ${asset['quote'] ?? ''}',
+                quotePrice is num
+                    ? 'Notowanie: ${number(quotePrice, 5)} ${asset['quote'] ?? ''}'
+                    : 'Notowanie: brak aktualnej ceny',
+              ),
+              Text(
+                'Źródło: $source${asset['market_stale'] == true ? ' • DANE REFERENCYJNE/STALE' : ''}',
+                style: const TextStyle(color: muted, fontSize: 12),
               ),
               if (asset['market_price_pln'] is num)
                 Text(
-                  'Cena referencyjna: ${number(asset['market_price_pln'], 2)} PLN',
+                  'Cena referencyjna: ${number(asset['market_price_pln'])} PLN',
                 ),
-              const SizedBox(height: 10),
-              Text('Pozycja paper-live: ${asset['position'] ?? 'FLAT'}'),
-              Text(
-                'Wynik paper-live: ${signed(asset['net_profit'])} ${asset['quote'] ?? ''}',
+              const Divider(height: 30, color: Color(0xFF294152)),
+              const Text(
+                'POZYCJA AUTONOMICZNEGO AI',
+                style: TextStyle(color: cyan, fontWeight: FontWeight.w700),
               ),
-              if (asset['net_profit_pln'] is num)
+              const SizedBox(height: 8),
+              if (position.isEmpty)
+                const Text('FLAT • brak otwartej pozycji AI na tym rynku')
+              else ...[
                 Text(
-                  'Wynik paper-live: ${signed(asset['net_profit_pln'])} PLN',
+                  '${position['side'] ?? '—'} • ${position['strategy'] ?? '—'}'
+                  '${position['learning_probe'] == true ? ' • LEARNING PROBE' : ''}',
                 ),
-              if (opportunity != null) ...[
-                const SizedBox(height: 14),
+                Text('Ekspozycja: ${number(position['allocation_pln'])} PLN'),
+                Text('Wejście: ${number(position['entry'], 5)}'),
                 Text(
-                  'Research TOP ${opportunityRank(symbol) ?? '—'} • ${classLabel(opportunity['asset_class'])}',
-                  style: const TextStyle(
-                    color: cyan,
-                    fontWeight: FontWeight.w600,
+                  'Niezrealizowany PnL: ${unrealized == null ? '—' : signed(unrealized)} PLN',
+                  style: TextStyle(
+                    color: unrealized == null
+                        ? muted
+                        : unrealized >= 0
+                            ? mint
+                            : Colors.redAccent,
                   ),
-                ),
-                Text('Strategia: ${opportunity['strategy'] ?? '—'}'),
-                if (opportunity['cross_market_score'] is num)
-                  Text(
-                    'Cross score: ${number(opportunity['cross_market_score'], 4)}',
-                  ),
-                if (opportunity['expected_net_return'] is num)
-                  Text(
-                    'Prognoza netto modelu: ${((opportunity['expected_net_return'] as num).toDouble() * 100).toStringAsFixed(3)}%',
-                  ),
-                Text(
-                  'Walidacja: ${opportunity['validation_trades'] ?? 0} prób',
                 ),
               ],
-              const SizedBox(height: 12),
-              Text(
-                pln['available'] == true
-                    ? 'PLN: ${pln['path'] ?? 'realna ścieżka FX'}'
-                    : 'PLN niedostępne dla tego rynku',
-                style: const TextStyle(color: muted, fontSize: 12),
+              const SizedBox(height: 8),
+              Text('Pozycje oczekujące: ${pending.length}'),
+              for (final row in pending)
+                Text(
+                  '${row['side'] ?? '—'} • ${row['strategy'] ?? '—'}'
+                  '${row['learning_probe'] == true ? ' • LEARNING PROBE' : ''}',
+                  style: const TextStyle(color: cyan),
+                ),
+              const Divider(height: 30, color: Color(0xFF294152)),
+              const Text(
+                'HISTORIA TEGO RYNKU — TYLKO AI',
+                style: TextStyle(color: cyan, fontWeight: FontWeight.w700),
               ),
+              const SizedBox(height: 8),
+              Text('Zamknięte pozycje: ${trades.length}'),
+              Text(
+                'Zrealizowany PnL: ${signed(realized)} PLN',
+                style: TextStyle(
+                  color: realized >= 0 ? mint : Colors.redAccent,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              for (final trade in trades.reversed.take(8))
+                Padding(
+                  padding: const EdgeInsets.only(top: 5),
+                  child: Text(
+                    '${trade['strategy'] ?? '—'} • ${trade['side'] ?? '—'} • '
+                    '${trade['reason'] ?? '—'} • ${signed(trade['profit'])} PLN',
+                    style: const TextStyle(color: muted, fontSize: 12),
+                  ),
+                ),
+              const Divider(height: 30, color: Color(0xFF294152)),
+              const Text(
+                'SYGNAŁY BIEŻĄCEGO CYKLU AI',
+                style: TextStyle(color: cyan, fontWeight: FontWeight.w700),
+              ),
+              const SizedBox(height: 8),
+              if (candidates.isEmpty)
+                const Text('Brak bieżącej oceny modelu dla tego rynku')
+              else
+                for (final row in candidates)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 6),
+                    child: Text(
+                      '${row['strategy'] ?? '—'} • ${row['side'] ?? '—'} • '
+                      'expected ${row['expected_net_return'] is num ? ((row['expected_net_return'] as num).toDouble() * 100).toStringAsFixed(3) : '—'}% • '
+                      '${row['eligible'] == true ? 'DOPUSZCZONY' : 'ODRZUCONY'}',
+                      style: TextStyle(
+                        color: row['eligible'] == true ? mint : muted,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ),
+              if (opportunity != null) ...[
+                const Divider(height: 30, color: Color(0xFF294152)),
+                Text(
+                  'RESEARCH TOP ${opportunityRank(symbol) ?? '—'} • '
+                  '${classLabel(opportunity['asset_class'])}',
+                  style: const TextStyle(
+                    color: cyan,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                Text('Strategia Research: ${opportunity['strategy'] ?? '—'}'),
+              ],
               const SizedBox(height: 18),
               TextButton(
-                onPressed: () => Navigator.pop(context),
+                onPressed: () => Navigator.pop(sheetContext),
                 child: const Text('Zamknij'),
               ),
             ],
@@ -559,12 +2219,24 @@ class _ProDashboardState extends State<ProDashboard> {
   }
 
   Widget marketTable({bool all = false}) {
-    final filtered = assets.where((asset) {
+    final filtered = marketCatalog.where((asset) {
       final symbol = asset['symbol']?.toString() ?? '';
       final name = asset['name']?.toString() ?? '';
       return '$symbol $name'.toLowerCase().contains(query.toLowerCase());
-    }).toList();
-    final shown = all ? filtered : filtered.take(9).toList();
+    }).toList()
+      ..sort((a, b) {
+        final aOpen = (a['position']?.toString() ?? 'FLAT') != 'FLAT';
+        final bOpen = (b['position']?.toString() ?? 'FLAT') != 'FLAT';
+        if (aOpen != bOpen) return aOpen ? -1 : 1;
+
+        final ar = opportunityRank(a['symbol']?.toString() ?? '') ?? 9999;
+        final br = opportunityRank(b['symbol']?.toString() ?? '') ?? 9999;
+        if (ar != br) return ar.compareTo(br);
+
+        return (a['symbol']?.toString() ?? '')
+            .compareTo(b['symbol']?.toString() ?? '');
+      });
+    final shown = all ? filtered : filtered.take(12).toList();
 
     return box(
       Column(
@@ -574,7 +2246,7 @@ class _ProDashboardState extends State<ProDashboard> {
             children: [
               const Expanded(
                 child: Text(
-                  'Rynki paper-live',
+                  'Rynki AI paper-live',
                   style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
                 ),
               ),
@@ -586,7 +2258,7 @@ class _ProDashboardState extends State<ProDashboard> {
             ],
           ),
           const Text(
-            'Realne notowania • środki wirtualne • PLN tylko z realnej ścieżki FX',
+            'Wszystkie skonfigurowane rynki • równoległe pozycje AI • wyłącznie wirtualne PLN',
             style: TextStyle(color: muted, fontSize: 12),
           ),
           if (all)
@@ -613,8 +2285,9 @@ class _ProDashboardState extends State<ProDashboard> {
             Builder(
               builder: (context) {
                 final symbol = asset['symbol']?.toString() ?? '—';
-                final pnl = (asset['net_profit'] as num?)?.toDouble() ?? 0.0;
-                final pnlPln = (asset['net_profit_pln'] as num?)?.toDouble();
+                final aiPosition = asMap(asMap(ai?['positions'])[symbol]);
+                final pnlPln =
+                    (aiPosition['unrealized_pnl'] as num?)?.toDouble();
                 final opportunity = opportunityFor(symbol);
                 final rank = opportunity == null
                     ? null
@@ -627,14 +2300,7 @@ class _ProDashboardState extends State<ProDashboard> {
                     padding: const EdgeInsets.symmetric(vertical: 13),
                     child: Row(
                       children: [
-                        CircleAvatar(
-                          radius: 17,
-                          backgroundColor: const Color(0xFF23485F),
-                          child: Text(
-                            symbol.isEmpty ? '?' : symbol.substring(0, 1),
-                            style: const TextStyle(color: cyan),
-                          ),
-                        ),
+                        assetLogo(symbol, size: 34),
                         const SizedBox(width: 12),
                         Expanded(
                           child: Column(
@@ -662,20 +2328,28 @@ class _ProDashboardState extends State<ProDashboard> {
                           crossAxisAlignment: CrossAxisAlignment.end,
                           children: [
                             Text(
-                              '${number(price, digits)} ${asset['quote'] ?? ''}',
+                              price is num
+                                  ? '${number(price, digits)} ${asset['quote'] ?? ''}'
+                                  : 'Brak notowania',
                             ),
                             Text(
-                              pnlPln != null
-                                  ? '${signed(pnlPln)} PLN'
-                                  : '${signed(pnl)} ${asset['quote'] ?? ''}',
+                              pnlPln == null
+                                  ? 'AI • brak pozycji'
+                                  : '${signed(pnlPln)} PLN',
                               style: TextStyle(
-                                color: pnl >= 0 ? mint : Colors.redAccent,
+                                color: pnlPln == null
+                                    ? muted
+                                    : pnlPln >= 0
+                                        ? mint
+                                        : Colors.redAccent,
                                 fontSize: 12,
                               ),
                             ),
                             Text(
-                              rank == null
-                                  ? '${asset['position'] ?? 'FLAT'} • poza TOP 10'
+                              (asset['position']?.toString() ?? 'FLAT') != 'FLAT'
+                                  ? '${asset['position']} • AI ${number(asset['ai_allocation_pln'])} PLN'
+                                  : rank == null
+                                  ? 'FLAT • poza TOP 10'
                                   : 'TOP $rank • ${classLabel(opportunity?['asset_class'])}',
                               style: const TextStyle(
                                 color: muted,
@@ -697,8 +2371,9 @@ class _ProDashboardState extends State<ProDashboard> {
 
   Widget activity() {
     final decisions = asList(ai?['decisions']);
-    final macro = asList(research?['macro_events']);
     final errors = asMap(research?['errors']);
+    final supervisor = asMap(ai?['strategy_supervisor']);
+    final strategyHealth = asMap(supervisor['strategies']);
     return box(
       Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -717,13 +2392,137 @@ class _ProDashboardState extends State<ProDashboard> {
             ],
           ),
           const SizedBox(height: 18),
+          if (strategyHealth.isNotEmpty) ...[
+            Row(
+              children: [
+                const Icon(
+                  Icons.health_and_safety_outlined,
+                  color: cyan,
+                  size: 22,
+                ),
+                const SizedBox(width: 8),
+                const Text(
+                  'Nadzorca strategii',
+                  style: TextStyle(
+                    fontWeight: FontWeight.w700,
+                    fontSize: 16,
+                  ),
+                ),
+                const Spacer(),
+                Text(
+                  supervisor['overall_status']?.toString() ?? 'LEARNING',
+                  style: const TextStyle(
+                    color: cyan,
+                    fontWeight: FontWeight.w700,
+                    fontSize: 11,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 10),
+            for (final entry in strategyHealth.entries)
+              Builder(
+                builder: (context) {
+                  final health = asMap(entry.value);
+                  final status =
+                      health['status']?.toString() ?? 'LEARNING';
+                  final tone = status == 'ACTIVE'
+                      ? mint
+                      : status == 'PAUSED'
+                      ? Colors.redAccent
+                      : status == 'WATCH'
+                      ? Colors.amber
+                      : cyan;
+                  final trades = health['trades'] ?? 0;
+                  final winRate =
+                      ((health['win_rate'] as num?)?.toDouble() ?? 0.0) *
+                      100;
+                  final pf = (health['profit_factor'] as num?)?.toDouble();
+                  final avg =
+                      ((health['mean_return'] as num?)?.toDouble() ?? 0.0) *
+                      100;
+                  final stopRate =
+                      ((health['stop_loss_rate'] as num?)?.toDouble() ?? 0.0) *
+                      100;
+                  final pfText = pf == null
+                      ? '—'
+                      : pf.isInfinite
+                      ? 'INF'
+                      : pf.toStringAsFixed(2);
+
+                  return Container(
+                    margin: const EdgeInsets.only(bottom: 8),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 10,
+                    ),
+                    decoration: BoxDecoration(
+                      color: tone.withValues(alpha: 0.06),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                        color: tone.withValues(alpha: 0.20),
+                      ),
+                    ),
+                    child: Row(
+                      children: [
+                        Container(
+                          width: 9,
+                          height: 9,
+                          decoration: BoxDecoration(
+                            color: tone,
+                            shape: BoxShape.circle,
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                entry.key.replaceAll('_', ' '),
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                              const SizedBox(height: 3),
+                              Text(
+                                '$trades transakcji • WR ${winRate.toStringAsFixed(1)}% • '
+                                'PF $pfText • avg ${avg >= 0 ? '+' : ''}${avg.toStringAsFixed(3)}% • '
+                                'SL ${stopRate.toStringAsFixed(0)}%',
+                                style: const TextStyle(
+                                  color: muted,
+                                  fontSize: 11,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        Text(
+                          status,
+                          style: TextStyle(
+                            color: tone,
+                            fontSize: 11,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                },
+              ),
+            const Divider(
+              height: 28,
+              color: Color(0xFF294152),
+            ),
+          ],
           if (decisions.isEmpty)
             const Text(
               'Brak zapisanych decyzji AI.',
               style: TextStyle(color: muted),
             )
           else
-            for (final raw in decisions.reversed.take(10))
+            for (final raw in decisions.reversed.take(30))
               if (raw is Map)
                 ListTile(
                   contentPadding: EdgeInsets.zero,
@@ -733,24 +2532,14 @@ class _ProDashboardState extends State<ProDashboard> {
                   ),
                   subtitle: Text(raw['reason']?.toString() ?? ''),
                 ),
-          if (macro.isNotEmpty) ...[
+          if (errors.values.any((value) => value != null)) ...[
             const Divider(color: Color(0xFF294152)),
             const SizedBox(height: 10),
             const Text(
-              'Ostatnie wydarzenia makro',
+              'Problemy z danymi',
               style: TextStyle(fontWeight: FontWeight.w600),
             ),
-            for (final raw in macro.reversed.take(5))
-              if (raw is Map)
-                ListTile(
-                  contentPadding: EdgeInsets.zero,
-                  leading: const Icon(Icons.public, color: mint, size: 20),
-                  title: Text(raw['title']?.toString() ?? 'Wydarzenie makro'),
-                  subtitle: Text(raw['source']?.toString() ?? ''),
-                ),
-          ],
-          if (errors.values.any((value) => value != null)) ...[
-            const Divider(color: Color(0xFF294152)),
+            const SizedBox(height: 6),
             Text(
               errors.entries
                   .where((entry) => entry.value != null)
@@ -764,6 +2553,56 @@ class _ProDashboardState extends State<ProDashboard> {
             'Wirtualny broker • brak prawdziwych zleceń • ranking nie jest gwarancją zysku.',
             style: TextStyle(color: mint, height: 1.5),
           ),
+        ],
+      ),
+    );
+  }
+
+  Widget macroEvents() {
+    final macro = asList(research?['macro_events']);
+    return box(
+      Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          heading(
+            'Ostatnie wydarzenia',
+            'Makro i informacje wykorzystywane przez warstwę research',
+          ),
+          const Row(
+            children: [
+              Icon(Icons.public, color: mint, size: 30),
+              SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  'Oddzielny widok wydarzeń, bez zaśmiecania głównego ekranu portfela.',
+                  style: TextStyle(color: muted),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 18),
+          if (macro.isEmpty)
+            const Text(
+              'Brak zapisanych wydarzeń.',
+              style: TextStyle(color: muted),
+            )
+          else
+            for (final raw in macro.reversed.take(30))
+              if (raw is Map)
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: const Icon(Icons.public, color: mint, size: 20),
+                  title: Text(
+                    raw['title']?.toString() ?? 'Wydarzenie makro',
+                  ),
+                  subtitle: Text(
+                    [
+                      if (raw['source'] != null) raw['source'].toString(),
+                      if (raw['published_at'] != null)
+                        raw['published_at'].toString(),
+                    ].join(' • '),
+                  ),
+                ),
         ],
       ),
     );
@@ -793,7 +2632,7 @@ class _ProDashboardState extends State<ProDashboard> {
                   '${raw['reason'] ?? ''} • ${number(raw['entry'], 5)} → ${number(raw['exit_price'], 5)}',
                 ),
                 trailing: Text(
-                  '${signed(raw['profit'])} jedn.',
+                  '${signed(raw['profit'])} PLN',
                   style: TextStyle(
                     color: (raw['profit'] as num? ?? 0) >= 0
                         ? mint
@@ -806,15 +2645,137 @@ class _ProDashboardState extends State<ProDashboard> {
     );
   }
 
-  void openLegacy() {
-    final builder = widget.legacyBuilder;
-    if (builder == null) return;
-    Navigator.of(context).push(MaterialPageRoute<void>(builder: builder));
+  /// Select any market visible to research or to the autonomous AI account.
+  /// The old BTCUSDT legacy paper account is not part of this navigation.
+  Future<void> openMarketDetails() async {
+    final entries = marketCatalog;
+    final selected = await showModalBottomSheet<Map<String, dynamic>>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: panel,
+      showDragHandle: true,
+      builder: (sheetContext) => SafeArea(
+        child: FractionallySizedBox(
+          heightFactor: 0.80,
+          child: Column(
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 8, 20, 10),
+                child: heading(
+                  'Szczegóły rynku',
+                  'Wybierz instrument z jednego wielorynkowego rachunku AI',
+                ),
+              ),
+              Expanded(
+                child: entries.isEmpty
+                    ? const Center(
+                        child: Text(
+                          'Brak danych o instrumentach AI',
+                          style: TextStyle(color: muted),
+                        ),
+                      )
+                    : ListView.builder(
+                        itemCount: entries.length,
+                        itemBuilder: (context, index) {
+                          final asset = entries[index];
+                          final symbol = asset['symbol']?.toString() ?? '—';
+                          final position =
+                              asMap(asMap(ai?['positions'])[symbol]);
+                          return ListTile(
+                            key: ValueKey('market_$symbol'),
+                            leading: assetLogo(symbol, size: 30),
+                            title: Text(symbol),
+                            subtitle: Text(
+                              asset['name']?.toString() ?? '',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(color: muted),
+                            ),
+                            trailing: Text(
+                              position.isEmpty
+                                  ? 'FLAT'
+                                  : 'AI ${position['side'] ?? '—'}',
+                              style: TextStyle(
+                                color: position.isEmpty ? muted : mint,
+                              ),
+                            ),
+                            onTap: () => Navigator.pop(sheetContext, asset),
+                          );
+                        },
+                      ),
+              ),
+              TextButton(
+                onPressed: () => Navigator.pop(sheetContext),
+                child: const Text('Zamknij'),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+    if (!mounted || selected == null) return;
+    assetDetail(selected);
+  }
+
+  Future<void> openMobileMoreMenu() async {
+    final selected = await showModalBottomSheet<int>(
+      context: context,
+      backgroundColor: panel,
+      showDragHandle: true,
+      builder: (context) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ListTile(
+                leading: const Icon(Icons.newspaper, color: cyan),
+                title: const Text('Wydarzenia'),
+                subtitle: const Text(
+                  'Makro i informacje z warstwy research',
+                  style: TextStyle(color: muted, fontSize: 12),
+                ),
+                onTap: () => Navigator.pop(context, 4),
+              ),
+              ListTile(
+                leading: const Icon(Icons.history, color: cyan),
+                title: const Text('Historia'),
+                subtitle: const Text(
+                  'Zamknięte transakcje AI',
+                  style: TextStyle(color: muted, fontSize: 12),
+                ),
+                onTap: () => Navigator.pop(context, 5),
+              ),
+              ListTile(
+                leading: const Icon(
+                  Icons.analytics_outlined,
+                  color: cyan,
+                ),
+                title: const Text('Szczegóły rynku'),
+                subtitle: const Text(
+                  'Wszystkie rynki • wspólne konto autonomicznego AI',
+                  style: TextStyle(color: muted, fontSize: 12),
+                ),
+                onTap: () => Navigator.pop(context, 6),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+
+    if (selected == 6 && mounted) {
+      await openMarketDetails();
+    } else if (selected != null && mounted) {
+      setState(() => page = selected);
+    }
   }
 
   @override
   Widget build(BuildContext context) {
-    final wide = MediaQuery.sizeOf(context).width >= 1100;
+    final screenWidth = MediaQuery.sizeOf(context).width;
+    final wide = screenWidth >= 1180;
+    final roomy = screenWidth >= 1500;
     final researchData = research;
 
     return Scaffold(
@@ -822,19 +2783,36 @@ class _ProDashboardState extends State<ProDashboard> {
       bottomNavigationBar: wide
           ? null
           : NavigationBar(
-              selectedIndex: page,
+              selectedIndex: page <= 3 ? page : 4,
               backgroundColor: panel,
-              onDestinationSelected: (value) => setState(() => page = value),
-              destinations: [
-                for (int i = 0; i < labels.length; i++)
-                  NavigationDestination(
-                    icon: Icon(icons[i]),
-                    label: i == 2
-                        ? 'TOP 10'
-                        : i == 3
-                        ? 'AI'
-                        : labels[i],
-                  ),
+              onDestinationSelected: (value) {
+                if (value == 4) {
+                  openMobileMoreMenu();
+                  return;
+                }
+                setState(() => page = value);
+              },
+              destinations: const [
+                NavigationDestination(
+                  icon: Icon(Icons.account_balance_wallet),
+                  label: 'Portfel',
+                ),
+                NavigationDestination(
+                  icon: Icon(Icons.candlestick_chart),
+                  label: 'Rynki',
+                ),
+                NavigationDestination(
+                  icon: Icon(Icons.travel_explore),
+                  label: 'TOP 10',
+                ),
+                NavigationDestination(
+                  icon: Icon(Icons.psychology),
+                  label: 'AI',
+                ),
+                NavigationDestination(
+                  icon: Icon(Icons.more_horiz_rounded),
+                  label: 'Więcej',
+                ),
               ],
             ),
       body: SafeArea(
@@ -842,7 +2820,7 @@ class _ProDashboardState extends State<ProDashboard> {
           children: [
             if (wide)
               Container(
-                width: 205,
+                width: roomy ? 205 : 184,
                 padding: const EdgeInsets.symmetric(
                   horizontal: 16,
                   vertical: 30,
@@ -876,23 +2854,46 @@ class _ProDashboardState extends State<ProDashboard> {
                           selected: page == i,
                           selectedTileColor: panel,
                           selectedColor: cyan,
-                          leading: Icon(icons[i], size: 20),
+                          leading: AnimatedContainer(
+                            duration: const Duration(milliseconds: 180),
+                            width: 34,
+                            height: 34,
+                            decoration: BoxDecoration(
+                              color: page == i
+                                  ? cyan.withValues(alpha: 0.14)
+                                  : const Color(0xFF142B3D),
+                              borderRadius: BorderRadius.circular(10),
+                              border: Border.all(
+                                color: page == i
+                                    ? cyan.withValues(alpha: 0.45)
+                                    : const Color(0xFF294152),
+                              ),
+                            ),
+                            child: Icon(
+                              icons[i],
+                              size: 19,
+                              color: page == i ? cyan : muted,
+                            ),
+                          ),
                           title: Text(
                             labels[i],
-                            style: const TextStyle(fontSize: 13),
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              fontSize: roomy ? 13 : 12,
+                            ),
                           ),
                           onTap: () => setState(() => page = i),
                         ),
                       ),
-                    if (widget.legacyBuilder != null)
-                      Padding(
-                        padding: const EdgeInsets.only(top: 8),
-                        child: OutlinedButton.icon(
-                          onPressed: openLegacy,
-                          icon: const Icon(Icons.candlestick_chart, size: 18),
-                          label: const Text('Szczegóły rynku'),
-                        ),
+                    Padding(
+                      padding: const EdgeInsets.only(top: 8),
+                      child: OutlinedButton.icon(
+                        onPressed: openMarketDetails,
+                        icon: const Icon(Icons.analytics_outlined, size: 18),
+                        label: const Text('Szczegóły rynku'),
                       ),
+                    ),
                     const Spacer(),
                     const Text(
                       'Realne dane rynkowe.\nWirtualny kapitał.',
@@ -905,7 +2906,13 @@ class _ProDashboardState extends State<ProDashboard> {
               child: RefreshIndicator(
                 onRefresh: refresh,
                 child: ListView(
-                  padding: EdgeInsets.all(wide ? 28 : 16),
+                  padding: EdgeInsets.all(
+                    screenWidth >= 1500
+                        ? 28
+                        : screenWidth >= 900
+                        ? 22
+                        : 14,
+                  ),
                   children: [
                     Row(
                       children: [
@@ -918,19 +2925,76 @@ class _ProDashboardState extends State<ProDashboard> {
                             ),
                           ),
                         ),
-                        if (!wide && widget.legacyBuilder != null)
+                        if (!wide)
                           IconButton(
                             tooltip: 'Szczegóły rynku',
-                            onPressed: openLegacy,
+                            onPressed: openMarketDetails,
                             icon: const Icon(
                               Icons.candlestick_chart,
                               color: cyan,
                             ),
                           ),
+                        Tooltip(
+                          message: stale
+                              ? 'Status danych: STALE'
+                              : 'Status danych: LIVE',
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 9,
+                              vertical: 6,
+                            ),
+                            decoration: BoxDecoration(
+                              color: (stale ? Colors.amber : mint)
+                                  .withValues(alpha: 0.10),
+                              borderRadius: BorderRadius.circular(10),
+                              border: Border.all(
+                                color: (stale ? Colors.amber : mint)
+                                    .withValues(alpha: 0.35),
+                              ),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(
+                                  stale
+                                      ? Icons.cloud_off_rounded
+                                      : Icons.cloud_done_rounded,
+                                  size: 18,
+                                  color: stale ? Colors.amber : mint,
+                                ),
+                                const SizedBox(width: 6),
+                                Text(
+                                  stale ? 'STALE' : 'LIVE',
+                                  style: TextStyle(
+                                    color: stale ? Colors.amber : mint,
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w700,
+                                    letterSpacing: 0.5,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 6),
                         IconButton(
-                          tooltip: 'Odśwież',
-                          onPressed: refresh,
-                          icon: const Icon(Icons.refresh, color: cyan),
+                          tooltip: busy
+                              ? 'Odświeżanie danych…'
+                              : 'Odśwież teraz',
+                          onPressed: manualRefresh,
+                          icon: busy
+                              ? const SizedBox(
+                                  width: 18,
+                                  height: 18,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    color: cyan,
+                                  ),
+                                )
+                              : const Icon(
+                                  Icons.refresh_rounded,
+                                  color: cyan,
+                                ),
                         ),
                       ],
                     ),
@@ -978,51 +3042,48 @@ class _ProDashboardState extends State<ProDashboard> {
                       ),
                     if (received == null && failure == null)
                       const LinearProgressIndicator(),
+                    if (aiRiskBlocked) riskHaltBanner(),
+                    if (aiScanning) aiActivityBanner(),
                     if (page == 0) ...[
                       summary(),
                       const SizedBox(height: 20),
-                      if (wide)
+                      marketTickerStrip(),
+                      const SizedBox(height: 20),
+                      if (roomy)
                         Row(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Expanded(
-                              flex: 3,
-                              child: Column(
-                                children: [
-                                  equityChart(),
-                                  const SizedBox(height: 20),
-                                  marketTable(),
-                                ],
-                              ),
+                              flex: 7,
+                              child: equityChart(),
                             ),
                             const SizedBox(width: 20),
                             Expanded(
-                              flex: 2,
+                              flex: 5,
                               child: Column(
                                 children: [
-                                  portfolioActions(),
+                                  fundsDonut(),
                                   const SizedBox(height: 20),
-                                  activity(),
+                                  portfolioActions(),
                                 ],
                               ),
                             ),
                           ],
                         )
                       else ...[
+                        fundsDonut(),
+                        const SizedBox(height: 20),
                         portfolioActions(),
                         const SizedBox(height: 20),
                         equityChart(),
-                        const SizedBox(height: 20),
-                        marketTable(),
-                        const SizedBox(height: 20),
-                        activity(),
                       ],
                     ],
                     if (page == 1) marketTable(all: true),
                     if (page == 2)
                       ResearchPanel(data: researchData, error: failure),
                     if (page == 3) activity(),
-                    if (page == 4) history(),
+                    if (page == 4) macroEvents(),
+                    if (page == 5) history(),
                     const SizedBox(height: 24),
                     const Center(
                       child: Text(
@@ -1041,6 +3102,67 @@ class _ProDashboardState extends State<ProDashboard> {
     );
   }
 }
+
+class FundsDonutPainter extends CustomPainter {
+  final List<double> values;
+  final List<Color> colors;
+
+  FundsDonutPainter({
+    required this.values,
+    required this.colors,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final total = values.fold<double>(
+      0.0,
+      (sum, value) => sum + math.max(0.0, value),
+    );
+
+    final center = Offset(size.width / 2, size.height / 2);
+    final radius = math.min(size.width, size.height) / 2 - 6;
+    final rect = Rect.fromCircle(center: center, radius: radius);
+    const stroke = 22.0;
+
+    if (total <= 0) {
+      canvas.drawArc(
+        rect,
+        0,
+        math.pi * 2,
+        false,
+        Paint()
+          ..color = const Color(0xFF294152)
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = stroke,
+      );
+      return;
+    }
+
+    var start = -math.pi / 2;
+    for (int i = 0; i < values.length; i++) {
+      final value = math.max(0.0, values[i]);
+      if (value <= 0) continue;
+
+      final sweep = math.pi * 2 * value / total;
+      canvas.drawArc(
+        rect,
+        start,
+        sweep,
+        false,
+        Paint()
+          ..color = colors[i % colors.length]
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = stroke
+          ..strokeCap = StrokeCap.butt,
+      );
+      start += sweep;
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant FundsDonutPainter oldDelegate) => true;
+}
+
 
 class EquityPainter extends CustomPainter {
   final List<double> values;

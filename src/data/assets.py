@@ -115,7 +115,7 @@ ASSET_ALIASES = {
     for asset in (*SUPPORTED_ASSETS, *RESEARCH_ASSETS)
     for alias in asset.aliases
 }
-_BINANCE_USDT_RE = re.compile(r"^[A-Z0-9]{2,20}USDT$")
+_BINANCE_USDT_RE = re.compile(r"^[A-Z0-9]{1,20}USDT$")
 
 
 def dynamic_binance_asset(symbol: str) -> AssetSpec:

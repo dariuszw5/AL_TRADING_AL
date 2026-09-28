@@ -225,6 +225,146 @@ class DataProvider:
             symbol=asset_symbol or provider_symbol,
         )
 
+    def get_market_quote(self, symbol="BTCUSDT"):
+        """Return an exchange-style live/reference quote for one asset.
+
+        Binance values use the provider's rolling 24h ticker. Yahoo values use
+        the regular market price versus the previous session close. The method
+        only reports market data; it never places orders.
+        """
+        asset = get_asset(symbol, allow_dynamic_binance=True)
+
+        if asset.provider == "binance":
+            response = self._get_binance(
+                "/api/v3/ticker/24hr",
+                {"symbol": asset.provider_symbol},
+            )
+            row = response.json()
+            price = float(row["lastPrice"])
+            previous = float(row["openPrice"])
+            change = float(row["priceChange"])
+            change_pct = float(row["priceChangePercent"])
+            return {
+                "symbol": asset.symbol,
+                "provider": asset.provider,
+                "price": price,
+                "previous_close": previous,
+                "change": change,
+                "change_pct": change_pct,
+                "day_high": float(row["highPrice"]),
+                "day_low": float(row["lowPrice"]),
+                "volume": float(row["volume"]),
+                "quote_volume": float(row["quoteVolume"]),
+                "timestamp": int(row.get("closeTime") or time.time() * 1000),
+                "change_period": "24h",
+            }
+
+        encoded_symbol = urllib.parse.quote(asset.provider_symbol, safe="")
+        response = self._request(
+            f"{self.YAHOO_BASE_URL}/{encoded_symbol}",
+            params={
+                "range": "5d",
+                "interval": "1d",
+                "includePrePost": "false",
+                "events": "div,splits",
+            },
+            headers={"User-Agent": "AL-Trading-Agent-Paper/1.0"},
+        )
+        payload = response.json()
+        chart = payload.get("chart", {})
+        results = chart.get("result") or []
+        if not results:
+            error = chart.get("error") or {}
+            description = error.get("description", "empty response")
+            raise ValueError(
+                f"Yahoo Finance returned no quote for {asset.provider_symbol}: "
+                f"{description}"
+            )
+
+        result = results[0]
+        meta = result.get("meta") or {}
+        timestamps = result.get("timestamp") or []
+        quote = result.get("indicators", {}).get("quote", [{}])[0]
+        closes = [
+            float(value)
+            for value in (quote.get("close") or [])
+            if value is not None
+        ]
+
+        if not closes and meta.get("regularMarketPrice") is None:
+            raise ValueError(f"No quote price returned for {asset.symbol}")
+
+        price = float(
+            meta.get("regularMarketPrice")
+            if meta.get("regularMarketPrice") is not None
+            else closes[-1]
+        )
+
+        previous_raw = (
+            meta.get("chartPreviousClose")
+            if meta.get("chartPreviousClose") is not None
+            else meta.get("previousClose")
+        )
+        if previous_raw is None and len(closes) >= 2:
+            previous_raw = closes[-2]
+        if previous_raw is None:
+            previous_raw = price
+
+        previous = float(previous_raw)
+        change = price - previous
+        change_pct = (change / previous * 100.0) if previous else 0.0
+
+        highs = [
+            float(value)
+            for value in (quote.get("high") or [])
+            if value is not None
+        ]
+        lows = [
+            float(value)
+            for value in (quote.get("low") or [])
+            if value is not None
+        ]
+        volumes = [
+            float(value or 0.0)
+            for value in (quote.get("volume") or [])
+            if value is not None
+        ]
+
+        timestamp = meta.get("regularMarketTime")
+        if timestamp is not None:
+            timestamp = int(timestamp) * 1000
+        elif timestamps:
+            timestamp = int(timestamps[-1]) * 1000
+        else:
+            timestamp = int(time.time() * 1000)
+
+        return {
+            "symbol": asset.symbol,
+            "provider": asset.provider,
+            "price": price,
+            "previous_close": previous,
+            "change": change,
+            "change_pct": change_pct,
+            "day_high": float(
+                meta.get("regularMarketDayHigh")
+                if meta.get("regularMarketDayHigh") is not None
+                else (highs[-1] if highs else price)
+            ),
+            "day_low": float(
+                meta.get("regularMarketDayLow")
+                if meta.get("regularMarketDayLow") is not None
+                else (lows[-1] if lows else price)
+            ),
+            "volume": float(
+                meta.get("regularMarketVolume")
+                if meta.get("regularMarketVolume") is not None
+                else (volumes[-1] if volumes else 0.0)
+            ),
+            "quote_volume": None,
+            "timestamp": timestamp,
+            "change_period": "sesja",
+        }
+
     def get_historical_candles(self, symbol="BTCUSDT", interval="1m", limit=1000):
         asset = get_asset(symbol, allow_dynamic_binance=True)
 

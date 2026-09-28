@@ -1,16 +1,19 @@
 from __future__ import annotations
 
+from concurrent.futures import ThreadPoolExecutor
 import json
 import os
 from pathlib import Path
+from threading import Lock
 import time
 from typing import Any
+from uuid import uuid4
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
-from src.data.assets import SUPPORTED_ASSETS, asset_payload, get_asset
+from src.data.assets import RESEARCH_ASSETS, SUPPORTED_ASSETS, asset_payload, get_asset
 from src.data.data_provider import DataProvider
 from src.data.fx_provider import FxRateProvider, PlnRate
 
@@ -26,10 +29,14 @@ TRADE_HISTORY_FILE = LIVE_STATE_DIR / "paper_live_history.csv"
 SNAPSHOTS_FILE = LIVE_STATE_DIR / "paper_live_snapshots.csv"
 DAILY_FILE = LIVE_STATE_DIR / "paper_live_daily.csv"
 USER_PORTFOLIO_FILE = LIVE_STATE_DIR / "user_portfolio.json"
+AI_CONTROL_FILE = LIVE_STATE_DIR / "ai_control.json"
 RESEARCH_STATE_FILE = LIVE_STATE_DIR / "research_state.json"
 
 FX_PROVIDER = FxRateProvider(ttl_seconds=60.0)
 MARKET_CACHE: dict[str, dict[str, Any]] = {}
+ASSET_LIVE_CACHE: dict[str, Any] = {"timestamp": 0.0, "prices": {}}
+MARKET_QUOTE_CACHE: dict[str, dict[str, Any]] = {}
+USER_PORTFOLIO_LOCK = Lock()
 
 
 class PortfolioAmount(BaseModel):
@@ -120,6 +127,61 @@ def load_research_state() -> dict[str, Any]:
     state["age_seconds"] = age_seconds
     state["stale"] = age_seconds is None or age_seconds > 180.0
     return state
+
+
+def load_ai_state_raw() -> dict[str, Any]:
+    """Load the autonomous AI paper account state without HTTP decoration."""
+    path = LIVE_STATE_DIR / "ai_paper.json"
+    try:
+        with path.open(encoding="utf-8-sig") as handle:
+            value = json.load(handle)
+        return value if isinstance(value, dict) else {}
+    except (OSError, ValueError, TypeError):
+        return {}
+
+
+def dashboard_asset_universe() -> tuple:
+    """Every market the dashboard may need to display right now.
+
+    Includes the curated app/research universe, current research opportunities,
+    and any symbols currently open or pending in the autonomous AI account.
+    This prevents an active position from disappearing when it drops out of
+    the latest TOP 10 research snapshot.
+    """
+    result = []
+    seen = set()
+
+    def add_symbol(symbol: str) -> None:
+        symbol = str(symbol or "").strip()
+        if not symbol or symbol in seen:
+            return
+        try:
+            asset = get_asset(symbol, allow_dynamic_binance=True)
+        except ValueError:
+            return
+        result.append(asset)
+        seen.add(asset.symbol)
+
+    for asset in (*SUPPORTED_ASSETS, *RESEARCH_ASSETS):
+        if asset.symbol in seen:
+            continue
+        result.append(asset)
+        seen.add(asset.symbol)
+
+    research_state = load_research_state()
+    for row in research_state.get("opportunities", []):
+        add_symbol(row.get("symbol"))
+
+    ai_state = load_ai_state_raw()
+
+    for symbol in (ai_state.get("positions") or {}):
+        add_symbol(symbol)
+
+    for row in ai_state.get("pending") or []:
+        if isinstance(row, dict):
+            add_symbol(row.get("symbol"))
+
+    return tuple(result)
 
 
 def position_payload(state: dict[str, Any]) -> dict[str, Any]:
@@ -482,82 +544,267 @@ def load_market_candles(symbol: str = "BTCUSDT", limit: int = 120) -> dict[str, 
     }
 
 
+def dashboard_quote_universe() -> tuple:
+    """Markets shown in the exchange-style quotes area.
+
+    Always includes configured forex pairs and core app markets, then adds the
+    current research opportunities plus any open/pending AI markets.
+    """
+    result = []
+    seen = set()
+
+    def add(asset) -> None:
+        if asset.symbol in seen:
+            return
+        result.append(asset)
+        seen.add(asset.symbol)
+
+    for asset in (*SUPPORTED_ASSETS, *RESEARCH_ASSETS):
+        if asset.asset_type == "forex":
+            add(asset)
+
+    for asset in SUPPORTED_ASSETS:
+        add(asset)
+
+    research_state = load_research_state()
+    for row in research_state.get("opportunities", []):
+        try:
+            add(
+                get_asset(
+                    str(row.get("symbol") or ""),
+                    allow_dynamic_binance=True,
+                )
+            )
+        except ValueError:
+            continue
+
+    ai_state = load_ai_state_raw()
+    for symbol in (ai_state.get("positions") or {}):
+        try:
+            add(get_asset(symbol, allow_dynamic_binance=True))
+        except ValueError:
+            pass
+    for row in ai_state.get("pending") or []:
+        if not isinstance(row, dict):
+            continue
+        try:
+            add(
+                get_asset(
+                    str(row.get("symbol") or ""),
+                    allow_dynamic_binance=True,
+                )
+            )
+        except ValueError:
+            pass
+
+    return tuple(result)
+
+
+def dashboard_live_prices() -> dict[str, dict[str, Any]]:
+    """Exchange-style quotes with per-symbol caching.
+
+    Crypto quotes refresh more frequently because those markets trade 24/7.
+    Traditional-market references use a longer cache to avoid hammering Yahoo.
+    """
+    now = time.time()
+    targets = dashboard_quote_universe()
+    provider = DataProvider()
+
+    def fetch(asset):
+        cached = MARKET_QUOTE_CACHE.get(asset.symbol)
+        ttl = 15.0 if asset.asset_type == "crypto" else 60.0
+
+        if cached and now - float(cached.get("_cached_at") or 0.0) < ttl:
+            return asset.symbol, dict(cached)
+
+        try:
+            quote = provider.get_market_quote(asset.symbol)
+            quote_timestamp = int(quote.get("timestamp") or 0)
+            age_seconds = (
+                max(0.0, now - quote_timestamp / 1000.0)
+                if quote_timestamp
+                else None
+            )
+            freshness = 180.0 if asset.asset_type == "crypto" else 1800.0
+            payload = {
+                **quote,
+                "_cached_at": now,
+                "age_seconds": age_seconds,
+                "stale": age_seconds is None or age_seconds > freshness,
+            }
+            MARKET_QUOTE_CACHE[asset.symbol] = payload
+            return asset.symbol, dict(payload)
+        except Exception as exc:
+            if cached:
+                fallback = dict(cached)
+                fallback["stale"] = True
+                fallback["error"] = f"{type(exc).__name__}: {exc}"
+                return asset.symbol, fallback
+            return asset.symbol, {
+                "stale": True,
+                "error": f"{type(exc).__name__}: {exc}",
+            }
+
+    workers = min(6, max(1, len(targets)))
+    with ThreadPoolExecutor(max_workers=workers) as pool:
+        rows = list(pool.map(fetch, targets))
+
+    return {
+        symbol: {
+            key: value
+            for key, value in payload.items()
+            if key != "_cached_at"
+        }
+        for symbol, payload in rows
+    }
+
+
 @app.get("/api/assets")
 def assets() -> list[dict[str, Any]]:
     result = []
     fx_by_quote: dict[str, tuple[PlnRate | None, dict[str, Any]]] = {}
-    for asset in SUPPORTED_ASSETS:
-        state = load_state(asset.symbol)
-        market_price = float(state.get("market_price") or 0.0)
-        balance = float(state.get("balance") or 0.0)
-        initial_balance = 1000.0
+
+    live_prices = dashboard_live_prices()
+    ai_state = load_ai_state_raw()
+    ai_positions = ai_state.get("positions") or {}
+    ai_marks = ai_state.get("market_marks") or {}
+    now_ms = int(time.time() * 1000)
+
+    for asset in dashboard_asset_universe():
+        legacy_state = (
+            load_state(asset.symbol)
+            if asset.symbol in {row.symbol for row in SUPPORTED_ASSETS}
+            else {"available": False}
+        )
+
+        paper_market_price = float(legacy_state.get("market_price") or 0.0)
+        live = live_prices.get(asset.symbol) or {}
+        mark = ai_marks.get(asset.symbol) or {}
+
+        if live.get("price") is not None:
+            market_price = float(live["price"])
+            market_timestamp = live.get("timestamp")
+            market_stale = bool(live.get("stale", False))
+            market_provider = live.get("provider", asset.provider)
+            market_live = not market_stale
+        elif mark.get("price") is not None:
+            market_price = float(mark["price"])
+            market_timestamp = mark.get("timestamp")
+            age_ms = (
+                now_ms - int(market_timestamp)
+                if market_timestamp is not None
+                else 10**12
+            )
+            freshness_ms = 180_000 if asset.asset_type == "crypto" else 1_800_000
+            market_stale = age_ms > freshness_ms
+            market_provider = asset.provider
+            market_live = not market_stale
+        else:
+            market_price = paper_market_price
+            market_timestamp = None
+            market_stale = True
+            market_provider = asset.provider
+            market_live = False
+
+        position = ai_positions.get(asset.symbol) or {}
+        position_side = position.get("side") or "FLAT"
+        ai_pnl_pln = float(position.get("unrealized_pnl") or 0.0)
+
         if asset.quote not in fx_by_quote:
             fx_by_quote[asset.quote] = _fx_payload(asset)
         rate, fx = fx_by_quote[asset.quote]
+
         result.append(
             {
                 **asset_payload(asset),
-                "state_available": state.get("available", False),
+                "state_available": legacy_state.get("available", False),
                 "market_price": market_price,
                 "market_price_pln": _to_pln(market_price, rate),
-                "balance": balance,
-                "balance_pln": _to_pln(balance, rate),
-                "net_profit": balance - initial_balance,
-                "net_profit_pln": _to_pln(balance - initial_balance, rate),
-                "position": (
-                    state.get("position", {}).get("side")
-                    if state.get("position")
+                "paper_market_price": paper_market_price,
+                "market_timestamp": market_timestamp,
+                "market_live": market_live,
+                "market_stale": market_stale,
+                "market_provider": market_provider,
+                "market_change": live.get("change"),
+                "market_change_pct": live.get("change_pct"),
+                "market_previous_close": live.get("previous_close"),
+                "market_day_high": live.get("day_high"),
+                "market_day_low": live.get("day_low"),
+                "market_volume": live.get("volume"),
+                "market_quote_volume": live.get("quote_volume"),
+                "market_change_period": live.get("change_period"),
+
+                # Primary dashboard trading state = autonomous AI paper account.
+                "position": position_side,
+                "ai_position": position if position else None,
+                "ai_pnl_pln": ai_pnl_pln,
+                "ai_allocation_pln": float(position.get("allocation_pln") or 0.0),
+                "net_profit_pln": ai_pnl_pln,
+
+                # Legacy per-symbol paper worker remains visible only as metadata.
+                "legacy_position": (
+                    legacy_state.get("position", {}).get("side")
+                    if legacy_state.get("position")
                     else "FLAT"
                 ),
+                "legacy_balance": float(legacy_state.get("balance") or 0.0),
                 "pln": fx,
             }
         )
+
     return result
 
 
 @app.get("/api/ai")
 def ai_status() -> dict[str, Any]:
-    path = LIVE_STATE_DIR / "ai_paper.json"
+    state = load_ai_state_raw()
     try:
-        with path.open(encoding="utf-8-sig") as handle:
-            state = json.load(handle)
-        age = time.time() - state["last_cycle"] / 1000
+        last_cycle = int(state["last_cycle"])
+        age = time.time() - last_cycle / 1000
         return {
             **state,
             "available": True,
             "stale": age > 180,
             "age_seconds": max(0, age),
         }
-    except (OSError, ValueError, KeyError, TypeError):
+    except (ValueError, KeyError, TypeError):
         return {
             "available": False,
             "mode": "PAPER_ONLY",
-            "reason": "Opcjonalny moduł AI nie zapisał jeszcze poprawnego cyklu",
+            "reason": "Moduł AI nie zapisał jeszcze poprawnego cyklu",
         }
 
 
-def user_portfolio_state() -> dict[str, Any]:
-    default = {
-        "version": 1,
+def _user_portfolio_default() -> dict[str, Any]:
+    return {
+        "version": 2,
         "currency": "PLN",
         "balance": 0.0,
         "total_deposited": 0.0,
         "total_withdrawn": 0.0,
+        "transferred_to_ai": 0.0,
+        "ai_transfers": [],
         "profit_transferred": 0.0,
         "profit_transfers": [],
+        "applied_ai_profit_ids": [],
         "result": 0.0,
         "available": True,
     }
+
+
+def _read_user_portfolio_unlocked() -> dict[str, Any]:
+    default = _user_portfolio_default()
     try:
         with USER_PORTFOLIO_FILE.open(encoding="utf-8-sig") as handle:
-            state = {**default, **json.load(handle)}
-        state["result"] = state.get("profit_transferred", 0.0)
-        return state
-    except (OSError, ValueError, TypeError, KeyError):
+            value = json.load(handle)
+        if not isinstance(value, dict):
+            return default
+        return {**default, **value}
+    except (OSError, ValueError, TypeError):
         return default
 
 
-def save_user_portfolio(state: dict[str, Any]) -> dict[str, Any]:
+def _write_user_portfolio_unlocked(state: dict[str, Any]) -> None:
     LIVE_STATE_DIR.mkdir(parents=True, exist_ok=True)
     temporary = USER_PORTFOLIO_FILE.with_suffix(".tmp")
     temporary.write_text(
@@ -565,7 +812,105 @@ def save_user_portfolio(state: dict[str, Any]) -> dict[str, Any]:
         encoding="utf-8",
     )
     temporary.replace(USER_PORTFOLIO_FILE)
-    return user_portfolio_state()
+
+
+def _reconcile_ai_profit_transfers_unlocked(
+    state: dict[str, Any],
+) -> dict[str, Any]:
+    """Credit each realized AI profit sweep to the user's virtual wallet once."""
+    ai_state = load_ai_state_raw()
+    events = ai_state.get("profit_transfers") or []
+    applied = set(state.get("applied_ai_profit_ids") or [])
+    history = list(state.get("profit_transfers") or [])
+    changed = False
+
+    for event in events:
+        if not isinstance(event, dict):
+            continue
+
+        event_id = str(event.get("id") or "")
+        if not event_id or event_id in applied:
+            continue
+
+        amount = float(event.get("amount") or 0.0)
+        applied.add(event_id)
+        changed = True
+
+        if amount <= 0:
+            continue
+
+        state["balance"] = float(state.get("balance") or 0.0) + amount
+        state["profit_transferred"] = (
+            float(state.get("profit_transferred") or 0.0) + amount
+        )
+        history.append(event)
+
+    state["applied_ai_profit_ids"] = list(applied)[-2000:]
+    state["profit_transfers"] = history[-1000:]
+    state["result"] = float(state.get("profit_transferred") or 0.0)
+
+    if changed:
+        _write_user_portfolio_unlocked(state)
+
+    return state
+
+
+def user_portfolio_state() -> dict[str, Any]:
+    with USER_PORTFOLIO_LOCK:
+        state = _read_user_portfolio_unlocked()
+        return _reconcile_ai_profit_transfers_unlocked(state)
+
+
+def save_user_portfolio(state: dict[str, Any]) -> dict[str, Any]:
+    with USER_PORTFOLIO_LOCK:
+        state = {**_user_portfolio_default(), **state}
+        state = _reconcile_ai_profit_transfers_unlocked(state)
+        _write_user_portfolio_unlocked(state)
+        return state
+
+
+def ai_control_state() -> dict[str, Any]:
+    default = {
+        "version": 1,
+        "paper_only": True,
+        "funding_events": [],
+    }
+    try:
+        with AI_CONTROL_FILE.open(encoding="utf-8-sig") as handle:
+            value = json.load(handle)
+        if not isinstance(value, dict):
+            return default
+        return {**default, **value}
+    except (OSError, ValueError, TypeError):
+        return default
+
+
+def save_ai_control(state: dict[str, Any]) -> dict[str, Any]:
+    LIVE_STATE_DIR.mkdir(parents=True, exist_ok=True)
+    temporary = AI_CONTROL_FILE.with_suffix(".tmp")
+    temporary.write_text(
+        json.dumps(state, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
+    temporary.replace(AI_CONTROL_FILE)
+    return ai_control_state()
+
+
+@app.get("/api/dashboard-snapshot")
+def dashboard_snapshot() -> dict[str, Any]:
+    """Fast dashboard state without external market-provider calls.
+
+    The mobile/desktop dashboards use this endpoint for critical local state
+    so slow Yahoo/Binance quote refreshes cannot blank the portfolio, AI
+    decision or research status.
+    """
+    return {
+        "available": True,
+        "served_at_unix": time.time(),
+        "research": load_research_state(),
+        "ai": ai_status(),
+        "user_portfolio": user_portfolio_state(),
+    }
 
 
 @app.get("/api/user-portfolio")
@@ -589,6 +934,56 @@ def withdraw_user_portfolio(request: PortfolioAmount) -> dict[str, Any]:
     state["balance"] -= request.amount
     state["total_withdrawn"] += request.amount
     return save_user_portfolio(state)
+
+
+@app.post("/api/ai/fund")
+def fund_ai_account(request: PortfolioAmount) -> dict[str, Any]:
+    """Move virtual PLN from the user wallet to the autonomous paper account."""
+    portfolio = user_portfolio_state()
+    amount = float(request.amount)
+
+    if amount > float(portfolio.get("balance") or 0.0):
+        raise HTTPException(
+            status_code=400,
+            detail="Niewystarczające saldo portfela PLN",
+        )
+
+    event = {
+        "id": str(uuid4()),
+        "amount": amount,
+        "currency": "PLN",
+        "created_at_unix": time.time(),
+        "paper_only": True,
+    }
+
+    original = dict(portfolio)
+    portfolio["balance"] = float(portfolio.get("balance") or 0.0) - amount
+    portfolio["transferred_to_ai"] = (
+        float(portfolio.get("transferred_to_ai") or 0.0) + amount
+    )
+    portfolio["ai_transfers"] = (
+        list(portfolio.get("ai_transfers") or []) + [event]
+    )[-500:]
+
+    save_user_portfolio(portfolio)
+
+    try:
+        control = ai_control_state()
+        control["funding_events"] = (
+            list(control.get("funding_events") or []) + [event]
+        )[-500:]
+        save_ai_control(control)
+    except Exception:
+        save_user_portfolio(original)
+        raise
+
+    return {
+        "accepted": True,
+        "paper_only": True,
+        "transfer": event,
+        "portfolio": user_portfolio_state(),
+        "message": "Transfer przyjęty. AI zastosuje środki w najbliższym cyklu.",
+    }
 
 
 @app.get("/api/market")

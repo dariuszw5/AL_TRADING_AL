@@ -90,3 +90,32 @@ def test_legacy_gold_alias_resolves_to_canonical_state(tmp_path, monkeypatch):
     assert result["strategy"]["symbol"] == "GOLD_FUT_CONT"
     assert result["strategy"]["provider_symbol"] == "GC=F"
     assert result["account"]["market_price_pln"] == 10_000.0
+
+
+def test_dashboard_snapshot_returns_critical_local_state(monkeypatch):
+    monkeypatch.setattr(
+        main,
+        "load_research_state",
+        lambda: {"available": True, "opportunities": [{"symbol": "BTCUSDT"}]},
+    )
+    monkeypatch.setattr(
+        main,
+        "ai_status",
+        lambda: {"available": True, "decision": {"action": "CASH"}, "equity": 976.83},
+    )
+    monkeypatch.setattr(
+        main,
+        "user_portfolio_state",
+        lambda: {"available": True, "balance": 12.34},
+    )
+
+    client = TestClient(main.app)
+    response = client.get("/api/dashboard-snapshot")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["available"] is True
+    assert payload["research"]["opportunities"][0]["symbol"] == "BTCUSDT"
+    assert payload["ai"]["decision"]["action"] == "CASH"
+    assert payload["ai"]["equity"] == 976.83
+    assert payload["user_portfolio"]["balance"] == 12.34

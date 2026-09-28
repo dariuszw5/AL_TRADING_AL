@@ -1,6 +1,6 @@
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">\n    <uses-permission android:name="android.permission.INTERNET"/>
     <application
-        android:label="al_trading_dashboard"
+        android:label="AL Trading Agent"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
         <activity
