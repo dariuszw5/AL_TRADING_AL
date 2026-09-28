@@ -120,6 +120,13 @@ def update_shadow_ledger(
                 "reason": result[1],
                 "return_fraction": ret,
                 "eligible_at_signal": position["eligible_at_signal"],
+                "eligibility_reason_at_signal": position.get(
+                    "eligibility_reason_at_signal"
+                ),
+                "score_at_signal": position.get("score_at_signal"),
+                "expected_net_return_at_signal": position.get(
+                    "expected_net_return_at_signal"
+                ),
                 "supervisor_status_at_signal": position.get(
                     "supervisor_status_at_signal"
                 ),
@@ -177,6 +184,9 @@ def update_shadow_ledger(
             "side": side,
             "signal_timestamp": timestamp,
             "eligible_at_signal": bool(row.get("eligible")),
+            "eligibility_reason_at_signal": row.get("eligibility_reason"),
+            "score_at_signal": row.get("score"),
+            "expected_net_return_at_signal": row.get("expected_net_return"),
             "supervisor_status_at_signal": row.get("supervisor_status"),
         }
 
