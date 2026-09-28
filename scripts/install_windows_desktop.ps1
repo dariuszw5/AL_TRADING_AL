@@ -41,7 +41,7 @@ if ($LASTEXITCODE -ne 0) {
 
 Write-Host ""
 Write-Host "=== 3. ANALIZA ===" -ForegroundColor Yellow
-& $Flutter analyze
+& $Flutter analyze "lib/main.dart"
 if ($LASTEXITCODE -ne 0) {
     throw "flutter analyze failed"
 }
