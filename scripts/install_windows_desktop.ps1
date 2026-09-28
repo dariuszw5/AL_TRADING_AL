@@ -1,6 +1,6 @@
 param(
     [string]$Flutter = "C:\\Users\\ddare\\develop\\flutter\\bin\\flutter.bat",
-    [string]$ApiBaseUrl = "http://34.45.151.160:8000"
+    [string]$ApiBaseUrl = "https://34-45-151-160.sslip.io"
 )
 
 $ErrorActionPreference = "Stop"
