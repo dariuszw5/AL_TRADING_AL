@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from math import isfinite
 
-SHADOW_OPEN_LIMIT = 200
+SHADOW_OPEN_LIMIT = 1000
 SHADOW_HISTORY_LIMIT = 500
 SHADOW_SEEN_LIMIT = 5000
 
