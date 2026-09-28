@@ -180,6 +180,7 @@ class OpportunityScanner:
             memory = self.memory.adjustment(
                 features=feat,
                 strategy=str(best["strategy"]),
+                side=str(best["side"]),
                 macro_tags=macro_tags,
             )
             effective_market_score = (
@@ -217,6 +218,7 @@ class OpportunityScanner:
                 "asset_class": asset.asset_type,
                 "instrument_type": asset.instrument_type,
                 "strategy": best["strategy"],
+                "side": best["side"],
                 "eligible": bool(best.get("eligible")),
                 "model_score": float(best["score"]),
                 "combined_score": combined,
@@ -379,6 +381,7 @@ class OpportunityScanner:
                 close=row["last_price"],
                 features=row["features"],
                 strategy=row["strategy"],
+                side=row["side"],
                 macro_tags=row["macro_tags"],
                 model_score=row["model_score"],
             )
