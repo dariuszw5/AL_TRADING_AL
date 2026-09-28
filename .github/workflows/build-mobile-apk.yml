@@ -67,6 +67,10 @@ jobs:
           if-no-files-found: error
 
       - name: Publish GitHub release
+        # The APK is already preserved as a workflow artifact. Some repository
+        # token policies deny release creation with HTTP 403; do not discard
+        # a successfully tested and compiled APK because of that restriction.
+        continue-on-error: true
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
