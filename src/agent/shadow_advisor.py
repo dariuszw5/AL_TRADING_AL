@@ -134,10 +134,17 @@ def apply_shadow_advisor(rows: list[dict], shadow: dict) -> dict[str, dict]:
             assessments[key] = assess_shadow_evidence(shadow, strategy, side)
 
         assessment = assessments[key]
-        original = float(row.get("score") or 0.0)
+        raw_score = row.get("score")
+        original = float(raw_score) if raw_score is not None else None
         # The entire bonus applies ONLY to previously approved candidates.
-        bonus = float(assessment["bonus"]) if row.get("eligible") else 0.0
-        row["shadow_selection_score"] = original + bonus
+        bonus = (
+            float(assessment["bonus"])
+            if row.get("eligible") and original is not None
+            else 0.0
+        )
+        row["shadow_selection_score"] = (
+            original + bonus if original is not None else None
+        )
         row["shadow_selection_bonus"] = bonus
         row["shadow_advisor"] = assessment
     return assessments
