@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 
 import 'research_panel.dart';
+import 'brain_panel.dart';
 
 const ink = Color(0xFF071522);
 const panel = Color(0xFF102638);
@@ -3081,7 +3082,11 @@ class _ProDashboardState extends State<ProDashboard>
                     if (page == 1) marketTable(all: true),
                     if (page == 2)
                       ResearchPanel(data: researchData, error: failure),
-                    if (page == 3) activity(),
+                    if (page == 3) ...[
+                      BrainPanel(data: ai),
+                      const SizedBox(height: 20),
+                      activity(),
+                    ],
                     if (page == 4) macroEvents(),
                     if (page == 5) history(),
                     const SizedBox(height: 24),
