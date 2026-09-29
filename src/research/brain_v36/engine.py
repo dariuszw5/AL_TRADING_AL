@@ -266,6 +266,9 @@ def _observe_period(
     trades = []
     examined = 0
     signal_count = 0
+    missing_training = 0
+    rejected_nonpositive = 0
+    rejected_uncertainty = 0
     unpriceable = 0
     last_exit = start - 1
     # All labels must EXIT within the specified VALIDATION or TEST block.
@@ -279,11 +282,16 @@ def _observe_period(
         signal_count += 1
         prediction = _predict(x, training, risk)
         if prediction is None:
+            missing_training += 1
             continue
         expectation, uncertainty = prediction
         conservative = expectation - 0.35 * uncertainty
         # Threshold is fixed BEFORE consulting validation/test outcomes.
-        if expectation <= 0 or conservative <= risk.min_conservative_edge:
+        if expectation <= 0:
+            rejected_nonpositive += 1
+            continue
+        if conservative <= risk.min_conservative_edge:
+            rejected_uncertainty += 1
             continue
         labeled = label_outcome(candles, i, side, risk, costs)
         if labeled is None:
@@ -300,10 +308,23 @@ def _observe_period(
             "conservative_score": conservative,
         })
         last_exit = labeled["exit_index"]
-    return trades, {
-        "examined": examined, "signals": signal_count,
+    scan = {
+        "examined": examined,
+        "signals": signal_count,
+        "missing_training": missing_training,
+        "rejected_nonpositive": rejected_nonpositive,
+        "rejected_uncertainty": rejected_uncertainty,
         "unpriceable_gaps": unpriceable,
+        "executed_proxy": len(trades),
     }
+    if signal_count != sum(
+        scan[name] for name in (
+            "missing_training", "rejected_nonpositive",
+            "rejected_uncertainty", "unpriceable_gaps", "executed_proxy"
+        )
+    ):
+        raise AssertionError("Validation funnel does not reconcile")
+    return trades, scan
 
 
 def performance(trades: Sequence[dict]) -> dict:
@@ -381,7 +402,12 @@ def walk_forward(
                     bars, fold.test_start, fold.test_end,
                     strategy=strategy, side=side, training=training,
                     risk=risk, costs=costs,
-                ) if admitted else ([], {"examined": 0, "signals": 0, "unpriceable_gaps": 0})
+                ) if admitted else ([], {
+                    "examined": 0, "signals": 0, "missing_training": 0,
+                    "rejected_nonpositive": 0, "rejected_uncertainty": 0,
+                    "unpriceable_gaps": 0, "executed_proxy": 0,
+                    "status": "NOT_EVALUATED_VALIDATION_GATE",
+                })
                 rows.append({
                     "fold": n,
                     "split": fold.as_dict(),
