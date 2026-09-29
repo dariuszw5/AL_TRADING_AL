@@ -78,14 +78,18 @@ def test_legacy_local_asset_registry_without_instrument_type_is_compatible(monke
     from types import SimpleNamespace
     from src.research.brain_v36 import costs
 
-    original = costs.asset_registry.get_asset
-
     def old_get_asset(symbol):
-        if symbol in {"AAPL", "EURUSD", "BTCUSDT"}:
-            asset = original(symbol)
+        known = {
+            "AAPL": ("equity", "yahoo", "AAPL"),
+            "EURUSD": ("forex", "yahoo", "EURUSD=X"),
+            "BTCUSDT": ("crypto", "binance", "BTCUSDT"),
+        }
+        if symbol in known:
+            kind, provider, code = known[symbol]
             return SimpleNamespace(
-                symbol=asset.symbol, asset_type=asset.asset_type,
-                provider=asset.provider, provider_symbol=asset.provider_symbol,
+                symbol=symbol, asset_type=kind,
+                provider=provider, provider_symbol=code,
+                # intentionally no instrument_type
             )
         raise ValueError("Absent in older catalog")
 
