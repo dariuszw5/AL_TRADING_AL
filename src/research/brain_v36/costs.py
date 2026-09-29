@@ -54,7 +54,7 @@ class CostProfile:
             commission_per_side=float(value["commission_per_side"]),
             spread_round_trip=float(value["spread_round_trip"]),
             slippage_per_side=float(value["slippage_per_side"]),
-            source=str(value["source"]),
+            source=value["source"],
         )
 
 
