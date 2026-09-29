@@ -307,6 +307,50 @@ def test_unfiltered_research_statistics_do_not_override_admission(monkeypatch):
 
 
 
+
+def test_validation_only_does_not_read_test_even_if_admitted(monkeypatch):
+    import src.research.brain_v36.engine as engine
+
+    candles = wave()
+    risk = RiskPlan(horizon_minutes=15, min_train_samples=2, min_validation_trades=4)
+    fold = folds(
+        len(candles), risk, initial_train=450,
+        validation_size=250, test_size=250,
+    )[0]
+    real_observe = engine._observe_period
+    called_starts = []
+
+    def protected_observe(candles, start, end, **kwargs):
+        called_starts.append(start)
+        if start >= fold.test_start:
+            raise AssertionError("TEST was read during validation-only research")
+        if start == fold.validation_start:
+            # An artificial positive VALIDATION passes the unchanged gate.
+            return (
+                [{"return_fraction": 0.02}] * 4,
+                {"examined": 4, "signals": 4, "missing_training": 0,
+                 "rejected_nonpositive": 0, "rejected_uncertainty": 0,
+                 "unpriceable_gaps": 0, "executed_proxy": 4},
+            )
+        return real_observe(candles, start, end, **kwargs)
+
+    monkeypatch.setattr(engine, "_observe_period", protected_observe)
+    report = engine.walk_forward(
+        candles, symbol="BTCUSDT", asset_type="crypto",
+        instrument_type="spot", costs=profile(), risk=risk,
+        initial_train=450, validation_size=250, test_size=250,
+        evaluate_test=False,
+    )
+    assert report["evaluate_test"] is False
+    assert any(row["admitted_before_test"] for row in report["results"])
+    assert all(row["test"] is None and row["test_scan"] is None
+               for row in report["results"])
+    assert all(row["test_status"] == (
+        "SEALED_VALIDATION_ONLY" if row["admitted_before_test"]
+        else "NOT_EVALUATED_VALIDATION_GATE"
+    ) for row in report["results"])
+    assert fold.test_start not in called_starts
+
 def test_performance_keeps_empty_research_separate_from_profit():
     empty = performance([])
     assert empty["expectancy_net"] is None
