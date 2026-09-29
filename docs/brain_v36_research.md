@@ -102,3 +102,66 @@ confuse OHLC references with executable bid/ask spreads.
 A validated dataset and an explicit per-instrument cost profile are
 required before an instrument can join multi-asset experiments.
 Existing 5,000-candle BTC benchmark data were not rewritten.
+
+
+## Stage 6: ALL supported markets + dynamic current scanner universe
+
+The former BTCUSDT 1m benchmark is a regression reference only. The PRIMARY
+catalog-wide pipeline dynamically builds a deduplicated universe from the
+project's SUPPORTED_ASSETS, RESEARCH_ASSETS, the fixed cross-market project
+catalog (compatibility with older local source trees), plus symbols appearing
+in the current read-only /api/ai ranking and /api/research opportunities.
+Dynamic crypto membership is a frozen snapshot of the CURRENT scanner output,
+not a claim to cover every USDT product on Binance or symbols not discovered
+at capture time. A failed live-universe read explicitly marks the manifest
+as DYNAMIC_DISCOVERY_FAILED_PARTIAL_UNIVERSE.
+
+Instrument coverage includes crypto, equity, ETF, FX reference, index
+reference and continuous commodity futures proxy. The executable instrument
+is NOT assumed to be identical to a Yahoo index or synthetic reference.
+
+Fetch each asset's real OHLC from its provider (Binance history 1m/5m,
+Yahoo chart 1m/5m, respecting Yahoo's limited history), timestamp all
+downloads against a single capture cutoff, discard forming candles and save
+immutable JSON files with SHA256 and a manifest. No data are invented,
+forward-filled or downloaded into data/live. A missing feed, inadequate
+history, checksum failure, misclassified instrument or unsupported time
+interval is an explicit coverage status, never a successful backtest.
+
+Use the SAME bar interval (typically 5m), wall-clock horizons 15/30/60m,
+and fixed split sizes per asset. The final 160 bars (configurable) are
+reserved as a NEW OUTER holdout that is NEVER passed into walk_forward.
+Internal rolling TEST placeholders inside the development window are also
+not evaluated; expanding training/validation may later traverse those
+historical development placeholders, but cannot encounter outer holdout.
+No across-asset shared k-NN fit occurs at this stage. Model results stay
+grouped per symbol/strategy/side/fold/horizon.
+
+For first-run PIPELINE testing only, the sample config
+config/brain_v36_costs.multiasset_SCENARIO.json explicitly supplies a
+DIFFERENT unverified assumed commission/spread/slippage profile for every
+asset class. These are NOT measured execution costs and the resulting
+net metrics are hypothetical. Calibrate against actual executable
+bid/ask/provider/broker/venue quotes before making profitability claims.
+The runner fails closed with a visible status when an instrument has no
+explicit cost profile.
+
+### Single-command READ-ONLY full catalog run
+
+    python -m pytest -q tests/test_brain_v36_research.py tests/test_brain_v36_cost_audit.py tests/test_brain_v36_interval.py tests/test_brain_v36_all_assets.py
+    python -m scripts.run_brain_v36_all_assets --api-base-url https://34-45-151-160.sslip.io --costs config/brain_v36_costs.multiasset_SCENARIO.json --bar-minutes 5 --limit 3000 --horizons 15 30 60
+    python -m pytest -q --ignore=diagnostics
+
+All real screenshots/quotes/data are evaluated only on the user's machine
+when the explicit read-only command runs; unit tests use synthetic candles
+ONLY to test code behavior for every static/dynamic asset symbol at 1m/5m,
+every direction and every horizon. These unit tests are NOT real-data
+performance outcomes.
+
+Inspect multiasset_coverage_*.csv before interpreting multiasset_v36_*.csv:
+VALIDATION_ONLY_COMPLETED, PARTIAL_HORIZON_COVERAGE, DATA_UNAVAILABLE,
+SKIPPED_INSUFFICIENT_OR_INVALID_HISTORY, SKIPPED_COST_OR_DATA_ERROR.
+The manifest records every instrument, including failures.
+Do NOT pool overlapping fold rows as independent trades or claim a
+class-wide edge from a single asset. The current virtual PLN production
+account, v3.5 Brain, Supervisor and cloud VM are not accessed or changed.
