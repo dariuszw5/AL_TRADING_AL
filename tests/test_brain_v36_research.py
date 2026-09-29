@@ -65,6 +65,32 @@ def test_cost_resolution_is_per_symbol_or_asset_class_and_never_invents_missing_
         cost_for_symbol("EURUSD", config)
 
 
+
+def test_legacy_get_asset_resolver_is_compatible_without_keyword(monkeypatch):
+    from src.data import assets
+    from src.research.brain_v36 import costs
+
+    original = assets.get_asset
+
+    def old_get_asset(symbol):
+        if symbol == "ETHUSDT":
+            return original(symbol)
+        raise ValueError("Symbol absent in the old registry")
+
+    monkeypatch.setattr(costs.asset_registry, "get_asset", old_get_asset)
+    settings = {
+        "crypto": dict(commission_per_side=0.001, spread_round_trip=0.001,
+                       slippage_per_side=0.001, source="EXPLICIT_CRYPTO_ASSUMPTION"),
+        "index": dict(commission_per_side=0.001, spread_round_trip=0.001,
+                      slippage_per_side=0.001, source="EXPLICIT_INDEX_PROXY_ASSUMPTION"),
+    }
+    assert cost_for_symbol("ETHUSDT", settings)[1]["asset_type"] == "crypto"
+    assert cost_for_symbol("ETHFIUSDT", settings)[1]["asset_type"] == "crypto"
+    assert cost_for_symbol("SP500_INDEX", settings)[1]["reference_only"] is True
+    with pytest.raises(ValueError, match="Unknown research asset"):
+        cost_for_symbol("UNSUPPORTED_UNKNOWN", settings)
+
+
 def test_nonexecuting_reference_indices_are_flagged():
     raw = dict(commission_per_side=0.001, spread_round_trip=0.002,
                slippage_per_side=0.001, source="SYNTHETIC")
