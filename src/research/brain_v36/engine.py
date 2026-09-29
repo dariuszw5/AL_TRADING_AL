@@ -24,6 +24,7 @@ SIDES = ("LONG", "SHORT")
 @dataclass(frozen=True)
 class RiskPlan:
     horizon_minutes: int = 15
+    bar_minutes: int = 1
     stop_fraction: float = 0.012
     take_fraction: float = 0.024
     neighbors: int = 12
@@ -32,14 +33,26 @@ class RiskPlan:
     min_conservative_edge: float = 0.0
 
     def __post_init__(self) -> None:
-        if not 1 <= self.horizon_minutes <= 240:
+        if isinstance(self.bar_minutes, bool) or not isinstance(self.bar_minutes, int) or not 1 <= self.bar_minutes <= 60:
+            raise ValueError("bar_minutes must be an integer between 1 and 60")
+        if isinstance(self.horizon_minutes, bool) or not isinstance(self.horizon_minutes, int) or not 1 <= self.horizon_minutes <= 240:
             raise ValueError("Invalid horizon")
+        if self.horizon_minutes % self.bar_minutes:
+            raise ValueError("Horizon must be an exact multiple of the candle interval")
         if not 0 < self.stop_fraction < 1 or not 0 < self.take_fraction < 1:
             raise ValueError("Stop/take must be positive fractions below 1")
         if self.neighbors < 1 or self.min_train_samples < 2 or self.min_validation_trades < 1:
             raise ValueError("Invalid minimum evidence requirement")
         if not isfinite(self.min_conservative_edge) or self.min_conservative_edge < 0:
             raise ValueError("Conservative edge threshold must be non-negative")
+
+    @property
+    def horizon_bars(self) -> int:
+        return self.horizon_minutes // self.bar_minutes
+
+    @property
+    def candle_duration_ms(self) -> int:
+        return self.bar_minutes * MINUTE_MS
 
 
 @dataclass(frozen=True)
@@ -55,8 +68,10 @@ class Fold:
         return asdict(self)
 
 
-def validate_history(candles: Sequence, *, as_of_ms: int | None = None) -> tuple:
+def validate_history(candles: Sequence, *, as_of_ms: int | None = None, bar_minutes: int = 1) -> tuple:
     """Inspect real/frozen input without altering or filling missing sessions."""
+    if isinstance(bar_minutes, bool) or not isinstance(bar_minutes, int) or not 1 <= bar_minutes <= 60:
+        raise ValueError("Invalid candle interval")
     if not candles:
         raise ValueError("No candles supplied")
     previous = None
@@ -74,17 +89,20 @@ def validate_history(candles: Sequence, *, as_of_ms: int | None = None) -> tuple
         if previous is not None and ts <= previous:
             raise ValueError("Duplicate or unsorted candle")
         previous = ts
-    if as_of_ms is not None and candles[-1].timestamp + MINUTE_MS > as_of_ms:
+    if as_of_ms is not None and candles[-1].timestamp + bar_minutes * MINUTE_MS > as_of_ms:
         raise ValueError("Latest candle is still forming")
     return tuple(candles)
 
 
-def contiguous(candles: Sequence, first: int, last: int) -> bool:
-    """Both endpoints inclusive. Preserve actual exchange/session gaps."""
+def contiguous(candles: Sequence, first: int, last: int, bar_minutes: int = 1) -> bool:
+    """Both endpoints inclusive. Do NOT bridge weekends or exchange/session gaps."""
+    if isinstance(bar_minutes, bool) or not isinstance(bar_minutes, int) or bar_minutes < 1:
+        raise ValueError("Invalid candle interval")
     if first < 0 or last >= len(candles) or first > last:
         return False
+    duration = bar_minutes * MINUTE_MS
     return all(
-        candles[j].timestamp - candles[j - 1].timestamp == MINUTE_MS
+        candles[j].timestamp - candles[j - 1].timestamp == duration
         for j in range(first + 1, last + 1)
     )
 
@@ -98,13 +116,13 @@ def folds(
     embargo: int | None = None,
 ) -> list[Fold]:
     """Expanding chronological folds; test blocks do not overlap by default."""
-    margin = risk.horizon_minutes if embargo is None else embargo
+    margin = risk.horizon_bars if embargo is None else embargo
     stride = test_size if step is None else step
-    if margin < risk.horizon_minutes:
-        raise ValueError("Embargo must be >= the full trade horizon")
-    if initial_train < risk.horizon_minutes + 30:
+    if margin < risk.horizon_bars:
+        raise ValueError("Embargo must be >= the full trade horizon (in candle bars)")
+    if initial_train < risk.horizon_bars + 30:
         raise ValueError("Initial training window is too short")
-    if min(validation_size, test_size) <= risk.horizon_minutes + 1 or stride < test_size:
+    if min(validation_size, test_size) <= risk.horizon_bars + 1 or stride < test_size:
         raise ValueError("Validation/test/step windows cannot overlap or be empty")
     result = []
     end_train = initial_train
@@ -122,9 +140,9 @@ def folds(
     return result
 
 
-def features(candles: Sequence, i: int) -> tuple[float, ...]:
-    """Same four normalized past-only features as the v3.5 reference model."""
-    if i < 20 or not contiguous(candles, i - 20, i):
+def features(candles: Sequence, i: int, bar_minutes: int = 1) -> tuple[float, ...]:
+    """Four past-only features; lookback is 20 BARS (not fixed wall-clock minutes)."""
+    if i < 20 or not contiguous(candles, i - 20, i, bar_minutes):
         raise ValueError("Insufficient consecutive PAST bars for features")
     closes = [bar.close for bar in candles[i - 20 : i + 1]]
     returns = [b / a - 1 for a, b in zip(closes, closes[1:])]
@@ -137,9 +155,9 @@ def features(candles: Sequence, i: int) -> tuple[float, ...]:
     )
 
 
-def signal_side(strategy: str, candles: Sequence, i: int) -> str | None:
-    """Frozen v3.5 candidate definitions; a new conditional model judges them."""
-    f = features(candles, i)
+def signal_side(strategy: str, candles: Sequence, i: int, bar_minutes: int = 1) -> str | None:
+    """Frozen v3.5 candidate definitions, generalized to the candle interval."""
+    f = features(candles, i, bar_minutes)
     if strategy == "trend":
         if f[1] > 0.35 and f[2] > 0.35:
             return "LONG"
@@ -168,16 +186,16 @@ def label_outcome(
     costs: CostProfile,
 ) -> dict | None:
     """Return None for unpriceable session/data gap; never invent an exit."""
-    if side not in SIDES or signal_index < 0 or signal_index + risk.horizon_minutes >= len(candles):
+    if side not in SIDES or signal_index < 0 or signal_index + risk.horizon_bars >= len(candles):
         raise ValueError("Invalid signal/side/horizon")
     entry = float(candles[signal_index + 1].open)
     previous_ts = candles[signal_index].timestamp
     stop = entry * (1 - risk.stop_fraction if side == "LONG" else 1 + risk.stop_fraction)
     take = entry * (1 + risk.take_fraction if side == "LONG" else 1 - risk.take_fraction)
 
-    for j in range(signal_index + 1, signal_index + risk.horizon_minutes + 1):
+    for j in range(signal_index + 1, signal_index + risk.horizon_bars + 1):
         bar = candles[j]
-        if bar.timestamp - previous_ts != MINUTE_MS:
+        if bar.timestamp - previous_ts != risk.candle_duration_ms:
             return None
         previous_ts = bar.timestamp
 
@@ -204,7 +222,7 @@ def label_outcome(
                 price, reason = take, "TAKE_PROFIT"
             else:
                 price, reason = None, None
-        if price is None and j == signal_index + risk.horizon_minutes:
+        if price is None and j == signal_index + risk.horizon_bars:
             price, reason = bar.close, "TIME_EXIT"
         if price is not None:
             return {
@@ -230,11 +248,11 @@ def _training(
     samples = []
     last_exit = -1
     # train labels must CLOSE before train_end, with no future labels crossing.
-    for i in range(20, fold.train_end - risk.horizon_minutes):
-        if i <= last_exit or not contiguous(candles, i - 20, i):
+    for i in range(20, fold.train_end - risk.horizon_bars):
+        if i <= last_exit or not contiguous(candles, i - 20, i, risk.bar_minutes):
             continue
-        x = features(candles, i)
-        if signal_side(strategy, candles, i) != side:
+        x = features(candles, i, risk.bar_minutes)
+        if signal_side(strategy, candles, i, risk.bar_minutes) != side:
             continue
         labeled = label_outcome(candles, i, side, risk, costs)
         if labeled is None:
@@ -272,12 +290,12 @@ def _observe_period(
     unpriceable = 0
     last_exit = start - 1
     # All labels must EXIT within the specified VALIDATION or TEST block.
-    for i in range(max(start, 20), end - risk.horizon_minutes):
-        if i <= last_exit or not contiguous(candles, i - 20, i):
+    for i in range(max(start, 20), end - risk.horizon_bars):
+        if i <= last_exit or not contiguous(candles, i - 20, i, risk.bar_minutes):
             continue
         examined += 1
-        x = features(candles, i)
-        if signal_side(strategy, candles, i) != side:
+        x = features(candles, i, risk.bar_minutes)
+        if signal_side(strategy, candles, i, risk.bar_minutes) != side:
             continue
         signal_count += 1
         prediction = _predict(x, training, risk)
@@ -341,10 +359,10 @@ def observe_unfiltered_period(
     trades: list[dict] = []
     signals = occupied = gaps = 0
     last_exit = start - 1
-    for i in range(max(start, 20), end - risk.horizon_minutes):
-        if not contiguous(candles, i - 20, i):
+    for i in range(max(start, 20), end - risk.horizon_bars):
+        if not contiguous(candles, i - 20, i, risk.bar_minutes):
             continue
-        if signal_side(strategy, candles, i) != side:
+        if signal_side(strategy, candles, i, risk.bar_minutes) != side:
             continue
         signals += 1
         if i <= last_exit:
@@ -420,7 +438,14 @@ def walk_forward(
     Set evaluate_test=False for validation diagnostics to avoid repeated
     access to the held-out TEST period while iterating on research.
     """
-    bars = validate_history(candles, as_of_ms=as_of_ms)
+    bars = validate_history(candles, as_of_ms=as_of_ms, bar_minutes=risk.bar_minutes)
+    # Reject an incorrectly labeled dataset rather than quietly producing
+    # zero signals because 1-minute bars were declared to be 5-minute bars.
+    if len(bars) > 25 and not any(
+        contiguous(bars, i - 20, i, risk.bar_minutes)
+        for i in range(20, len(bars))
+    ):
+        raise ValueError("No contiguous 21-bar history at the declared candle interval")
     if not isinstance(symbol, str) or not symbol:
         raise ValueError("A real instrument symbol is required")
     if not isinstance(costs, CostProfile):
@@ -482,6 +507,8 @@ def walk_forward(
                     "strategy": strategy,
                     "side": side,
                     "horizon_minutes": risk.horizon_minutes,
+                    "bar_minutes": risk.bar_minutes,
+                    "feature_window_bars": 20,
                     "stop_fraction": risk.stop_fraction,
                     "take_fraction": risk.take_fraction,
                     "cost_source": costs.source,
@@ -510,6 +537,7 @@ def walk_forward(
         "asset_type": asset_type,
         "instrument_type": instrument_type,
         "reference_only": proxy,
+        "bar_minutes": risk.bar_minutes,
         "data_candles": len(bars),
         "first_timestamp": bars[0].timestamp,
         "last_timestamp": bars[-1].timestamp,
