@@ -73,3 +73,32 @@ This adds evaluate_test=false to the JSON and test_status=SEALED_VALIDATION_ONLY
 for any admitted variant. The script does not call the TEST evaluator at all,
 even if the model passes VALIDATION. Run a separate, pre-registered final
 holdout ONLY after fixing the protocol/model without consulting TEST outcomes.
+
+
+## Milestone 5: interval-aware offline research
+
+The original v3.5-style 1m baseline is preserved as the default.
+For 5m candle files, explicitly set \`--bar-minutes 5\`. All risk plan
+horizons remain **wall-clock minutes**: 15m -> 3 bars, 30m -> 6
+bars, 60m -> 12 bars. Next-open execution, intra-bar stops, forming
+candle detection, gap checks, chronological embargoes, split guards and
+label closure use the declared candle duration.
+
+Example using an independently frozen 5m dataset (only when such a
+file actually exists):
+
+    python -m scripts.run_brain_v36_research --input BTCUSDT=data/research/BTCUSDT_5m.json --costs config/brain_v36_costs.example.json --bar-minutes 5 --initial-train 600 --validation-size 400 --test-size 200 --horizons 15 30 60 --validation-only
+
+The feature lookback remains 20 **bars**, not 20 minutes: 1m and 5m
+signals are distinct model specifications and results must not be
+treated as matched signals. A user-supplied 1m series incorrectly
+declared as 5m raises an explicit error instead of silently yielding
+zero signals. Actual discontinuities across market sessions/weekends
+are never filled; open outcomes crossing a missing bar are censored
+rather than pretending there was an executable quote. This implies
+limited evidence from datasets with many discontinuities. Do not
+confuse OHLC references with executable bid/ask spreads.
+
+A validated dataset and an explicit per-instrument cost profile are
+required before an instrument can join multi-asset experiments.
+Existing 5,000-candle BTC benchmark data were not rewritten.
