@@ -8,7 +8,7 @@ from src.data.candle import Candle
 from src.research.brain_v36 import CostProfile, RiskPlan, cost_for_symbol, validate_history, walk_forward
 from src.research.brain_v36.engine import (
     contiguous, features, folds, label_outcome, performance, signal_side,
-    _training, _observe_period,
+    _training, _observe_period, observe_unfiltered_period,
 )
 
 
@@ -199,6 +199,8 @@ def test_research_only_report_and_test_not_used_for_validation_decision(tmp_path
     for before, after in zip(report["results"], again["results"]):
         assert before["training_samples"] == after["training_samples"]
         assert before["validation"] == after["validation"]
+        assert before["unfiltered_validation"] == after["unfiltered_validation"]
+        assert before["unfiltered_validation_scan"] == after["unfiltered_validation_scan"]
         assert before["admitted_before_test"] == after["admitted_before_test"]
 
 
@@ -232,6 +234,77 @@ def test_validation_funnel_explains_sparse_signals_and_reconciles():
         "missing_training", "rejected_nonpositive",
         "rejected_uncertainty", "unpriceable_gaps", "executed_proxy",
     )) == scan["signals"]
+
+
+
+def test_raw_validation_observes_strategies_without_knn_filter_or_overlap():
+    candles = wave(450)
+    risk = RiskPlan(horizon_minutes=15, min_train_samples=2)
+    costs = profile()
+    trades, scan = observe_unfiltered_period(
+        candles, 100, 350, strategy="trend", side="LONG",
+        risk=risk, costs=costs,
+    )
+    assert scan["signals"] > 0
+    assert trades
+    assert scan["completed_proxy"] == len(trades)
+    assert scan["signals"] == (
+        scan["skipped_during_position"]
+        + scan["unpriceable_gaps"]
+        + scan["completed_proxy"]
+    )
+    assert all(row["counterfactual"] and not row["model_filter_applied"] for row in trades)
+    assert all(row["entry_index"] == row["signal_index"] + 1 for row in trades)
+    assert all(
+        a["exit_index"] < b["signal_index"]
+        for a, b in zip(trades, trades[1:])
+    )
+    assert all(
+        row["return_fraction"] == pytest.approx(
+            costs.net_fraction(row["entry_mid"], row["exit_mid"], "LONG")
+        )
+        for row in trades
+    )
+    filtered, filtered_scan = _observe_period(
+        candles, 100, 350, strategy="trend", side="LONG",
+        training=[
+            (features(candles, 80), -0.002, 81),
+            (features(candles, 81), -0.003, 82),
+        ],
+        risk=risk, costs=costs,
+    )
+    assert filtered == []
+    assert filtered_scan["rejected_nonpositive"] > 0
+
+
+def test_unfiltered_research_statistics_do_not_override_admission(monkeypatch):
+    import src.research.brain_v36.engine as engine
+
+    candles = wave()
+    risk = RiskPlan(horizon_minutes=15, min_train_samples=10_000)
+    kwargs = dict(
+        symbol="BTCUSDT", asset_type="crypto", instrument_type="spot",
+        costs=profile(), risk=risk, initial_train=450,
+        validation_size=250, test_size=250,
+    )
+
+    def artificial_raw(*args, **kwargs):
+        # Exaggerated positive raw outcomes must NEVER create an eligible row.
+        trades = [{"return_fraction": 0.20}] * 100
+        scan = {
+            "signals": 100, "skipped_during_position": 0,
+            "unpriceable_gaps": 0, "completed_proxy": 100,
+        }
+        return trades, scan
+
+    monkeypatch.setattr(engine, "observe_unfiltered_period", artificial_raw)
+    report = engine.walk_forward(candles, **kwargs)
+    assert all(row["unfiltered_validation"]["expectancy_net"] == 0.20
+               for row in report["results"])
+    assert all(row["validation"]["trades"] == 0 for row in report["results"])
+    assert all(not row["admitted_before_test"] for row in report["results"])
+    assert all(row["test"] is None for row in report["results"])
+
 
 
 def test_performance_keeps_empty_research_separate_from_profit():
