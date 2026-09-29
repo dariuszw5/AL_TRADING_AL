@@ -21,6 +21,7 @@ from hashlib import sha256
 import json
 from pathlib import Path
 from time import time
+from urllib.parse import urlsplit
 
 import requests
 
@@ -38,11 +39,15 @@ def _api_read(base_url: str) -> tuple[tuple[str, ...], dict]:
     if not base_url.startswith("https://"):
         raise ValueError("Scanner API URL MUST use HTTPS")
     base = base_url.rstrip("/")
-    if not (base.endswith("sslip.io") or "://" in base):
-        raise ValueError("Invalid scanner API")
+    parsed = urlsplit(base)
+    if (parsed.scheme != "https" or not parsed.hostname
+            or parsed.path or parsed.query or parsed.fragment):
+        raise ValueError("Provide the HTTPS API origin, without a path or query")
     response = requests.get(base + "/api/ai", timeout=35)
     response.raise_for_status()
     ai = response.json()
+    if not isinstance(ai, dict):
+        raise ValueError("AI scanner response must be a JSON object")
     research = {}
     try:
         rs = requests.get(base + "/api/research", timeout=35)
@@ -50,6 +55,8 @@ def _api_read(base_url: str) -> tuple[tuple[str, ...], dict]:
         research = rs.json()
     except (requests.RequestException, ValueError):
         # ai.ranking alone still yields all candidates exposed by the AI API.
+        research = {}
+    if not isinstance(research, dict):
         research = {}
     return live_crypto_symbols(ai, research), {
         "ai_ranking_rows": len(ai.get("ranking") or []),
@@ -163,6 +170,7 @@ def evaluate(
         )}
         info.update({
             "data_status": entry["status"], "snapshot_bars": entry["count"],
+            "snapshot_session_gaps": entry.get("session_gaps"),
             "data_sha256": entry.get("sha256"),
             "dynamic_discovery_status": manifest["dynamic_discovery"]["status"],
             "evaluation_status": None, "detail": None,
@@ -227,8 +235,12 @@ def evaluate(
                         "train_samples": item["training_samples"],
                         "raw_validation_signals": item["unfiltered_validation_scan"]["signals"],
                         "raw_validation_trades": item["unfiltered_validation"]["trades"],
+                        "raw_validation_unpriceable_gaps": item["unfiltered_validation_scan"]["unpriceable_gaps"],
                         "raw_validation_mean_net": item["unfiltered_validation"]["expectancy_net"],
                         "filtered_validation_signals": item["validation_scan"]["signals"],
+                        "filtered_rejected_nonpositive": item["validation_scan"]["rejected_nonpositive"],
+                        "filtered_rejected_uncertainty": item["validation_scan"]["rejected_uncertainty"],
+                        "filtered_validation_unpriceable_gaps": item["validation_scan"]["unpriceable_gaps"],
                         "filtered_validation_trades": item["validation"]["trades"],
                         "filtered_validation_mean_net": item["validation"]["expectancy_net"],
                         "admitted_before_test": item["admitted_before_test"],
@@ -293,7 +305,7 @@ def evaluate(
     fields = [
         "symbol", "asset_type", "instrument_type", "reference_only",
         "provider", "origin", "data_status", "snapshot_bars",
-        "data_sha256", "dynamic_discovery_status", "evaluation_status",
+        "snapshot_session_gaps", "data_sha256", "dynamic_discovery_status", "evaluation_status",
         "detail", "sealed_outer_holdout_bars", "assumption_source",
         "validated_rows", "admitted_rows",
     ]
@@ -313,6 +325,15 @@ def evaluate(
     print(f"INSTRUMENTS={len(coverage)} VALIDATED_ALL_HORIZONS={status.get('VALIDATION_ONLY_COMPLETED', 0)}")
     print(f"PARTIAL_OR_MISSING={len(coverage) - status.get('VALIDATION_ONLY_COMPLETED', 0)}")
     print(f"DYNAMIC_DISCOVERY={manifest['dynamic_discovery']['status']}")
+    for klass in sorted({row["asset_type"] for row in coverage}):
+        part = [row for row in coverage if row["asset_type"] == klass]
+        full = sum(row["evaluation_status"] == "VALIDATION_ONLY_COMPLETED" for row in part)
+        print(f"CLASS {klass:10s} fully-validated={full}/{len(part)} (unverified cost scenario)")
+    is_complete = (
+        status.get("VALIDATION_ONLY_COMPLETED", 0) == len(coverage)
+        and manifest["dynamic_discovery"]["status"] == "COMPLETE_API_READ"
+    )
+    print(f"COVERAGE_STATUS={'COMPLETE' if is_complete else 'INCOMPLETE_INSPECT_COVERAGE_CSV'}")
     print(f"COVERAGE={coverage_csv}")
     print(f"RESULTS={output}")
     if report_csv:
