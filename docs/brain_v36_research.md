@@ -63,3 +63,13 @@ not independent. Count unique windows/dates before inferring sample size.
 No v3.5 production deployment, live-state migration, API or real orders
 are performed by these modules. Performance is research counterfactual
 and does not imply a realizable trading edge.
+
+
+### Safe iterative invocation (keeps TEST unopened)
+
+    python -m scripts.run_brain_v36_research --input BTCUSDT=data/backtest/BTCUSDT_1m_5000.json --costs config/brain_v36_costs.example.json --initial-train 1500 --validation-size 1200 --test-size 400 --horizons 15 30 60 --validation-only
+
+This adds evaluate_test=false to the JSON and test_status=SEALED_VALIDATION_ONLY
+for any admitted variant. The script does not call the TEST evaluator at all,
+even if the model passes VALIDATION. Run a separate, pre-registered final
+holdout ONLY after fixing the protocol/model without consulting TEST outcomes.
