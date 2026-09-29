@@ -45,11 +45,30 @@ def _research_asset(symbol: str):
         asset = asset_registry.get_asset(normalized)
     except (KeyError, ValueError):
         asset = None
+    if asset is None:
+        research = getattr(asset_registry, "RESEARCH_ASSET_BY_SYMBOL", {})
+        asset = research.get(normalized)
     if asset is not None:
-        return asset
-    research = getattr(asset_registry, "RESEARCH_ASSET_BY_SYMBOL", {})
-    if normalized in research:
-        return research[normalized]
+        # Some older Windows copies expose get_asset(symbol) but omit the
+        # newer instrument_type/provider_symbol dataclass fields. Normalize
+        # ONLY the research metadata; never mutate production AssetSpec.
+        canonical = str(asset.symbol).upper()
+        asset_class = str(asset.asset_type)
+        legacy = _LEGACY_RESEARCH.get(canonical)
+        instrument = getattr(asset, "instrument_type", None)
+        if not instrument or (instrument == "spot" and asset_class != "crypto"):
+            instrument = legacy[1] if legacy else (
+                "spot" if asset_class == "crypto" else asset_class
+            )
+        return SimpleNamespace(
+            symbol=canonical,
+            asset_type=asset_class,
+            instrument_type=instrument,
+            provider=getattr(asset, "provider", None) or (
+                "binance" if asset_class == "crypto" else "yahoo"
+            ),
+            provider_symbol=getattr(asset, "provider_symbol", None),
+        )
     if re.fullmatch(r"[A-Z0-9]{1,20}USDT", normalized):
         return SimpleNamespace(symbol=normalized, asset_type="crypto",
                                instrument_type="spot", provider="binance")
