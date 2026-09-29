@@ -42,6 +42,10 @@ def main(argv=None) -> int:
     parser.add_argument("--validation-size", type=int, default=400)
     parser.add_argument("--test-size", type=int, default=400)
     parser.add_argument("--output-dir", type=Path, default=Path("diagnostics/brain_v36"))
+    parser.add_argument(
+        "--validation-only", action="store_true",
+        help="Keep TEST strictly sealed; report unfiltered and filtered VALIDATION only",
+    )
     args = parser.parse_args(argv)
 
     diagnostics = (ROOT / "diagnostics").resolve()
@@ -79,6 +83,7 @@ def main(argv=None) -> int:
                 initial_train=args.initial_train,
                 validation_size=args.validation_size,
                 test_size=args.test_size,
+                evaluate_test=not args.validation_only,
             )
             result["dataset"] = str(path)
             reports.append(result)
@@ -109,6 +114,7 @@ def main(argv=None) -> int:
                     "validation_trades": row["validation"]["trades"],
                     "validation_expectancy": row["validation"]["expectancy_net"],
                     "admitted_before_test": row["admitted_before_test"],
+                    "test_status": row["test_status"],
                     "test_trades": row["test"]["trades"] if row["test"] else None,
                     "test_expectancy": row["test"]["expectancy_net"] if row["test"] else None,
                     "test_profit_factor": row["test"]["profit_factor"] if row["test"] else None,
@@ -134,6 +140,11 @@ def main(argv=None) -> int:
         writer.writerows(summary)
     print(f"RESEARCH_ONLY_JSON={detail_path}")
     print(f"RESEARCH_ONLY_CSV={summary_path}")
+    print(
+        "HELD_OUT_TEST_SEALED: no TEST outcome evaluated"
+        if args.validation_only else
+        "TEST evaluated ONLY for variants admitted by VALIDATION"
+    )
     print("Production and the virtual PLN account were NOT accessed.")
     return 0
 
