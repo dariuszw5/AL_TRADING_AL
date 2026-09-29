@@ -101,20 +101,24 @@ def test_current_scanner_snapshot_extracts_only_real_present_usdt_symbols():
 
 
 @pytest.mark.parametrize("asset", universe(DYNAMIC), ids=lambda a: a.symbol)
+@pytest.mark.parametrize("bar_minutes", (1, 5), ids=("1m", "5m"))
 @pytest.mark.parametrize("horizon,side", [
     (15, "LONG"), (15, "SHORT"), (30, "LONG"), (30, "SHORT"),
     (60, "LONG"), (60, "SHORT"),
 ])
 def test_every_asset_obeys_same_real_minute_execution_and_separate_cost_profile(
-    asset, horizon, side,
+    asset, horizon, side, bar_minutes,
 ):
     costs, meta = cost_for_symbol(asset.symbol, SCENARIO)
     assert meta["asset_type"] == asset.asset_type
     assert meta["reference_only"] == asset.reference_only
     assert "UNVERIFIED_" in costs.source
     assert costs.round_trip > 0
-    risk = RiskPlan(horizon_minutes=horizon, bar_minutes=5)
-    candles = [candle(i) for i in range(risk.horizon_bars + 1)]
+    risk = RiskPlan(horizon_minutes=horizon, bar_minutes=bar_minutes)
+    candles = [
+        candle(i, duration=risk.candle_duration_ms)
+        for i in range(risk.horizon_bars + 1)
+    ]
     result = label_outcome(candles, 0, side, risk, costs)
     assert result["entry_timestamp"] == candles[1].timestamp
     assert result["exit_timestamp"] == candles[risk.horizon_bars].timestamp
@@ -273,6 +277,17 @@ def test_multiasset_evaluation_audits_every_symbol_and_reserves_outer_holdout(
     path.write_text(json.dumps(manifest), encoding="utf-8")
     cost_path = tmp_path / "cost_scenario.json"
     cost_path.write_text(json.dumps(SCENARIO), encoding="utf-8")
+    expected_last_visible = bars[-161].timestamp
+    original = multiasset.walk_forward
+    observed = []
+
+    def holdout_guard(candles, **kwargs):
+        observed.append(candles[-1].timestamp)
+        assert candles[-1].timestamp == expected_last_visible
+        assert kwargs["evaluate_test"] is False
+        return original(candles, **kwargs)
+
+    monkeypatch.setattr(multiasset, "walk_forward", holdout_guard)
     output, csv_path, report = multiasset.evaluate(
         path, costs_path=cost_path,
         initial_train=480, validation_size=320, internal_test_size=160,
@@ -293,3 +308,5 @@ def test_multiasset_evaluation_audits_every_symbol_and_reserves_outer_holdout(
     for b in mutated[-160:]:
         b.close += 10
     assert report["results"]
+    assert len(observed) == 3
+    assert all(ts == expected_last_visible for ts in observed)
