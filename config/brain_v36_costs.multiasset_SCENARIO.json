@@ -1,0 +1,38 @@
+{
+  "crypto": {
+    "commission_per_side": 0.0004,
+    "spread_round_trip": 0.0002,
+    "slippage_per_side": 0.0005,
+    "source": "UNVERIFIED_CRYPTO_SCENARIO_FOR_RESEARCH_PIPELINE_NOT_A_BROKER_QUOTE"
+  },
+  "equity": {
+    "commission_per_side": 0.0001,
+    "spread_round_trip": 0.0004,
+    "slippage_per_side": 0.0002,
+    "source": "UNVERIFIED_EQUITY_SCENARIO_FOR_RESEARCH_PIPELINE_NOT_A_BROKER_QUOTE"
+  },
+  "etf": {
+    "commission_per_side": 0.0001,
+    "spread_round_trip": 0.0003,
+    "slippage_per_side": 0.0002,
+    "source": "UNVERIFIED_ETF_SCENARIO_FOR_RESEARCH_PIPELINE_NOT_A_BROKER_QUOTE"
+  },
+  "forex": {
+    "commission_per_side": 0.0,
+    "spread_round_trip": 0.0003,
+    "slippage_per_side": 0.00015,
+    "source": "UNVERIFIED_FX_REFERENCE_SCENARIO_FOR_RESEARCH_PIPELINE_NOT_EXECUTABLE"
+  },
+  "index": {
+    "commission_per_side": 0.0001,
+    "spread_round_trip": 0.0006,
+    "slippage_per_side": 0.0003,
+    "source": "UNVERIFIED_INDEX_REFERENCE_SCENARIO_FOR_RESEARCH_PIPELINE_NOT_EXECUTABLE"
+  },
+  "commodity": {
+    "commission_per_side": 0.0002,
+    "spread_round_trip": 0.0006,
+    "slippage_per_side": 0.0003,
+    "source": "UNVERIFIED_CONTINUOUS_FUTURES_SCENARIO_FOR_RESEARCH_PIPELINE_NOT_EXECUTABLE"
+  }
+}
