@@ -69,6 +69,9 @@ def test_complete_catalogue_and_all_fixed_market_classes():
         }, f"Asset class {klass} lost catalog coverage"
     assert all(a.provider in {"binance", "yahoo"} for a in CATALOG)
     assert all(a.reference_only == (a.instrument_type in REFERENCE_TYPES) for a in CATALOG)
+    symbols = set(known)
+    assert {"GOLD_FUT_CONT", "WTI_FUT_CONT"} <= symbols
+    assert "XAUUSD" not in symbols and "WTIUSD" not in symbols  # aliases, not new assets
 
 
 def test_dynamic_scanner_assets_join_without_replacing_static_universe():
@@ -174,6 +177,20 @@ def test_scanner_api_merges_current_dynamic_with_fixed_universe(monkeypatch):
     assert set(DYNAMIC) <= set(dynamic)
     assert len(universe(dynamic)) >= len(CATALOG) + 3
     assert report["ai_ranking_rows"] == 4
+
+
+
+def test_incomplete_ai_scanner_response_is_never_labeled_full_dynamic_coverage(monkeypatch):
+    class Response:
+        def raise_for_status(self):
+            pass
+        def json(self):
+            return {"status": "ok"}  # no ranking; cannot prove current universe
+    monkeypatch.setattr(multiasset.requests, "get",
+                        lambda *args, **kwargs: Response())
+    with pytest.raises(ValueError, match="full AI ranking"):
+        multiasset._api_read("https://research.example.org")
+
 
 
 def test_binance_snapshot_closes_forming_bar_and_retains_real_timestamps():
