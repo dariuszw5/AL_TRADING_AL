@@ -7,7 +7,8 @@ import pytest
 from src.data.candle import Candle
 from src.research.brain_v36 import CostProfile, RiskPlan, cost_for_symbol, validate_history, walk_forward
 from src.research.brain_v36.engine import (
-    contiguous, features, folds, label_outcome, performance, signal_side, _training,
+    contiguous, features, folds, label_outcome, performance, signal_side,
+    _training, _observe_period,
 )
 
 
@@ -199,6 +200,38 @@ def test_research_only_report_and_test_not_used_for_validation_decision(tmp_path
         assert before["training_samples"] == after["training_samples"]
         assert before["validation"] == after["validation"]
         assert before["admitted_before_test"] == after["admitted_before_test"]
+
+
+
+def test_validation_funnel_explains_sparse_signals_and_reconciles():
+    candles = wave(450)
+    risk = RiskPlan(horizon_minutes=15, min_train_samples=2)
+    trades, scan = _observe_period(
+        candles, 100, 350,
+        strategy="trend", side="LONG",
+        training=[], risk=risk, costs=profile(),
+    )
+    assert trades == []
+    assert scan["signals"] > 0
+    assert scan["missing_training"] == scan["signals"]
+    assert scan["executed_proxy"] == 0
+
+    training = [
+        (features(candles, 80), -0.002, 81),
+        (features(candles, 81), -0.003, 82),
+    ]
+    trades, scan = _observe_period(
+        candles, 100, 350,
+        strategy="trend", side="LONG",
+        training=training, risk=risk, costs=profile(),
+    )
+    assert not trades
+    assert scan["signals"] > 0
+    assert scan["rejected_nonpositive"] == scan["signals"]
+    assert sum(scan[field] for field in (
+        "missing_training", "rejected_nonpositive",
+        "rejected_uncertainty", "unpriceable_gaps", "executed_proxy",
+    )) == scan["signals"]
 
 
 def test_performance_keeps_empty_research_separate_from_profit():
