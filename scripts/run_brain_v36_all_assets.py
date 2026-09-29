@@ -48,6 +48,8 @@ def _api_read(base_url: str) -> tuple[tuple[str, ...], dict]:
     ai = response.json()
     if not isinstance(ai, dict):
         raise ValueError("AI scanner response must be a JSON object")
+    if not isinstance(ai.get("ranking"), list):
+        raise ValueError("Missing full AI ranking; dynamic universe cannot be verified")
     research = {}
     try:
         rs = requests.get(base + "/api/research", timeout=35)
