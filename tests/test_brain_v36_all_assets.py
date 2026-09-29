@@ -74,6 +74,33 @@ def test_complete_catalogue_and_all_fixed_market_classes():
     assert "XAUUSD" not in symbols and "WTIUSD" not in symbols  # aliases, not new assets
 
 
+def test_legacy_local_asset_registry_without_instrument_type_is_compatible(monkeypatch):
+    from types import SimpleNamespace
+    from src.research.brain_v36 import costs
+
+    original = costs.asset_registry.get_asset
+
+    def old_get_asset(symbol):
+        if symbol in {"AAPL", "EURUSD", "BTCUSDT"}:
+            asset = original(symbol)
+            return SimpleNamespace(
+                symbol=asset.symbol, asset_type=asset.asset_type,
+                provider=asset.provider, provider_symbol=asset.provider_symbol,
+            )
+        raise ValueError("Absent in older catalog")
+
+    monkeypatch.setattr(costs.asset_registry, "get_asset", old_get_asset)
+    for symbol, expected in (
+        ("AAPL", "equity"),
+        ("EURUSD", "fx_spot_reference"),
+        ("BTCUSDT", "spot"),
+    ):
+        profile, metadata = cost_for_symbol(symbol, SCENARIO)
+        assert profile.round_trip > 0
+        assert metadata["instrument_type"] == expected
+    assert len(universe(DYNAMIC)) >= len(CATALOG) + 3
+
+
 def test_dynamic_scanner_assets_join_without_replacing_static_universe():
     enriched = universe(DYNAMIC)
     names = {asset.symbol for asset in enriched}
