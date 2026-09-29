@@ -327,6 +327,53 @@ def _observe_period(
     return trades, scan
 
 
+def observe_unfiltered_period(
+    candles: Sequence, start: int, end: int, *,
+    strategy: str, side: str, risk: RiskPlan, costs: CostProfile,
+) -> tuple[list[dict], dict]:
+    """Counterfactual VALIDATION observation with NO k-NN filter.
+
+    This is a diagnostic of the original strategy's signals under the SAME
+    entry/exit/cost assumptions. It is never an entry decision, a live trade,
+    a permission to bypass the model, or a reason to admit a TEST candidate.
+    Its independent non-overlap path differs from the filtered path.
+    """
+    trades: list[dict] = []
+    signals = occupied = gaps = 0
+    last_exit = start - 1
+    for i in range(max(start, 20), end - risk.horizon_minutes):
+        if not contiguous(candles, i - 20, i):
+            continue
+        if signal_side(strategy, candles, i) != side:
+            continue
+        signals += 1
+        if i <= last_exit:
+            occupied += 1
+            continue
+        labeled = label_outcome(candles, i, side, risk, costs)
+        if labeled is None:
+            gaps += 1
+            continue
+        if labeled["exit_index"] >= end:
+            raise AssertionError("Unfiltered observation escaped VALIDATION")
+        trades.append({
+            **labeled,
+            "strategy": strategy,
+            "side": side,
+            "counterfactual": True,
+            "model_filter_applied": False,
+        })
+        last_exit = labeled["exit_index"]
+    scan = {
+        "signals": signals,
+        "skipped_during_position": occupied,
+        "unpriceable_gaps": gaps,
+        "completed_proxy": len(trades),
+    }
+    if signals != occupied + gaps + len(trades):
+        raise AssertionError("Unfiltered validation funnel does not reconcile")
+    return trades, scan
+
 def performance(trades: Sequence[dict]) -> dict:
     returns = [float(trade["return_fraction"]) for trade in trades]
     if not returns:
@@ -391,6 +438,12 @@ def walk_forward(
                     risk=risk, costs=costs,
                 )
                 val_stats = performance(validation)
+                raw_validation, raw_scan = observe_unfiltered_period(
+                    bars, fold.validation_start, fold.validation_end,
+                    strategy=strategy, side=side, risk=risk, costs=costs,
+                )
+                raw_stats = performance(raw_validation)
+                # Diagnostic raw strategy outcomes MUST NOT influence admission.
                 # Frozen validation admission. The TEST labels never influence this.
                 admitted = (
                     len(training) >= risk.min_train_samples
@@ -426,6 +479,9 @@ def walk_forward(
                     "max_train_label_exit_index": max((v[2] for v in training), default=None),
                     "validation": val_stats,
                     "validation_scan": val_scan,
+                    "unfiltered_validation": raw_stats,
+                    "unfiltered_validation_scan": raw_scan,
+                    "unfiltered_validation_trades": raw_validation,
                     "admitted_before_test": admitted,
                     "test": performance(test) if admitted else None,
                     "test_scan": test_scan if admitted else None,
@@ -436,7 +492,7 @@ def walk_forward(
                     "mode": "RESEARCH_ONLY",
                 })
     return {
-        "version": "3.6-research-1",
+        "version": "3.6-research-2",
         "mode": "RESEARCH_ONLY",
         "symbol": symbol,
         "asset_type": asset_type,
@@ -451,7 +507,10 @@ def walk_forward(
         "results": rows,
         "warning": (
             "Historical counterfactual only; not PLN PnL, live track record, "
-            "trade permission or deployable broker execution. Cost assumptions "
+            "trade permission or deployable broker execution. Unfiltered "
+            "VALIDATION is a descriptive counterfactual, not an admission rule; "
+            "its independent non-overlap sequence is not a paired trade-by-trade "
+            "comparison. No unadmitted TEST outcome is inspected. Cost assumptions "
             "must be checked against executable market quotes."
         ),
     }
