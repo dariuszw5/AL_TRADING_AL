@@ -11,7 +11,7 @@ from dataclasses import asdict
 from hashlib import sha256
 import json
 from pathlib import Path
-from time import time
+from time import sleep
 from urllib.parse import quote
 
 import requests
@@ -25,12 +25,28 @@ YAHOO = "https://query1.finance.yahoo.com/v8/finance/chart"
 
 
 def _get(session, url: str, *, params: dict):
-    response = session.get(
-        url, params=params, timeout=25,
-        headers={"User-Agent": "AL-Trading-v36-research-only/1.0"},
-    )
-    response.raise_for_status()
-    return response.json()
+    # Bounded retry for transient feed errors. Do NOT fabricate a last price
+    # or reuse stale candles if all attempts fail.
+    last_error = None
+    for attempt in range(3):
+        try:
+            response = session.get(
+                url, params=params, timeout=25,
+                headers={"User-Agent": "AL-Trading-v36-research-only/1.0"},
+            )
+            response.raise_for_status()
+            return response.json()
+        except (requests.exceptions.Timeout,
+                requests.exceptions.ConnectionError) as error:
+            last_error = error
+        except requests.exceptions.HTTPError as error:
+            last_error = error
+            status_code = getattr(getattr(error, "response", None), "status_code", None)
+            if status_code not in (429, 500, 502, 503, 504):
+                raise
+        if attempt < 2:
+            sleep(0.75 * (2 ** attempt))
+    raise last_error
 
 
 def real_candles(
