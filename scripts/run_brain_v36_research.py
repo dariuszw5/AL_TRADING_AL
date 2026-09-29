@@ -38,6 +38,10 @@ def main(argv=None) -> int:
     parser.add_argument("--input", action="append", required=True, metavar="SYMBOL=PATH")
     parser.add_argument("--costs", required=True, type=Path, help="Explicit cost assumptions in JSON")
     parser.add_argument("--horizons", type=int, nargs="+", default=[15, 30, 60])
+    parser.add_argument(
+        "--bar-minutes", type=int, default=1,
+        help="Duration of each input OHLC candle; horizon remains in wall-clock minutes",
+    )
     parser.add_argument("--initial-train", type=int, default=1200)
     parser.add_argument("--validation-size", type=int, default=400)
     parser.add_argument("--test-size", type=int, default=400)
@@ -75,7 +79,7 @@ def main(argv=None) -> int:
     summary = []
     for symbol, path, costs, asset, candles in work:
         for horizon in args.horizons:
-            risk = RiskPlan(horizon_minutes=horizon)
+            risk = RiskPlan(horizon_minutes=horizon, bar_minutes=args.bar_minutes)
             result = walk_forward(
                 candles,
                 symbol=symbol, asset_type=asset["asset_type"],
@@ -96,6 +100,7 @@ def main(argv=None) -> int:
                     "strategy": row["strategy"],
                     "side": row["side"],
                     "horizon": horizon,
+                    "bar_minutes": risk.bar_minutes,
                     "round_trip_cost": costs.round_trip,
                     "cost_source": costs.source,
                     "train_samples": row["training_samples"],
@@ -121,7 +126,7 @@ def main(argv=None) -> int:
                     "test_max_drawdown": row["test"]["max_drawdown_fraction"] if row["test"] else None,
                 })
             print(
-                f"{symbol} {horizon}m | folds={len(result['folds'])} | "
+                f"{symbol} {horizon}m on {risk.bar_minutes}m candles | folds={len(result['folds'])} | "
                 f"admitted={sum(v['admitted_before_test'] for v in result['results'])}/"
                 f"{len(result['results'])} | {costs.source}"
             )
