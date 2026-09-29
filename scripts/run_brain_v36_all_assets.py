@@ -51,18 +51,21 @@ def _api_read(base_url: str) -> tuple[tuple[str, ...], dict]:
     if not isinstance(ai.get("ranking"), list):
         raise ValueError("Missing full AI ranking; dynamic universe cannot be verified")
     research = {}
+    research_available = False
     try:
         rs = requests.get(base + "/api/research", timeout=35)
         rs.raise_for_status()
         research = rs.json()
+        research_available = isinstance(research, dict)
     except (requests.RequestException, ValueError):
-        # ai.ranking alone still yields all candidates exposed by the AI API.
+        # An unavailable secondary source must be visible in the manifest.
         research = {}
     if not isinstance(research, dict):
         research = {}
     return live_crypto_symbols(ai, research), {
         "ai_ranking_rows": len(ai.get("ranking") or []),
         "research_opportunities": len(research.get("opportunities") or []),
+        "research_endpoint_status": "AVAILABLE" if research_available else "UNAVAILABLE",
         "discovery": "LIVE_API_RANKING_AND_AVAILABLE_RESEARCH_OPPORTUNITIES",
     }
 
@@ -124,8 +127,10 @@ def collect(
         "requested_limit": limit,
         "dynamic_discovery": {
             **discovery, "status": (
-                "COMPLETE_API_READ" if dynamic_failure is None
-                else "DYNAMIC_DISCOVERY_FAILED_PARTIAL_UNIVERSE"
+                "DYNAMIC_DISCOVERY_FAILED_PARTIAL_UNIVERSE" if dynamic_failure is not None
+                else "COMPLETE_API_READ"
+                if discovery.get("research_endpoint_status") == "AVAILABLE"
+                else "PARTIAL_AI_RANKING_ONLY_RESEARCH_ENDPOINT_UNAVAILABLE"
             ),
             "error": dynamic_failure,
             "dynamic_symbols": list(dynamic),
