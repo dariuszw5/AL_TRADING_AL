@@ -118,6 +118,7 @@ def analyze_sealed_validation(payload: dict) -> list[dict]:
                 "strategy": record["strategy"],
                 "side": side,
                 "horizon_minutes": record["horizon_minutes"],
+                "bar_minutes": record.get("bar_minutes", run.get("bar_minutes", 1)),
                 "cost_source": record["cost_source"],
                 "assumed_round_trip_cost": base_cost,
                 "raw_signals": record["unfiltered_validation_scan"]["signals"],
