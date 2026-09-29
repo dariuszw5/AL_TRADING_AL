@@ -211,6 +211,26 @@ def test_scanner_api_merges_current_dynamic_with_fixed_universe(monkeypatch):
 
 
 
+def test_ai_only_dynamic_discovery_is_marked_partial(monkeypatch):
+    import requests
+
+    class AIResponse:
+        def raise_for_status(self):
+            return None
+        def json(self):
+            return {"ranking": [{"symbol": "ADAUSDT"}]}
+
+    def limited_get(url, **kwargs):
+        if url.endswith("/api/ai"):
+            return AIResponse()
+        raise requests.exceptions.Timeout("Research opportunity API unavailable")
+
+    monkeypatch.setattr(multiasset.requests, "get", limited_get)
+    symbols, meta = multiasset._api_read("https://research.example.org")
+    assert symbols == ("ADAUSDT",)
+    assert meta["research_endpoint_status"] == "UNAVAILABLE"
+
+
 def test_incomplete_ai_scanner_response_is_never_labeled_full_dynamic_coverage(monkeypatch):
     class Response:
         def raise_for_status(self):
