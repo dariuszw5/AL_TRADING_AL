@@ -413,8 +413,13 @@ def walk_forward(
     test_size: int = 400,
     step: int | None = None,
     as_of_ms: int | None = None,
+    evaluate_test: bool = True,
 ) -> dict:
-    """Return an independent RESEARCH_ONLY report; no external side effects."""
+    """Return an independent RESEARCH_ONLY report; no external side effects.
+
+    Set evaluate_test=False for validation diagnostics to avoid repeated
+    access to the held-out TEST period while iterating on research.
+    """
     bars = validate_history(candles, as_of_ms=as_of_ms)
     if not isinstance(symbol, str) or not symbol:
         raise ValueError("A real instrument symbol is required")
@@ -451,16 +456,22 @@ def walk_forward(
                     and val_stats["expectancy_net"] is not None
                     and val_stats["expectancy_net"] > 0
                 )
-                test, test_scan = _observe_period(
-                    bars, fold.test_start, fold.test_end,
-                    strategy=strategy, side=side, training=training,
-                    risk=risk, costs=costs,
-                ) if admitted else ([], {
-                    "examined": 0, "signals": 0, "missing_training": 0,
-                    "rejected_nonpositive": 0, "rejected_uncertainty": 0,
-                    "unpriceable_gaps": 0, "executed_proxy": 0,
-                    "status": "NOT_EVALUATED_VALIDATION_GATE",
-                })
+                # TEST remains sealed for iterative validation diagnostics.
+                # Even when VALIDATION admits a variant, evaluation is an
+                # explicit separate research step and not needed here.
+                if admitted and evaluate_test:
+                    test, test_scan = _observe_period(
+                        bars, fold.test_start, fold.test_end,
+                        strategy=strategy, side=side, training=training,
+                        risk=risk, costs=costs,
+                    )
+                    test_status = "EVALUATED_AFTER_VALIDATION_ADMISSION"
+                else:
+                    test, test_scan = [], None
+                    test_status = (
+                        "SEALED_VALIDATION_ONLY" if admitted
+                        else "NOT_EVALUATED_VALIDATION_GATE"
+                    )
                 rows.append({
                     "fold": n,
                     "split": fold.as_dict(),
@@ -483,8 +494,9 @@ def walk_forward(
                     "unfiltered_validation_scan": raw_scan,
                     "unfiltered_validation_trades": raw_validation,
                     "admitted_before_test": admitted,
-                    "test": performance(test) if admitted else None,
-                    "test_scan": test_scan if admitted else None,
+                    "test_status": test_status,
+                    "test": performance(test) if admitted and evaluate_test else None,
+                    "test_scan": test_scan if admitted and evaluate_test else None,
                     "validation_trades": validation,
                     "test_trades": test,
                     "model": "strategy_side_conditioned_knn_frozen_train",
@@ -503,6 +515,7 @@ def walk_forward(
         "last_timestamp": bars[-1].timestamp,
         "costs": {**asdict(costs), "round_trip": costs.round_trip},
         "risk": asdict(risk),
+        "evaluate_test": evaluate_test,
         "folds": [fold.as_dict() for fold in sections],
         "results": rows,
         "warning": (
