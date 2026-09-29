@@ -42,9 +42,11 @@ def _research_asset(symbol: str):
     if not normalized:
         raise ValueError("Empty research asset symbol")
     try:
-        return asset_registry.get_asset(normalized)
+        asset = asset_registry.get_asset(normalized)
     except (KeyError, ValueError):
-        pass
+        asset = None
+    if asset is not None:
+        return asset
     research = getattr(asset_registry, "RESEARCH_ASSET_BY_SYMBOL", {})
     if normalized in research:
         return research[normalized]
