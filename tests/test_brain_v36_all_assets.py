@@ -242,6 +242,35 @@ def test_yahoo_snapshot_uses_actual_provider_symbol_and_drops_open_candle():
     assert all(c.volume == 0 for c in bars)
 
 
+
+def test_quote_source_retries_a_transient_timeout_without_fabricating_data(monkeypatch):
+    import requests
+    import src.research.brain_v36.snapshots as snapshots
+
+    calls = []
+    monkeypatch.setattr(snapshots, "sleep", lambda seconds: None)
+
+    class Response:
+        def raise_for_status(self):
+            return None
+        def json(self):
+            return {"source": "ACTUAL_PROVIDER_RESPONSE"}
+
+    class Session:
+        def get(self, url, **kwargs):
+            calls.append((url, kwargs))
+            if len(calls) == 1:
+                raise requests.exceptions.Timeout("transient network failure")
+            return Response()
+
+    assert snapshots._get(Session(), "https://provider.example/api",
+                          params={"interval": "5m"}) == {
+        "source": "ACTUAL_PROVIDER_RESPONSE"
+    }
+    assert len(calls) == 2
+
+
+
 def test_frozen_snapshot_checksum_and_immutable_write(tmp_path):
     instrument = CATALOG[0]
     bars = [candle(i) for i in range(100)]
