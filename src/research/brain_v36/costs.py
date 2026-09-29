@@ -7,9 +7,55 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from math import isfinite
+from types import SimpleNamespace
 from typing import Mapping
+import re
 
-from src.data.assets import get_asset
+from src.data import assets as asset_registry
+
+# Research-only compatibility with older local asset registries. These are
+# canonical symbols already defined in the newer project catalog; unfamiliar
+# non-crypto symbols are deliberately rejected rather than guessed.
+_LEGACY_RESEARCH = {
+    **{symbol: ("equity", "equity", "yahoo") for symbol in
+       ("AAPL", "MSFT", "NVDA", "AMZN", "META", "GOOGL", "TSLA", "JPM", "XOM")},
+    **{symbol: ("etf", "etf", "yahoo") for symbol in
+       ("SPY", "QQQ", "IWM", "DIA", "XLK", "XLF")},
+    **{symbol: ("forex", "fx_spot_reference", "yahoo") for symbol in
+       ("EURUSD", "GBPUSD", "USDJPY", "AUDUSD", "USDCAD", "USDCHF", "NZDUSD")},
+    **{symbol: ("index", "index_reference", "yahoo") for symbol in
+       ("SP500_INDEX", "NASDAQ100_INDEX", "DOW30_INDEX",
+        "RUSSELL2000_INDEX", "VIX_INDEX")},
+    **{symbol: ("commodity", "continuous_future_proxy", "yahoo") for symbol in
+       ("GOLD_FUT_CONT", "WTI_FUT_CONT", "SILVER_FUT_CONT",
+        "COPPER_FUT_CONT", "NATGAS_FUT_CONT", "BRENT_FUT_CONT")},
+}
+
+
+def _research_asset(symbol: str):
+    """Resolve project metadata without requiring the newer get_asset keyword.
+
+    The installed local asset registry may predate the feature branch. This
+    adapter affects RESEARCH_ONLY reports, never production asset routing.
+    """
+    normalized = symbol.upper().strip()
+    if not normalized:
+        raise ValueError("Empty research asset symbol")
+    try:
+        return asset_registry.get_asset(normalized)
+    except (KeyError, ValueError):
+        pass
+    research = getattr(asset_registry, "RESEARCH_ASSET_BY_SYMBOL", {})
+    if normalized in research:
+        return research[normalized]
+    if re.fullmatch(r"[A-Z0-9]{1,20}USDT", normalized):
+        return SimpleNamespace(symbol=normalized, asset_type="crypto",
+                               instrument_type="spot", provider="binance")
+    if normalized in _LEGACY_RESEARCH:
+        kind, instrument, provider = _LEGACY_RESEARCH[normalized]
+        return SimpleNamespace(symbol=normalized, asset_type=kind,
+                               instrument_type=instrument, provider=provider)
+    raise ValueError(f"Unknown research asset: {normalized}")
 
 
 @dataclass(frozen=True)
@@ -59,7 +105,7 @@ class CostProfile:
 
 
 def cost_for_symbol(symbol: str, profiles: Mapping[str, Mapping]) -> tuple[CostProfile, dict]:
-    asset = get_asset(symbol, allow_dynamic_binance=True)
+    asset = _research_asset(symbol)
     raw = profiles.get(asset.symbol, profiles.get(asset.asset_type))
     if raw is None:
         raise ValueError(
