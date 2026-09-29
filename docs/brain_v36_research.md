@@ -40,3 +40,26 @@ The first report is a research baseline, NOT a production candidate or
 evidence of profitability. Compare frozen v3.5 on the *same* candles,
 costs, horizon, execution semantics and non-overlapping folds before
 interpreting any advantage. Do not repeatedly tune on TEST.
+
+
+## Milestone 3: unfiltered validation diagnostics
+
+Both filtered and unfiltered observations use the exact same risk plan,
+closed-candle signal rules, next-open entry, conservative OHLC exits and
+cost profile. The unfiltered series accepts raw strategy signals whenever
+the previous counterfactual position has closed; the model-filtered
+series separately applies k-NN prediction and uncertainty rejection.
+
+The CSV adds raw_validation_signals, raw_validation_trades,
+raw_validation_expectancy, raw_validation_profit_factor and
+raw_validation_max_drawdown alongside the original model-filtered funnel.
+Raw observations are **VALIDATION ONLY**: they are never input to the
+admission decision or a means to open TEST for an unadmitted variant.
+Their independent non-overlap schedule means trade counts/expectancies
+are descriptive rather than a matched-pairs uplift estimate. Across
+expanding folds, validation windows overlap and summed raw signals are
+not independent. Count unique windows/dates before inferring sample size.
+
+No v3.5 production deployment, live-state migration, API or real orders
+are performed by these modules. Performance is research counterfactual
+and does not imply a realizable trading edge.
