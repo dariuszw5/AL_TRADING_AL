@@ -1,0 +1,8 @@
+{
+  "crypto": {
+    "commission_per_side": 0.0004,
+    "spread_round_trip": 0.0,
+    "slippage_per_side": 0.0005,
+    "source": "V35_LEGACY_ASSUMPTION_ONLY_NOT_A_MEASURED_BID_ASK_SPREAD"
+  }
+}
