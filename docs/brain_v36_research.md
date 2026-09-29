@@ -78,7 +78,7 @@ holdout ONLY after fixing the protocol/model without consulting TEST outcomes.
 ## Milestone 5: interval-aware offline research
 
 The original v3.5-style 1m baseline is preserved as the default.
-For 5m candle files, explicitly set \`--bar-minutes 5\`. All risk plan
+For 5m candle files, explicitly set `--bar-minutes 5`. All risk plan
 horizons remain **wall-clock minutes**: 15m -> 3 bars, 30m -> 6
 bars, 60m -> 12 bars. Next-open execution, intra-bar stops, forming
 candle detection, gap checks, chronological embargoes, split guards and
